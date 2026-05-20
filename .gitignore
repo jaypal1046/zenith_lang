@@ -1,0 +1,26 @@
+# Compiled compiler and application executables
+*.exe
+zenith.exe
+tests/zenith_app_android
+
+# Object files and assembly
+*.o
+*.obj
+*.wat
+
+# Transpiled artifacts (re-generatable during build)
+tests/main.cpp
+
+# Temporary screenshots / emulator assets
+tests/screen.png
+
+# Legacy Flutter Android shell
+zenith_android/
+
+# IDE / system folders
+.vscode/
+.idea/
+.vs/
+*.suo
+*.user
+*.db

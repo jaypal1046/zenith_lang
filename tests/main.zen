@@ -1,0 +1,55 @@
+// Zenith Sample Program
+import std.io;
+import "helper.zen";
+
+class Database(String url) {
+    agentic String summarizeDocument(String text) {
+        prompt: "Extract the three most important bullet points from this text: {text} using {url}"
+    }
+}
+
+UI ChatScreen() {
+    List<String> active_users = ["Jay", "Alex"];
+    Map<String, Int> scores = {"Jay": 100, "Alex": 95};
+    
+    Bool active = true;
+    Int retry = 0;
+    
+    active_users.push("Sam");
+    
+    if (active == true) {
+        while (retry < 3) {
+            retry = retry + 1;
+        }
+    }
+    
+    Database db = Database("http://localhost:11434");
+    String response = db.summarizeDocument("This is a document payload.");
+
+    return Column(
+        Text("AI Summary:", fontWeight: "bold"),
+        Row(
+            Text(response),
+            Text(getVerificationStatus())
+        )
+    );
+}
+
+Void main() {
+    println("--- Booting Zenith App ---");
+    UI app = ChatScreen();
+    app.render();
+
+    println("\n--- Testing Counter App setState ---");
+    CounterApp counter = CounterApp();
+    counter.build().render();
+    
+    counter.increment();
+    counter.increment();
+    
+    println("\n--- Testing Interface Polymorphism ---");
+    Shape my_shape = Circle(10.0);
+    println("Circle Area: " + my_shape.getArea());
+    
+    println("--- Zenith App Shutdown ---");
+}

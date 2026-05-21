@@ -59,7 +59,7 @@ if %errorlevel% neq 0 (
 :: 5. Compile C++ to Android Native Binary
 echo.
 echo Cross-compiling transpiled C++ code for Android %ABI%...
-call "%COMPILER%" -O3 -std=c++17 tests/main.cpp -I include -static-libstdc++ -o tests/zenith_app_android
+call "%COMPILER%" -O3 -std=c++17 tests/main.cpp -I include -static-libstdc++ -llog -o tests/zenith_app_android
 if %errorlevel% neq 0 (
     echo [ERROR] Cross-compilation failed.
     exit /b %errorlevel%

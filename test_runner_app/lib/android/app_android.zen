@@ -1,0 +1,5 @@
+class AppAndroid() {
+    String getPlatformName() {
+        return "Android Client";
+    }
+}

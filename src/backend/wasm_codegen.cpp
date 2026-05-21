@@ -145,48 +145,104 @@ void WASMCodeGenerator::generateExpression(ExprNode* expr) {
         int my_id = ui_node_counter++;
         std::string local_name = "$tmp_ui_" + std::to_string(my_id);
         
-        if (ui->component_type == "Text") {
-            if (!ui->children.empty()) {
-                generateExpression(ui->children[0].get());
-            } else {
-                indent(); output << "i32.const 0\n";
-            }
-            indent(); output << "call $create_text\n";
-        } else if (ui->component_type == "Button") {
-            if (!ui->children.empty()) {
-                generateExpression(ui->children[0].get());
-            } else {
-                indent(); output << "i32.const 0\n";
-            }
-            if (!current_class_name.empty()) {
-                indent(); output << "local.get $this\n";
-            } else {
-                indent(); output << "i32.const 0\n";
-            }
-            std::string method_name = "";
-            for (const auto& arg : ui->named_args) {
-                if (arg.first == "onClick") {
-                    if (auto* id = dynamic_cast<IdentifierNode*>(arg.second.get())) {
-                        method_name = id->name;
+        bool is_builtin = (ui->component_type == "Text" || ui->component_type == "Button" ||
+                           ui->component_type == "Column" || ui->component_type == "Row" ||
+                           ui->component_type == "Image" || ui->component_type == "Video" ||
+                           ui->component_type == "Scrolling" || ui->component_type == "Card" ||
+                           ui->component_type == "Container");
+                           
+        if (is_builtin) {
+            if (ui->component_type == "Text") {
+                if (!ui->children.empty()) {
+                    generateExpression(ui->children[0].get());
+                } else {
+                    indent(); output << "i32.const 0\n";
+                }
+                indent(); output << "call $create_text\n";
+            } else if (ui->component_type == "Button") {
+                if (!ui->children.empty()) {
+                    generateExpression(ui->children[0].get());
+                } else {
+                    indent(); output << "i32.const 0\n";
+                }
+                if (!current_class_name.empty()) {
+                    indent(); output << "local.get $this\n";
+                } else {
+                    indent(); output << "i32.const 0\n";
+                }
+                std::string method_name = "";
+                for (const auto& arg : ui->named_args) {
+                    if (arg.first == "onClick") {
+                        if (auto* id = dynamic_cast<IdentifierNode*>(arg.second.get())) {
+                            method_name = id->name;
+                        }
                     }
                 }
+                std::string export_name = current_class_name.empty() ? method_name : (current_class_name + "_" + method_name);
+                if (string_literals.find(export_name) == string_literals.end()) {
+                    string_literals[export_name] = next_string_offset;
+                    next_string_offset += export_name.length() + 1;
+                }
+                indent(); output << "i32.const " << string_literals[export_name] << "\n";
+                indent(); output << "call $create_button\n";
+            } else if (ui->component_type == "Image" || ui->component_type == "Video") {
+                if (!ui->children.empty()) {
+                    generateExpression(ui->children[0].get());
+                } else {
+                    indent(); output << "i32.const 0\n";
+                }
+                indent(); output << "call $create_" << (ui->component_type == "Image" ? "image" : "video") << "\n";
+            } else if (ui->component_type == "Column" || ui->component_type == "Row" ||
+                       ui->component_type == "Scrolling" || ui->component_type == "Card" ||
+                       ui->component_type == "Container") {
+                std::string creator_suffix = ui->component_type;
+                if (creator_suffix == "Column") creator_suffix = "column";
+                else if (creator_suffix == "Row") creator_suffix = "row";
+                else if (creator_suffix == "Scrolling") creator_suffix = "scrolling";
+                else if (creator_suffix == "Card") creator_suffix = "card";
+                else if (creator_suffix == "Container") creator_suffix = "container";
+                
+                indent(); output << "call $create_" << creator_suffix << "\n";
             }
-            std::string export_name = current_class_name.empty() ? method_name : (current_class_name + "_" + method_name);
-            if (string_literals.find(export_name) == string_literals.end()) {
-                string_literals[export_name] = next_string_offset;
-                next_string_offset += export_name.length() + 1;
-            }
-            indent(); output << "i32.const " << string_literals[export_name] << "\n";
-            indent(); output << "call $create_button\n";
-        } else if (ui->component_type == "Column" || ui->component_type == "Row") {
-            indent(); output << "call $create_" << (ui->component_type == "Column" ? "column" : "row") << "\n";
+            
+            // Store the created component node index
             indent(); output << "local.set " << local_name << "\n";
             
-            for (const auto& child : ui->children) {
-                indent(); output << "local.get " << local_name << "\n";
-                generateExpression(child.get());
-                indent(); output << "call $append_child\n";
+            // Append children if layout/container component
+            if (ui->component_type == "Column" || ui->component_type == "Row" ||
+                ui->component_type == "Scrolling" || ui->component_type == "Card" ||
+                ui->component_type == "Container") {
+                for (const auto& child : ui->children) {
+                    indent(); output << "local.get " << local_name << "\n";
+                    generateExpression(child.get());
+                    indent(); output << "call $append_child\n";
+                }
             }
+            
+            // Apply attributes/styling dynamically
+            for (const auto& arg : ui->named_args) {
+                if (arg.first == "onClick" && ui->component_type == "Button") {
+                    continue; // onClick is handled inside create_button
+                }
+                std::string key = arg.first;
+                if (string_literals.find(key) == string_literals.end()) {
+                    string_literals[key] = next_string_offset;
+                    next_string_offset += key.length() + 1;
+                }
+                int key_offset = string_literals[key];
+                
+                indent(); output << "local.get " << local_name << "\n";
+                indent(); output << "i32.const " << key_offset << "\n";
+                generateExpression(arg.second.get());
+                indent();
+                if (isStringExpression(arg.second.get())) {
+                    output << "call $set_attribute\n";
+                } else {
+                    output << "call $set_attribute_int\n";
+                }
+            }
+            
+            // Leave the element index on the stack
             indent(); output << "local.get " << local_name << "\n";
         } else {
             // Custom UI Component (Function Call)
@@ -546,6 +602,15 @@ std::string WASMCodeGenerator::generate(ProgramNode* program) {
     indent(); output << "(import \"env\" \"concat_int\" (func $concat_int (param i32 i32) (result i32)))\n";
     indent(); output << "(import \"env\" \"concat_float\" (func $concat_float (param i32 f64) (result i32)))\n";
     indent(); output << "(import \"env\" \"create_button\" (func $create_button (param i32 i32 i32) (result i32)))\n";
+    indent(); output << "(import \"env\" \"httpGet\" (func $httpGet (param i32) (result i32)))\n";
+    indent(); output << "(import \"env\" \"httpPost\" (func $httpPost (param i32 i32) (result i32)))\n";
+    indent(); output << "(import \"env\" \"create_image\" (func $create_image (param i32) (result i32)))\n";
+    indent(); output << "(import \"env\" \"create_video\" (func $create_video (param i32) (result i32)))\n";
+    indent(); output << "(import \"env\" \"create_scrolling\" (func $create_scrolling (result i32)))\n";
+    indent(); output << "(import \"env\" \"create_card\" (func $create_card (result i32)))\n";
+    indent(); output << "(import \"env\" \"create_container\" (func $create_container (result i32)))\n";
+    indent(); output << "(import \"env\" \"set_attribute\" (func $set_attribute (param i32 i32 i32)))\n";
+    indent(); output << "(import \"env\" \"set_attribute_int\" (func $set_attribute_int (param i32 i32 i32)))\n";
     
     // Linear Memory Declaration (1 page = 64KB)
     indent();
@@ -703,6 +768,15 @@ std::string WASMCodeGenerator::generateHTMLWrapper() {
     html << "            }\n";
     html << "            return str;\n";
     html << "        }\n";
+    html << "        function writeStringToMemory(str, ptr) {\n";
+    html << "            if (!wasmMemory) return 0;\n";
+    html << "            const bytes = new Uint8Array(wasmMemory.buffer);\n";
+    html << "            for (let i = 0; i < str.length; i++) {\n";
+    html << "                bytes[ptr + i] = str.charCodeAt(i);\n";
+    html << "            }\n";
+    html << "            bytes[ptr + str.length] = 0;\n";
+    html << "            return ptr;\n";
+    html << "        }\n";
     html << "        \n";
     html << "        const DOMNodes = [null]; // Index 0 is null\n";
     html << "        const InstanceDOM = {}; // Map of class instance pointer -> DOM element\n";
@@ -809,6 +883,136 @@ std::string WASMCodeGenerator::generateHTMLWrapper() {
     html << "                    };\n";
     html << "                    DOMNodes.push(el);\n";
     html << "                    return DOMNodes.length - 1;\n";
+    html << "                },\n";
+    html << "                httpGet: (urlPtr) => {\n";
+    html << "                    const url = readString(urlPtr);\n";
+    html << "                    logToConsole(`[Network] httpGet: Fetching ${url}...`, 'system');\n";
+    html << "                    try {\n";
+    html << "                        const xhr = new XMLHttpRequest();\n";
+    html << "                        xhr.open('GET', url, false);\n";
+    html << "                        xhr.send(null);\n";
+    html << "                        if (xhr.status >= 200 && xhr.status < 300) {\n";
+    html << "                            return writeStringToMemory(xhr.responseText, 32768);\n";
+    html << "                        } else {\n";
+    html << "                            return writeStringToMemory(`{\\\"error\\\": \\\"HTTP ${xhr.status}\\\"}`, 32768);\n";
+    html << "                        }\n";
+    html << "                    } catch (e) {\n";
+    html << "                        logToConsole(`[Network Error/CORS] Using mock response for ${url}`, 'system');\n";
+    html << "                        if (url.indexOf(\\\"users\\\") !== -1) {\n";
+    html << "                            return writeStringToMemory(`{\\\"users\\\": [\\\"Sam\\\", \\\"Jay\\\", \\\"Alex\\\"], \\\"status\\\": \\\"active\\\"}`, 32768);\n";
+    html << "                        }\n";
+    html << "                        return writeStringToMemory(`{\\\"message\\\": \\\"Hello from Zenith WASM mock endpoint!\\\", \\\"status\\\": \\\"success\\\"}`, 32768);\n";
+    html << "                    }\n";
+    html << "                },\n";
+    html << "                httpPost: (urlPtr, bodyPtr) => {\n";
+    html << "                    const url = readString(urlPtr);\n";
+    html << "                    const body = readString(bodyPtr);\n";
+    html << "                    logToConsole(`[Network] httpPost: Posting to ${url}...`, 'system');\n";
+    html << "                    try {\n";
+    html << "                        const xhr = new XMLHttpRequest();\n";
+    html << "                        xhr.open('POST', url, false);\n";
+    html << "                        xhr.setRequestHeader('Content-Type', 'application/json');\n";
+    html << "                        xhr.send(body);\n";
+    html << "                        if (xhr.status >= 200 && xhr.status < 300) {\n";
+    html << "                            return writeStringToMemory(xhr.responseText, 32768);\n";
+    html << "                        } else {\n";
+    html << "                            return writeStringToMemory(`{\\\"error\\\": \\\"HTTP ${xhr.status}\\\"}`, 32768);\n";
+    html << "                        }\n";
+    html << "                    } catch (e) {\n";
+    html << "                        logToConsole(`[Network Error/CORS] Using mock response for POST ${url}`, 'system');\n";
+    html << "                        return writeStringToMemory(`{\\\"status\\\": \\\"posted\\\", \\\"received\\\": ${body}}`, 32768);\n";
+    html << "                    }\n";
+    html << "                },\n";
+    html << "                create_image: (urlPtr) => {\n";
+    html << "                    const el = document.createElement('img');\n";
+    html << "                    el.src = readString(urlPtr);\n";
+    html << "                    el.style.maxWidth = '100%';\n";
+    html << "                    el.style.borderRadius = '8px';\n";
+    html << "                    el.style.boxShadow = '0 4px 6px -1px rgba(0,0,0,0.1)';\n";
+    html << "                    DOMNodes.push(el);\n";
+    html << "                    return DOMNodes.length - 1;\n";
+    html << "                },\n";
+    html << "                create_video: (urlPtr) => {\n";
+    html << "                    const el = document.createElement('video');\n";
+    html << "                    el.src = readString(urlPtr);\n";
+    html << "                    el.controls = true;\n";
+    html << "                    el.style.maxWidth = '100%';\n";
+    html << "                    el.style.borderRadius = '8px';\n";
+    html << "                    el.style.boxShadow = '0 4px 6px -1px rgba(0,0,0,0.1)';\n";
+    html << "                    DOMNodes.push(el);\n";
+    html << "                    return DOMNodes.length - 1;\n";
+    html << "                },\n";
+    html << "                create_scrolling: () => {\n";
+    html << "                    const el = document.createElement('div');\n";
+    html << "                    el.style.display = 'flex';\n";
+    html << "                    el.style.flexDirection = 'column';\n";
+    html << "                    el.style.overflowY = 'auto';\n";
+    html << "                    el.style.maxHeight = '200px';\n";
+    html << "                    el.style.border = '1px solid rgba(255, 255, 255, 0.1)';\n";
+    html << "                    el.style.padding = '8px';\n";
+    html << "                    el.style.borderRadius = '8px';\n";
+    html << "                    el.style.background = 'rgba(0, 0, 0, 0.2)';\n";
+    html << "                    DOMNodes.push(el);\n";
+    html << "                    return DOMNodes.length - 1;\n";
+    html << "                },\n";
+    html << "                create_card: () => {\n";
+    html << "                    const el = document.createElement('div');\n";
+    html << "                    el.style.display = 'flex';\n";
+    html << "                    el.style.flexDirection = 'column';\n";
+    html << "                    el.style.background = 'rgba(30, 41, 59, 0.7)';\n";
+    html << "                    el.style.border = '1px solid rgba(56, 189, 248, 0.3)';\n";
+    html << "                    el.style.borderRadius = '12px';\n";
+    html << "                    el.style.padding = '16px';\n";
+    html << "                    el.style.margin = '8px 0';\n";
+    html << "                    el.style.boxShadow = '0 10px 15px -3px rgba(0,0,0,0.3)';\n";
+    html << "                    DOMNodes.push(el);\n";
+    html << "                    return DOMNodes.length - 1;\n";
+    html << "                },\n";
+    html << "                create_container: () => {\n";
+    html << "                    const el = document.createElement('div');\n";
+    html << "                    el.style.display = 'flex';\n";
+    html << "                    el.style.flexDirection = 'column';\n";
+    html << "                    el.style.border = '1px solid rgba(255, 255, 255, 0.05)';\n";
+    html << "                    el.style.borderRadius = '8px';\n";
+    html << "                    DOMNodes.push(el);\n";
+    html << "                    return DOMNodes.length - 1;\n";
+    html << "                },\n";
+    html << "                set_attribute: (nodeIdx, keyPtr, valPtr) => {\n";
+    html << "                    const el = DOMNodes[nodeIdx];\n";
+    html << "                    if (!el) return;\n";
+    html << "                    const key = readString(keyPtr);\n";
+    html << "                    const val = readString(valPtr);\n";
+    html << "                    if (key === 'color') {\n";
+    html << "                        el.style.color = val;\n";
+    html << "                    } else if (key === 'backgroundColor') {\n";
+    html << "                        el.style.backgroundColor = val;\n";
+    html << "                    } else if (key === 'fontWeight') {\n";
+    html << "                        el.style.fontWeight = val;\n";
+    html << "                    } else if (key === 'width') {\n";
+    html << "                        el.style.width = val;\n";
+    html << "                    } else if (key === 'height') {\n";
+    html << "                        el.style.height = val;\n";
+    html << "                    } else if (key === 'src' || key === 'url') {\n";
+    html << "                        el.src = val;\n";
+    html << "                    } else {\n";
+    html << "                        el.setAttribute(key, val);\n";
+    html << "                    }\n";
+    html << "                },\n";
+    html << "                set_attribute_int: (nodeIdx, keyPtr, val) => {\n";
+    html << "                    const el = DOMNodes[nodeIdx];\n";
+    html << "                    if (!el) return;\n";
+    html << "                    const key = readString(keyPtr);\n";
+    html << "                    if (key === 'padding') {\n";
+    html << "                        el.style.padding = val + 'px';\n";
+    html << "                    } else if (key === 'margin') {\n";
+    html << "                        el.style.margin = val + 'px';\n";
+    html << "                    } else if (key === 'width') {\n";
+    html << "                        el.style.width = val + 'px';\n";
+    html << "                    } else if (key === 'height') {\n";
+    html << "                        el.style.height = val + 'px';\n";
+    html << "                    } else {\n";
+    html << "                        el.setAttribute(key, val.toString());\n";
+    html << "                    }\n";
     html << "                }\n";
     html << "            }\n";
     html << "        };\n\n";
@@ -863,6 +1067,20 @@ bool WASMCodeGenerator::isFloatExpression(ExprNode* expr) {
     }
     if (auto* call = dynamic_cast<MethodCallNode*>(expr)) {
         if (call->method_name == "getArea") return true;
+    }
+    return false;
+}
+
+bool WASMCodeGenerator::isStringExpression(ExprNode* expr) {
+    if (!expr) return false;
+    if (dynamic_cast<StringLiteralNode*>(expr)) return true;
+    if (auto* id = dynamic_cast<IdentifierNode*>(expr)) {
+        if (local_types.count(id->name)) {
+            return local_types[id->name] == "String";
+        }
+    }
+    if (auto* binary = dynamic_cast<BinaryExprNode*>(expr)) {
+        return binary->is_string_concat || isStringExpression(binary->left.get()) || isStringExpression(binary->right.get());
     }
     return false;
 }

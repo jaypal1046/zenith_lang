@@ -360,11 +360,22 @@ bool SemanticAnalyzer::analyze(ProgramNode* program) {
                 auto println_fn = std::make_unique<FunctionNode>(std::make_unique<TypeNode>("Void"), "println");
                 println_fn->parameters.push_back(std::make_unique<VarDeclNode>(std::make_unique<TypeNode>("String"), "msg"));
 
+                auto httpGet_fn = std::make_unique<FunctionNode>(std::make_unique<TypeNode>("String"), "httpGet");
+                httpGet_fn->parameters.push_back(std::make_unique<VarDeclNode>(std::make_unique<TypeNode>("String"), "url"));
+
+                auto httpPost_fn = std::make_unique<FunctionNode>(std::make_unique<TypeNode>("String"), "httpPost");
+                httpPost_fn->parameters.push_back(std::make_unique<VarDeclNode>(std::make_unique<TypeNode>("String"), "url"));
+                httpPost_fn->parameters.push_back(std::make_unique<VarDeclNode>(std::make_unique<TypeNode>("String"), "json_body"));
+
                 builtin_fns.push_back(std::move(print_fn));
                 builtin_fns.push_back(std::move(println_fn));
+                builtin_fns.push_back(std::move(httpGet_fn));
+                builtin_fns.push_back(std::move(httpPost_fn));
 
-                functions["print"] = builtin_fns[builtin_fns.size() - 2].get();
-                functions["println"] = builtin_fns[builtin_fns.size() - 1].get();
+                functions["print"] = builtin_fns[builtin_fns.size() - 4].get();
+                functions["println"] = builtin_fns[builtin_fns.size() - 3].get();
+                functions["httpGet"] = builtin_fns[builtin_fns.size() - 2].get();
+                functions["httpPost"] = builtin_fns[builtin_fns.size() - 1].get();
             }
         }
     }

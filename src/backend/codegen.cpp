@@ -74,6 +74,13 @@ std::string CodeGenerator::generateExpression(ExprNode* expr) {
         return generateExpression(prop->object.get()) + "." + prop->property_name;
     }
     if (auto* call = dynamic_cast<MethodCallNode*>(expr)) {
+        if (call->method_name == "render") {
+            if (auto* inner_call = dynamic_cast<MethodCallNode*>(call->object.get())) {
+                if (inner_call->method_name == "build") {
+                    return "zenith::runInteractiveLoop(" + generateExpression(inner_call->object.get()) + ")";
+                }
+            }
+        }
         std::string m_name = call->method_name;
         if (m_name == "push") m_name = "push_back";
         
@@ -113,7 +120,14 @@ std::string CodeGenerator::generateExpression(ExprNode* expr) {
         if (!is_custom) {
             res += ", {";
             for (size_t i = 0; i < ui->named_args.size(); ++i) {
-                res += "{\"" + ui->named_args[i].first + "\", " + generateExpression(ui->named_args[i].second.get()) + "}";
+                std::string key = ui->named_args[i].first;
+                std::string val = generateExpression(ui->named_args[i].second.get());
+                if (key.rfind("on", 0) == 0) { // starts with "on"
+                    if (val.front() != '"') {
+                        val = "\"" + val + "\"";
+                    }
+                }
+                res += "{\"" + key + "\", zenith::toString(" + val + ")}";
                 if (i < ui->named_args.size() - 1) res += ", ";
             }
             res += "}";
@@ -312,6 +326,18 @@ void CodeGenerator::generateClass(ClassDeclNode* node) {
         }
         is_inside_class_method = false;
     }
+
+    // Generate triggerCallback dispatcher
+    indent(); output << "void triggerCallback(std::string name) {\n";
+    indent_level++;
+    for (const auto& method : node->methods) {
+        if (method->function_name != "build" && method->parameters.empty()) {
+            indent();
+            output << "if (name == \"" << method->function_name << "\") { this->" << method->function_name << "(); return; }\n";
+        }
+    }
+    indent_level--;
+    indent(); output << "}\n\n";
     
     indent_level--;
     indent(); output << "};\n\n";
@@ -354,6 +380,8 @@ std::string CodeGenerator::generate(ProgramNode* program) {
             if (imp->module_name == "std.io") {
                 function_names.insert("print");
                 function_names.insert("println");
+                function_names.insert("httpGet");
+                function_names.insert("httpPost");
             }
         }
     }
@@ -375,7 +403,9 @@ std::string CodeGenerator::generate(ProgramNode* program) {
 
     if (has_std_io) {
         output << "inline void print(std::string msg) { std::cout << msg; }\n";
-        output << "inline void println(std::string msg) { std::cout << msg << std::endl; }\n\n";
+        output << "inline void println(std::string msg) { std::cout << msg << std::endl; }\n";
+        output << "inline std::string httpGet(std::string url) { return zenith::httpGet(url); }\n";
+        output << "inline std::string httpPost(std::string url, std::string json_body) { return zenith::httpPost(url, json_body); }\n\n";
     }
 
     for (const auto& stmt : program->statements) {

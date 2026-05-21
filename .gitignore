@@ -21,6 +21,17 @@ zenith_android/
 .vscode/
 .idea/
 .vs/
-*.suo
-*.user
 *.db
+*.user
+*.suo
+
+# Scaffolded test projects and temporary test directories
+scaffold_test_app/
+test_app/
+
+# Generated test and build outputs
+tests/*.cpp
+tests/*.html
+tests/*.wat
+tests/*.wasm
+

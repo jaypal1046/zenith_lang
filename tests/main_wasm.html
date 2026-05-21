@@ -129,6 +129,15 @@
             }
             return str;
         }
+        function writeStringToMemory(str, ptr) {
+            if (!wasmMemory) return 0;
+            const bytes = new Uint8Array(wasmMemory.buffer);
+            for (let i = 0; i < str.length; i++) {
+                bytes[ptr + i] = str.charCodeAt(i);
+            }
+            bytes[ptr + str.length] = 0;
+            return ptr;
+        }
         
         const DOMNodes = [null]; // Index 0 is null
         const InstanceDOM = {}; // Map of class instance pointer -> DOM element
@@ -235,6 +244,136 @@
                     };
                     DOMNodes.push(el);
                     return DOMNodes.length - 1;
+                },
+                httpGet: (urlPtr) => {
+                    const url = readString(urlPtr);
+                    logToConsole(`[Network] httpGet: Fetching ${url}...`, 'system');
+                    try {
+                        const xhr = new XMLHttpRequest();
+                        xhr.open('GET', url, false);
+                        xhr.send(null);
+                        if (xhr.status >= 200 && xhr.status < 300) {
+                            return writeStringToMemory(xhr.responseText, 32768);
+                        } else {
+                            return writeStringToMemory(`{\"error\": \"HTTP ${xhr.status}\"}`, 32768);
+                        }
+                    } catch (e) {
+                        logToConsole(`[Network Error/CORS] Using mock response for ${url}`, 'system');
+                        if (url.indexOf(\"users\") !== -1) {
+                            return writeStringToMemory(`{\"users\": [\"Sam\", \"Jay\", \"Alex\"], \"status\": \"active\"}`, 32768);
+                        }
+                        return writeStringToMemory(`{\"message\": \"Hello from Zenith WASM mock endpoint!\", \"status\": \"success\"}`, 32768);
+                    }
+                },
+                httpPost: (urlPtr, bodyPtr) => {
+                    const url = readString(urlPtr);
+                    const body = readString(bodyPtr);
+                    logToConsole(`[Network] httpPost: Posting to ${url}...`, 'system');
+                    try {
+                        const xhr = new XMLHttpRequest();
+                        xhr.open('POST', url, false);
+                        xhr.setRequestHeader('Content-Type', 'application/json');
+                        xhr.send(body);
+                        if (xhr.status >= 200 && xhr.status < 300) {
+                            return writeStringToMemory(xhr.responseText, 32768);
+                        } else {
+                            return writeStringToMemory(`{\"error\": \"HTTP ${xhr.status}\"}`, 32768);
+                        }
+                    } catch (e) {
+                        logToConsole(`[Network Error/CORS] Using mock response for POST ${url}`, 'system');
+                        return writeStringToMemory(`{\"status\": \"posted\", \"received\": ${body}}`, 32768);
+                    }
+                },
+                create_image: (urlPtr) => {
+                    const el = document.createElement('img');
+                    el.src = readString(urlPtr);
+                    el.style.maxWidth = '100%';
+                    el.style.borderRadius = '8px';
+                    el.style.boxShadow = '0 4px 6px -1px rgba(0,0,0,0.1)';
+                    DOMNodes.push(el);
+                    return DOMNodes.length - 1;
+                },
+                create_video: (urlPtr) => {
+                    const el = document.createElement('video');
+                    el.src = readString(urlPtr);
+                    el.controls = true;
+                    el.style.maxWidth = '100%';
+                    el.style.borderRadius = '8px';
+                    el.style.boxShadow = '0 4px 6px -1px rgba(0,0,0,0.1)';
+                    DOMNodes.push(el);
+                    return DOMNodes.length - 1;
+                },
+                create_scrolling: () => {
+                    const el = document.createElement('div');
+                    el.style.display = 'flex';
+                    el.style.flexDirection = 'column';
+                    el.style.overflowY = 'auto';
+                    el.style.maxHeight = '200px';
+                    el.style.border = '1px solid rgba(255, 255, 255, 0.1)';
+                    el.style.padding = '8px';
+                    el.style.borderRadius = '8px';
+                    el.style.background = 'rgba(0, 0, 0, 0.2)';
+                    DOMNodes.push(el);
+                    return DOMNodes.length - 1;
+                },
+                create_card: () => {
+                    const el = document.createElement('div');
+                    el.style.display = 'flex';
+                    el.style.flexDirection = 'column';
+                    el.style.background = 'rgba(30, 41, 59, 0.7)';
+                    el.style.border = '1px solid rgba(56, 189, 248, 0.3)';
+                    el.style.borderRadius = '12px';
+                    el.style.padding = '16px';
+                    el.style.margin = '8px 0';
+                    el.style.boxShadow = '0 10px 15px -3px rgba(0,0,0,0.3)';
+                    DOMNodes.push(el);
+                    return DOMNodes.length - 1;
+                },
+                create_container: () => {
+                    const el = document.createElement('div');
+                    el.style.display = 'flex';
+                    el.style.flexDirection = 'column';
+                    el.style.border = '1px solid rgba(255, 255, 255, 0.05)';
+                    el.style.borderRadius = '8px';
+                    DOMNodes.push(el);
+                    return DOMNodes.length - 1;
+                },
+                set_attribute: (nodeIdx, keyPtr, valPtr) => {
+                    const el = DOMNodes[nodeIdx];
+                    if (!el) return;
+                    const key = readString(keyPtr);
+                    const val = readString(valPtr);
+                    if (key === 'color') {
+                        el.style.color = val;
+                    } else if (key === 'backgroundColor') {
+                        el.style.backgroundColor = val;
+                    } else if (key === 'fontWeight') {
+                        el.style.fontWeight = val;
+                    } else if (key === 'width') {
+                        el.style.width = val;
+                    } else if (key === 'height') {
+                        el.style.height = val;
+                    } else if (key === 'src' || key === 'url') {
+                        el.src = val;
+                    } else {
+                        el.setAttribute(key, val);
+                    }
+                },
+                set_attribute_int: (nodeIdx, keyPtr, val) => {
+                    const el = DOMNodes[nodeIdx];
+                    if (!el) return;
+                    const key = readString(keyPtr);
+                    if (key === 'padding') {
+                        el.style.padding = val + 'px';
+                    } else if (key === 'margin') {
+                        el.style.margin = val + 'px';
+                    } else if (key === 'width') {
+                        el.style.width = val + 'px';
+                    } else if (key === 'height') {
+                        el.style.height = val + 'px';
+                    } else {
+                        el.setAttribute(key, val.toString());
+                    }
                 }
             }
         };

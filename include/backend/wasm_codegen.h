@@ -37,6 +37,7 @@ private:
     std::string mapTypeToWASM(TypeNode* type);
     int countUINodes(ASTNode* node);
     bool isFloatExpression(ExprNode* expr);
+    bool isStringExpression(ExprNode* expr);
     
     // Visitor methods for WASM Stack Machine
     void generateClass(ClassDeclNode* node);

@@ -48,3 +48,26 @@ This document outlines the roadmap for the next development phases of the **Zeni
 * **Action Items:**
   * Refactored Agentic Runtime to conditionally compile using POSIX sockets (`posix_post`) on Linux/Android.
   * Automated toolchain selection, ABI detection, compilation, deployment, and execution via `build_android.bat`.
+
+---
+
+## Phase 4: Production Runtime, Keyboard Interaction, and Real Networking (IN PROGRESS)
+
+### 4.1 Cross-Platform Network Runtime
+* **Goal:** Upgrade the C++ runtime to perform real, asynchronous HTTP requests using `libcurl` and parse LLM JSON payloads.
+* **Action Items:**
+  * Implement general `libcurl` bindings inside `zenith_runtime.h` for platform-agnostic HTTP POST/GET.
+  * Add support for header-only JSON parsing for incoming agentic completions.
+
+### 4.2 Interactive Terminal Loop
+* **Goal:** Support keyboard input and rendering updates inside the ANSI terminal application.
+* **Action Items:**
+  * Implement a main event loop that catches keyboard keystrokes (`w`, `a`, `s`, `d`, `enter`, `escape`).
+  * Propagate button click events (`onClick: increment`) from terminal actions.
+
+### 4.3 Styling Attributes Compilation
+* **Goal:** Support dynamic styling attributes (`color`, `backgroundColor`, `margin`, `padding`).
+* **Action Items:**
+  * Update AST and Parser to support color attributes.
+  * Map layout styles to ANSI colors in terminal and CSS values in JS/Wasm code generators.
+

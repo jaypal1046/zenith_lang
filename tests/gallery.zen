@@ -1,0 +1,85 @@
+// Zenith Unified Gallery & Platform Verification
+import std.io;
+
+class GalleryApp() {
+    String title = "ZENITH PLATFORM GALLERY";
+    String loaded_data = "No API data fetched yet.";
+    Int clicks = 0;
+    
+    UI build() {
+        return Column(
+            // Styled header
+            Text(title, fontWeight: "bold", color: "cyan"),
+            
+            // Layout Box (Container) with nested layout
+            Container(
+                Text("1. Widget Grid & Flow Layouts", fontWeight: "bold", color: "yellow"),
+                Row(
+                    Text("Flow item 1", color: "green"),
+                    Text("Flow item 2", color: "magenta")
+                ),
+                padding: 1
+            ),
+            
+            // Buttons and Interactive Controls (Reactivity)
+            Card(
+                Text("2. Reactive Component States", fontWeight: "bold", color: "cyan"),
+                Row(
+                    Text("Interactive clicks: " + clicks, color: "green"),
+                    Button("Click Me!", onClick: handlePress)
+                ),
+                padding: 1
+            ),
+            
+            // Media Widgets
+            Row(
+                Image("https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe", width: 35, height: 4),
+                Video("https://assets.mixkit.co/videos/preview/mixkit-stars-in-space-background-1611-large.mp4", width: 35, height: 4)
+            ),
+            
+            // Scrolling Content Area
+            Scrolling(
+                Text("Line 1: Infinite Scrolling Row"),
+                Text("Line 2: GPU Accelerated Layouts"),
+                Text("Line 3: Reactive State Binding"),
+                Text("Line 4: Native Platform Primitives"),
+                Text("Line 5: Dynamic CSS Variables"),
+                Text("Line 6: Single-Thread WASM Event Loop"),
+                height: 4
+            ),
+            
+            // API Integration (Network IO Calls)
+            Card(
+                Text("3. REST API / Network Client Integration", fontWeight: "bold", color: "yellow"),
+                Row(
+                    Text("Response: " + loaded_data),
+                    Button("Fetch JSON", onClick: fetchData)
+                ),
+                padding: 1
+            )
+        );
+    }
+    
+    Void handlePress() {
+        setState {
+            clicks = clicks + 1;
+        }
+    }
+    
+    Void fetchData() {
+        // Trigger simulated/CORS-safe network HTTP GET request
+        String res = httpGet("https://jsonplaceholder.typicode.com/users");
+        setState {
+            loaded_data = res;
+        }
+    }
+}
+
+Void main() {
+    println("--- Booting Zenith Multi-Platform Gallery App ---");
+    
+    GalleryApp app = GalleryApp();
+    app.build().render();
+    
+    println("--- Gallery Loaded Successfully. Interactive loop started! ---");
+}

@@ -16,6 +16,7 @@ private:
     std::unordered_set<std::string> agentic_functions;
     std::unordered_set<std::string> async_functions;
     std::unordered_set<std::string> current_class_fields;
+    std::unordered_set<std::string> current_class_methods;
     bool is_inside_class_method = false;
 
     void indent();

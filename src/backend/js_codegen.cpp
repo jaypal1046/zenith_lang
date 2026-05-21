@@ -67,6 +67,9 @@ std::string JSCodeGenerator::generateExpression(ExprNode* expr) {
         if (is_inside_class_method && current_class_fields.count(id->name)) {
             return "this." + id->name;
         }
+        if (is_inside_class_method && current_class_methods.count(id->name)) {
+            return "this." + id->name + ".bind(this)";
+        }
         return id->name;
     }
     if (auto* str = dynamic_cast<StringLiteralNode*>(expr)) {
@@ -116,11 +119,15 @@ std::string JSCodeGenerator::generateExpression(ExprNode* expr) {
         std::string res;
         bool is_class = class_names.count(ui->component_type) > 0;
         bool is_fn = function_names.count(ui->component_type) > 0;
-        bool is_custom = is_class || is_fn;
+        bool is_method = is_inside_class_method && current_class_methods.count(ui->component_type);
+        bool is_custom = is_class || is_fn || is_method;
         
         if (is_custom) {
             if (is_class) {
                 res = "new " + ui->component_type + "(";
+            } else if (is_method) {
+                bool is_async_fn = async_functions.count(ui->component_type) > 0;
+                res = (is_async_fn ? "await this." : "this.") + ui->component_type + "(";
             } else {
                 bool is_async_fn = async_functions.count(ui->component_type) > 0;
                 res = (is_async_fn ? "await " : "") + ui->component_type + "(";
@@ -216,6 +223,10 @@ void JSCodeGenerator::generateClass(ClassDeclNode* node) {
     for (const auto& member : node->fields) {
         current_class_fields.insert(member->var_name);
     }
+    current_class_methods.clear();
+    for (const auto& method : node->methods) {
+        current_class_methods.insert(method->function_name);
+    }
 
     output << "class " << node->class_name << " {\n";
     indent_level++;
@@ -248,21 +259,67 @@ void JSCodeGenerator::generateClass(ClassDeclNode* node) {
     is_inside_class_method = true;
     for (const auto& method : node->methods) {
         indent();
-        if (async_functions.count(method->function_name)) {
-            output << "async ";
+        auto* agentic = dynamic_cast<AgenticFunctionNode*>(method.get());
+        if (agentic) {
+            output << "async " << method->function_name << "(";
+            for (size_t i = 0; i < method->parameters.size(); ++i) {
+                output << method->parameters[i]->var_name;
+                if (i < method->parameters.size() - 1) output << ", ";
+            }
+            output << ") {\n";
+            indent_level++;
+            
+            std::string raw_prompt = agentic->prompt_template;
+            std::string js_prompt = "`";
+            size_t pos = 0;
+            while (pos < raw_prompt.length()) {
+                if (raw_prompt[pos] == '{') {
+                    size_t end = raw_prompt.find('}', pos);
+                    if (end != std::string::npos) {
+                        std::string var_name = raw_prompt.substr(pos + 1, end - pos - 1);
+                        bool is_param = false;
+                        for (const auto& p : agentic->parameters) {
+                            if (p->var_name == var_name) is_param = true;
+                        }
+                        if (is_param) {
+                            js_prompt += "${" + var_name + "}";
+                        } else {
+                            js_prompt += "${this." + var_name + "}";
+                        }
+                        pos = end + 1;
+                    } else {
+                        js_prompt += "{";
+                        pos++;
+                    }
+                } else {
+                    js_prompt += raw_prompt[pos];
+                    pos++;
+                }
+            }
+            js_prompt += "`";
+            
+            indent();
+            output << "return await zenith.llmPrompt(this.url, " << js_prompt << ");\n";
+            
+            indent_level--;
+            indent(); output << "}\n";
+        } else {
+            if (async_functions.count(method->function_name)) {
+                output << "async ";
+            }
+            output << method->function_name << "(";
+            for (size_t i = 0; i < method->parameters.size(); ++i) {
+                output << method->parameters[i]->var_name;
+                if (i < method->parameters.size() - 1) output << ", ";
+            }
+            output << ") {\n";
+            indent_level++;
+            for (const auto& stmt : method->body) {
+                generateStatement(stmt.get());
+            }
+            indent_level--;
+            indent(); output << "}\n";
         }
-        output << method->function_name << "(";
-        for (size_t i = 0; i < method->parameters.size(); ++i) {
-            output << method->parameters[i]->var_name;
-            if (i < method->parameters.size() - 1) output << ", ";
-        }
-        output << ") {\n";
-        indent_level++;
-        for (const auto& stmt : method->body) {
-            generateStatement(stmt.get());
-        }
-        indent_level--;
-        indent(); output << "}\n";
     }
     
     // Special render method if it has build()
@@ -298,6 +355,18 @@ void JSCodeGenerator::generateClass(ClassDeclNode* node) {
         output << "this.domElement = newDom;\n";
         indent();
         output << "return newDom;\n";
+        indent_level--;
+        indent();
+        output << "}\n";
+
+        // Generate setState helper
+        indent();
+        output << "setState(callback) {\n";
+        indent_level++;
+        indent();
+        output << "callback();\n";
+        indent();
+        output << "this.render();\n";
         indent_level--;
         indent();
         output << "}\n";
@@ -405,6 +474,10 @@ std::string JSCodeGenerator::generate(ProgramNode* program) {
 
     // Initialize async_functions with agentic_functions
     async_functions = agentic_functions;
+    function_names.insert("httpGet");
+    function_names.insert("httpPost");
+    async_functions.insert("httpGet");
+    async_functions.insert("httpPost");
     
     // Fixed-point async propagation analysis
     bool changed = true;
@@ -623,15 +696,58 @@ std::string JSCodeGenerator::generate(ProgramNode* program) {
     output << "            }\n";
     output << "        };\n\n";
 
+    output << "        async function httpGet(url) {\n";
+    output << "            zenith.println('[Network] httpGet: Fetching ' + url + '...');\n";
+    output << "            try {\n";
+    output << "                const response = await fetch(url);\n";
+    output << "                if (response.ok) {\n";
+    output << "                    return await response.text();\n";
+    output << "                }\n";
+    output << "            } catch(e) {}\n";
+    output << "            zenith.println('[Network Error/CORS] Using mock response for ' + url);\n";
+    output << "            if (url.includes('users')) {\n";
+    output << "                return JSON.stringify({users: [\"Sam\", \"Jay\", \"Alex\"], status: \"active\"});\n";
+    output << "            }\n";
+    output << "            return JSON.stringify({message: \"Hello from Zenith JS mock endpoint!\", status: \"success\"});\n";
+    output << "        }\n\n";
+    output << "        async function httpPost(url, body) {\n";
+    output << "            zenith.println('[Network] httpPost: Posting to ' + url + '...');\n";
+    output << "            try {\n";
+    output << "                const response = await fetch(url, {\n";
+    output << "                    method: 'POST',\n";
+    output << "                    headers: { 'Content-Type': 'application/json' },\n";
+    output << "                    body: body\n";
+    output << "                });\n";
+    output << "                if (response.ok) {\n";
+    output << "                    return await response.text();\n";
+    output << "                }\n";
+    output << "            } catch(e) {}\n";
+    output << "            zenith.println('[Network Error/CORS] Using mock response for POST ' + url);\n";
+    output << "            return JSON.stringify({status: \"posted\", received: JSON.parse(body)});\n";
+    output << "        }\n\n";
     output << "        const UI = {\n";
     output << "            print: function(msg) { zenith.print(Array.isArray(msg) ? msg.join('') : msg); },\n";
     output << "            println: function(msg) { zenith.println(Array.isArray(msg) ? msg.join('') : msg); },\n";
+    output << "            applyStyles: function(el, attrs = {}) {\n";
+    output << "                if (!attrs) return;\n";
+    output << "                if (attrs.color) el.style.color = attrs.color;\n";
+    output << "                if (attrs.backgroundColor) el.style.backgroundColor = attrs.backgroundColor;\n";
+    output << "                if (attrs.padding) el.style.padding = typeof attrs.padding === 'number' ? attrs.padding + 'px' : attrs.padding;\n";
+    output << "                if (attrs.margin) el.style.margin = typeof attrs.margin === 'number' ? attrs.margin + 'px' : attrs.margin;\n";
+    output << "                if (attrs.width) el.style.width = typeof attrs.width === 'number' ? attrs.width + 'px' : attrs.width;\n";
+    output << "                if (attrs.height) el.style.height = typeof attrs.height === 'number' ? attrs.height + 'px' : attrs.height;\n";
+    output << "                if (attrs.fontWeight) el.style.fontWeight = attrs.fontWeight;\n";
+    output << "                if (attrs.onClick && typeof attrs.onClick === 'function') {\n";
+    output << "                    el.onclick = attrs.onClick;\n";
+    output << "                }\n";
+    output << "            },\n";
     output << "            Column: function(children, attrs = {}) {\n";
     output << "                const el = document.createElement('div');\n";
     output << "                el.className = 'zenith-column';\n";
     output << "                for (const child of children) {\n";
     output << "                    if (child) el.appendChild(child);\n";
     output << "                }\n";
+    output << "                UI.applyStyles(el, attrs);\n";
     output << "                el.render = function() {\n";
     output << "                    UI.render(el);\n";
     output << "                    return el;\n";
@@ -644,6 +760,7 @@ std::string JSCodeGenerator::generate(ProgramNode* program) {
     output << "                for (const child of children) {\n";
     output << "                    if (child) el.appendChild(child);\n";
     output << "                }\n";
+    output << "                UI.applyStyles(el, attrs);\n";
     output << "                el.render = function() {\n";
     output << "                    UI.render(el);\n";
     output << "                    return el;\n";
@@ -654,9 +771,106 @@ std::string JSCodeGenerator::generate(ProgramNode* program) {
     output << "                const el = document.createElement('span');\n";
     output << "                el.className = 'zenith-text';\n";
     output << "                el.textContent = Array.isArray(text) ? text.join('') : text;\n";
-    output << "                if (attrs.fontWeight === 'bold') {\n";
-    output << "                    el.style.fontWeight = 'bold';\n";
+    output << "                UI.applyStyles(el, attrs);\n";
+    output << "                el.render = function() {\n";
+    output << "                    UI.render(el);\n";
+    output << "                    return el;\n";
+    output << "                };\n";
+    output << "                return el;\n";
+    output << "            },\n";
+    output << "            Button: function(label, attrs = {}) {\n";
+    output << "                const el = document.createElement('button');\n";
+    output << "                el.className = 'interactive-btn';\n";
+    output << "                el.textContent = Array.isArray(label) ? label.join('') : label;\n";
+    output << "                UI.applyStyles(el, attrs);\n";
+    output << "                el.render = function() {\n";
+    output << "                    UI.render(el);\n";
+    output << "                    return el;\n";
+    output << "                };\n";
+    output << "                return el;\n";
+    output << "            },\n";
+    output << "            Image: function(url, attrs = {}) {\n";
+    output << "                const el = document.createElement('img');\n";
+    output << "                el.src = Array.isArray(url) ? url.join('') : url;\n";
+    output << "                el.style.maxWidth = '100%';\n";
+    output << "                el.style.borderRadius = '12px';\n";
+    output << "                el.style.boxShadow = '0 8px 30px rgba(0, 0, 0, 0.5)';\n";
+    output << "                el.style.border = '1px solid rgba(255, 255, 255, 0.1)';\n";
+    output << "                UI.applyStyles(el, attrs);\n";
+    output << "                el.render = function() {\n";
+    output << "                    UI.render(el);\n";
+    output << "                    return el;\n";
+    output << "                };\n";
+    output << "                return el;\n";
+    output << "            },\n";
+    output << "            Video: function(url, attrs = {}) {\n";
+    output << "                const el = document.createElement('video');\n";
+    output << "                el.src = Array.isArray(url) ? url.join('') : url;\n";
+    output << "                el.controls = true;\n";
+    output << "                el.style.maxWidth = '100%';\n";
+    output << "                el.style.borderRadius = '12px';\n";
+    output << "                el.style.boxShadow = '0 8px 30px rgba(0, 0, 0, 0.5)';\n";
+    output << "                el.style.border = '1px solid rgba(255, 255, 255, 0.1)';\n";
+    output << "                UI.applyStyles(el, attrs);\n";
+    output << "                el.render = function() {\n";
+    output << "                    UI.render(el);\n";
+    output << "                    return el;\n";
+    output << "                };\n";
+    output << "                return el;\n";
+    output << "            },\n";
+    output << "            Scrolling: function(children, attrs = {}) {\n";
+    output << "                const el = document.createElement('div');\n";
+    output << "                el.style.display = 'flex';\n";
+    output << "                el.style.flexDirection = 'column';\n";
+    output << "                el.style.overflowY = 'auto';\n";
+    output << "                el.style.maxHeight = '300px';\n";
+    output << "                el.style.border = '1px solid rgba(255, 255, 255, 0.1)';\n";
+    output << "                el.style.padding = '12px';\n";
+    output << "                el.style.borderRadius = '12px';\n";
+    output << "                el.style.background = 'rgba(0, 0, 0, 0.3)';\n";
+    output << "                for (const child of children) {\n";
+    output << "                    if (child) el.appendChild(child);\n";
     output << "                }\n";
+    output << "                UI.applyStyles(el, attrs);\n";
+    output << "                el.render = function() {\n";
+    output << "                    UI.render(el);\n";
+    output << "                    return el;\n";
+    output << "                };\n";
+    output << "                return el;\n";
+    output << "            },\n";
+    output << "            Card: function(children, attrs = {}) {\n";
+    output << "                const el = document.createElement('div');\n";
+    output << "                el.style.display = 'flex';\n";
+    output << "                el.style.flexDirection = 'column';\n";
+    output << "                el.style.background = 'rgba(30, 41, 59, 0.6)';\n";
+    output << "                el.style.backdropFilter = 'blur(12px)';\n";
+    output << "                el.style.border = '1px solid rgba(255, 255, 255, 0.1)';\n";
+    output << "                el.style.borderRadius = '16px';\n";
+    output << "                el.style.padding = '20px';\n";
+    output << "                el.style.margin = '10px 0';\n";
+    output << "                el.style.boxShadow = '0 20px 40px rgba(0, 0, 0, 0.4)';\n";
+    output << "                for (const child of children) {\n";
+    output << "                    if (child) el.appendChild(child);\n";
+    output << "                }\n";
+    output << "                UI.applyStyles(el, attrs);\n";
+    output << "                el.render = function() {\n";
+    output << "                    UI.render(el);\n";
+    output << "                    return el;\n";
+    output << "                };\n";
+    output << "                return el;\n";
+    output << "            },\n";
+    output << "            Container: function(children, attrs = {}) {\n";
+    output << "                const el = document.createElement('div');\n";
+    output << "                el.style.display = 'flex';\n";
+    output << "                el.style.flexDirection = 'column';\n";
+    output << "                el.style.border = '1px solid rgba(255, 255, 255, 0.05)';\n";
+    output << "                el.style.borderRadius = '12px';\n";
+    output << "                el.style.padding = '16px';\n";
+    output << "                el.style.background = 'rgba(255, 255, 255, 0.02)';\n";
+    output << "                for (const child of children) {\n";
+    output << "                    if (child) el.appendChild(child);\n";
+    output << "                }\n";
+    output << "                UI.applyStyles(el, attrs);\n";
     output << "                el.render = function() {\n";
     output << "                    UI.render(el);\n";
     output << "                    return el;\n";

@@ -180,15 +180,60 @@
             }
         };
 
+        async function httpGet(url) {
+            zenith.println('[Network] httpGet: Fetching ' + url + '...');
+            try {
+                const response = await fetch(url);
+                if (response.ok) {
+                    return await response.text();
+                }
+            } catch(e) {}
+            zenith.println('[Network Error/CORS] Using mock response for ' + url);
+            if (url.includes('users')) {
+                return JSON.stringify({users: ["Sam", "Jay", "Alex"], status: "active"});
+            }
+            return JSON.stringify({message: "Hello from Zenith JS mock endpoint!", status: "success"});
+        }
+
+        async function httpPost(url, body) {
+            zenith.println('[Network] httpPost: Posting to ' + url + '...');
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: body
+                });
+                if (response.ok) {
+                    return await response.text();
+                }
+            } catch(e) {}
+            zenith.println('[Network Error/CORS] Using mock response for POST ' + url);
+            return JSON.stringify({status: "posted", received: JSON.parse(body)});
+        }
+
         const UI = {
             print: function(msg) { zenith.print(Array.isArray(msg) ? msg.join('') : msg); },
             println: function(msg) { zenith.println(Array.isArray(msg) ? msg.join('') : msg); },
+            applyStyles: function(el, attrs = {}) {
+                if (!attrs) return;
+                if (attrs.color) el.style.color = attrs.color;
+                if (attrs.backgroundColor) el.style.backgroundColor = attrs.backgroundColor;
+                if (attrs.padding) el.style.padding = typeof attrs.padding === 'number' ? attrs.padding + 'px' : attrs.padding;
+                if (attrs.margin) el.style.margin = typeof attrs.margin === 'number' ? attrs.margin + 'px' : attrs.margin;
+                if (attrs.width) el.style.width = typeof attrs.width === 'number' ? attrs.width + 'px' : attrs.width;
+                if (attrs.height) el.style.height = typeof attrs.height === 'number' ? attrs.height + 'px' : attrs.height;
+                if (attrs.fontWeight) el.style.fontWeight = attrs.fontWeight;
+                if (attrs.onClick && typeof attrs.onClick === 'function') {
+                    el.onclick = attrs.onClick;
+                }
+            },
             Column: function(children, attrs = {}) {
                 const el = document.createElement('div');
                 el.className = 'zenith-column';
                 for (const child of children) {
                     if (child) el.appendChild(child);
                 }
+                UI.applyStyles(el, attrs);
                 el.render = function() {
                     UI.render(el);
                     return el;
@@ -201,6 +246,7 @@
                 for (const child of children) {
                     if (child) el.appendChild(child);
                 }
+                UI.applyStyles(el, attrs);
                 el.render = function() {
                     UI.render(el);
                     return el;
@@ -211,9 +257,106 @@
                 const el = document.createElement('span');
                 el.className = 'zenith-text';
                 el.textContent = Array.isArray(text) ? text.join('') : text;
-                if (attrs.fontWeight === 'bold') {
-                    el.style.fontWeight = 'bold';
+                UI.applyStyles(el, attrs);
+                el.render = function() {
+                    UI.render(el);
+                    return el;
+                };
+                return el;
+            },
+            Button: function(label, attrs = {}) {
+                const el = document.createElement('button');
+                el.className = 'interactive-btn';
+                el.textContent = Array.isArray(label) ? label.join('') : label;
+                UI.applyStyles(el, attrs);
+                el.render = function() {
+                    UI.render(el);
+                    return el;
+                };
+                return el;
+            },
+            Image: function(url, attrs = {}) {
+                const el = document.createElement('img');
+                el.src = Array.isArray(url) ? url.join('') : url;
+                el.style.maxWidth = '100%';
+                el.style.borderRadius = '12px';
+                el.style.boxShadow = '0 8px 30px rgba(0, 0, 0, 0.5)';
+                el.style.border = '1px solid rgba(255, 255, 255, 0.1)';
+                UI.applyStyles(el, attrs);
+                el.render = function() {
+                    UI.render(el);
+                    return el;
+                };
+                return el;
+            },
+            Video: function(url, attrs = {}) {
+                const el = document.createElement('video');
+                el.src = Array.isArray(url) ? url.join('') : url;
+                el.controls = true;
+                el.style.maxWidth = '100%';
+                el.style.borderRadius = '12px';
+                el.style.boxShadow = '0 8px 30px rgba(0, 0, 0, 0.5)';
+                el.style.border = '1px solid rgba(255, 255, 255, 0.1)';
+                UI.applyStyles(el, attrs);
+                el.render = function() {
+                    UI.render(el);
+                    return el;
+                };
+                return el;
+            },
+            Scrolling: function(children, attrs = {}) {
+                const el = document.createElement('div');
+                el.style.display = 'flex';
+                el.style.flexDirection = 'column';
+                el.style.overflowY = 'auto';
+                el.style.maxHeight = '300px';
+                el.style.border = '1px solid rgba(255, 255, 255, 0.1)';
+                el.style.padding = '12px';
+                el.style.borderRadius = '12px';
+                el.style.background = 'rgba(0, 0, 0, 0.3)';
+                for (const child of children) {
+                    if (child) el.appendChild(child);
                 }
+                UI.applyStyles(el, attrs);
+                el.render = function() {
+                    UI.render(el);
+                    return el;
+                };
+                return el;
+            },
+            Card: function(children, attrs = {}) {
+                const el = document.createElement('div');
+                el.style.display = 'flex';
+                el.style.flexDirection = 'column';
+                el.style.background = 'rgba(30, 41, 59, 0.6)';
+                el.style.backdropFilter = 'blur(12px)';
+                el.style.border = '1px solid rgba(255, 255, 255, 0.1)';
+                el.style.borderRadius = '16px';
+                el.style.padding = '20px';
+                el.style.margin = '10px 0';
+                el.style.boxShadow = '0 20px 40px rgba(0, 0, 0, 0.4)';
+                for (const child of children) {
+                    if (child) el.appendChild(child);
+                }
+                UI.applyStyles(el, attrs);
+                el.render = function() {
+                    UI.render(el);
+                    return el;
+                };
+                return el;
+            },
+            Container: function(children, attrs = {}) {
+                const el = document.createElement('div');
+                el.style.display = 'flex';
+                el.style.flexDirection = 'column';
+                el.style.border = '1px solid rgba(255, 255, 255, 0.05)';
+                el.style.borderRadius = '12px';
+                el.style.padding = '16px';
+                el.style.background = 'rgba(255, 255, 255, 0.02)';
+                for (const child of children) {
+                    if (child) el.appendChild(child);
+                }
+                UI.applyStyles(el, attrs);
                 el.render = function() {
                     UI.render(el);
                     return el;
@@ -255,6 +398,10 @@ class CounterApp {
         this.domElement = newDom;
         return newDom;
     }
+    setState(callback) {
+        callback();
+        this.render();
+    }
 }
 class Circle {
     constructor(radius) {
@@ -269,6 +416,7 @@ class Database {
         this.url = url;
     }
     async summarizeDocument(text) {
+        return await zenith.llmPrompt(this.url, `Extract the three most important bullet points from this text: ${text} using ${this.url}`);
     }
 }
 async function ChatScreen() {

@@ -359,7 +359,7 @@ std::unique_ptr<ClassDeclNode> Parser::parseClass() {
             advance();
         }
         
-        if (current().type == TokenType::TYPE) {
+        if (current().type == TokenType::TYPE || (current().type == TokenType::ID && std::isupper(static_cast<unsigned char>(current().value[0])))) {
             const Token& type_tok = current();
             auto return_type = parseType();
             if (current().type == TokenType::ID && peek().value != "(") {
@@ -401,7 +401,7 @@ std::unique_ptr<InterfaceDeclNode> Parser::parseInterface() {
             advance();
         }
         
-        if (current().type == TokenType::TYPE) {
+        if (current().type == TokenType::TYPE || (current().type == TokenType::ID && std::isupper(static_cast<unsigned char>(current().value[0])))) {
             const Token& type_tok = current();
             auto return_type = parseType();
             
@@ -448,7 +448,7 @@ std::unique_ptr<ProgramNode> Parser::parseProgram() {
             auto ret_type = parseType();
             program->statements.push_back(parseFunction(true, std::move(ret_type)));
         } 
-        else if (current().type == TokenType::TYPE) {
+        else if (current().type == TokenType::TYPE || (current().type == TokenType::ID && std::isupper(static_cast<unsigned char>(current().value[0])))) {
             auto ret_type = parseType();
             program->statements.push_back(parseFunction(false, std::move(ret_type)));
         } 

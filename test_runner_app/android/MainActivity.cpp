@@ -5,7 +5,7 @@
 
 // Called by NativeActivity when the app starts.
 // In a pure NDK binary (not via NativeActivity) this is unused;
-// instead main() in main.cpp is the entry point via `adb shell`.
+// instead main() in main.cpp is the entry point.
 extern "C" void ANativeActivity_onCreate(
     ANativeActivity* /*activity*/,
     void*            /*savedState*/,

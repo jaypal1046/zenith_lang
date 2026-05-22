@@ -225,6 +225,15 @@ std::vector<std::unique_ptr<ASTNode>> Parser::parseBlock() {
             auto expr = parseExpression();
             expect(TokenType::PUNCT, "Expected ';'");
             statements.push_back(locate(std::make_unique<ReturnStmtNode>(std::move(expr)), start_tok));
+        } else if (match(TokenType::KEYWORD, "let")) {
+            const Token& start_tok = prev();
+            std::string var_name(current().value);
+            expect(TokenType::ID, "Expected variable name");
+            expect(TokenType::OP, "=");
+            auto init = parseExpression();
+            expect(TokenType::PUNCT, "Expected ';'");
+            auto type = locate(std::make_unique<TypeNode>("Auto"), start_tok);
+            statements.push_back(locate(std::make_unique<VarDeclNode>(std::move(type), var_name, std::move(init)), start_tok));
         } else if (current().type == TokenType::TYPE || 
                    (current().type == TokenType::ID && std::isupper(static_cast<unsigned char>(current().value[0])) && 
                     peek().value != "." && peek().value != "(")) {
@@ -359,7 +368,22 @@ std::unique_ptr<ClassDeclNode> Parser::parseClass() {
             advance();
         }
         
-        if (current().type == TokenType::TYPE || (current().type == TokenType::ID && std::isupper(static_cast<unsigned char>(current().value[0])))) {
+        bool is_let = false;
+        if (current().type == TokenType::KEYWORD && current().value == "let") {
+            is_let = true;
+            advance();
+        }
+        
+        if (is_let) {
+            const Token& type_tok = prev();
+            std::string field_name(current().value);
+            expect(TokenType::ID, "Expected field name");
+            expect(TokenType::OP, "=");
+            auto init = parseExpression();
+            expect(TokenType::PUNCT, "Expected ';'");
+            auto return_type = locate(std::make_unique<TypeNode>("Auto"), type_tok);
+            class_node->fields.push_back(locate(std::make_unique<VarDeclNode>(std::move(return_type), field_name, std::move(init)), type_tok));
+        } else if (current().type == TokenType::TYPE || (current().type == TokenType::ID && std::isupper(static_cast<unsigned char>(current().value[0])))) {
             const Token& type_tok = current();
             auto return_type = parseType();
             if (current().type == TokenType::ID && peek().value != "(") {

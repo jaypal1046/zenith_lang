@@ -12,8 +12,11 @@ UI ChatScreen() {
     List<String> active_users = ["Jay", "Alex"];
     Map<String, Int> scores = {"Jay": 100, "Alex": 95};
     
-    Bool active = true;
-    Int retry = 0;
+    let active = true;
+    let retry = 0;
+    let inf_local_str = " (Type inferred locally)";
+    let ver_status = getVerificationStatus();
+    let full_status = ver_status + inf_local_str;
     
     active_users.push("Sam");
     
@@ -30,7 +33,7 @@ UI ChatScreen() {
         Text("AI Summary:", fontWeight: "bold"),
         Row(
             Text(response),
-            Text(getVerificationStatus())
+            Text(full_status)
         )
     );
 }

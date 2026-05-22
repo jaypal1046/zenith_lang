@@ -155,6 +155,16 @@ public:
         return el;
     }
 
+    static UIElement TextField(std::string placeholder, std::unordered_map<std::string, std::string> attrs = {}) {
+        UIElement el("TextField");
+        el.text_content = std::move(placeholder);
+        el.attributes = std::move(attrs);
+        if (!el.attributes.count("placeholder")) {
+            el.attributes["placeholder"] = el.text_content;
+        }
+        return el;
+    }
+
     static UIElement Column(std::vector<UIElement> children, std::unordered_map<std::string, std::string> attrs = {}) {
         return UIElement("Column", std::move(children), std::move(attrs));
     }
@@ -214,6 +224,13 @@ public:
         } else if (type == "Button") {
             layout_width = text_content.length() + 4 + padding * 2;
             layout_height = 3 + padding * 2;
+        } else if (type == "TextField") {
+            int w = 24;
+            int h = 3;
+            if (attributes.count("width")) { try { w = std::stoi(attributes.at("width")); } catch(...) {} }
+            if (attributes.count("height")) { try { h = std::stoi(attributes.at("height")); } catch(...) {} }
+            layout_width = w + padding * 2;
+            layout_height = h + padding * 2;
         } else if (type == "Image") {
             int w = 24;
             int h = 4;
@@ -228,42 +245,57 @@ public:
             if (attributes.count("height")) { try { h = std::stoi(attributes.at("height")); } catch(...) {} }
             layout_width = w + padding * 2;
             layout_height = h + padding * 2;
-        } else if (type == "Scrolling") {
-            int max_w = 0;
-            int total_h = 0;
-            for (const auto& child : children) {
-                child.measure();
-                if (child.layout_width > max_w) max_w = child.layout_width;
-                total_h += child.layout_height;
+        } else if (type == "Scrolling" || type == "Card" || type == "Container" || type == "Column" || type == "Row") {
+            std::string flex_dir = (type == "Row") ? "row" : "column";
+            if (attributes.count("flexDirection")) {
+                flex_dir = attributes.at("flexDirection");
             }
-            layout_width = max_w + 4 + padding * 2;
-            int h_limit = 8;
-            if (attributes.count("height")) { try { h_limit = std::stoi(attributes.at("height")); } catch(...) {} }
-            layout_height = (total_h > h_limit ? h_limit : total_h) + 2 + padding * 2;
-        } else if (type == "Card" || type == "Container" || type == "Column") {
-            int max_w = 0;
-            int total_h = 0;
+            int gap = 0;
+            if (attributes.count("gap")) {
+                try { gap = std::stoi(attributes.at("gap")); } catch(...) {}
+            }
+
+            int content_w = 0;
+            int content_h = 0;
+            int num_children = children.size();
+
             for (const auto& child : children) {
                 child.measure();
-                if (child.layout_width > max_w) {
-                    max_w = child.layout_width;
+            }
+
+            if (flex_dir == "row") {
+                int total_child_w = 0;
+                int max_child_h = 0;
+                for (const auto& child : children) {
+                    total_child_w += child.layout_width;
+                    if (child.layout_height > max_child_h) {
+                        max_child_h = child.layout_height;
+                    }
                 }
-                total_h += child.layout_height;
-            }
-            layout_width = max_w + 2 + padding * 2;
-            layout_height = total_h + 2 + padding * 2;
-        } else if (type == "Row") {
-            int total_w = 0;
-            int max_h = 0;
-            for (const auto& child : children) {
-                child.measure();
-                total_w += child.layout_width;
-                if (child.layout_height > max_h) {
-                    max_h = child.layout_height;
+                content_w = total_child_w + (num_children > 1 ? gap * (num_children - 1) : 0);
+                content_h = max_child_h;
+            } else { // "column"
+                int max_child_w = 0;
+                int total_child_h = 0;
+                for (const auto& child : children) {
+                    if (child.layout_width > max_child_w) {
+                        max_child_w = child.layout_width;
+                    }
+                    total_child_h += child.layout_height;
                 }
+                content_w = max_child_w;
+                content_h = total_child_h + (num_children > 1 ? gap * (num_children - 1) : 0);
             }
-            layout_width = total_w + 2 + padding * 2;
-            layout_height = max_h + 2 + padding * 2;
+
+            if (type == "Scrolling") {
+                layout_width = content_w + 4 + padding * 2;
+                int h_limit = 8;
+                if (attributes.count("height")) { try { h_limit = std::stoi(attributes.at("height")); } catch(...) {} }
+                layout_height = (content_h > h_limit ? h_limit : content_h) + 2 + padding * 2;
+            } else {
+                layout_width = content_w + 2 + padding * 2;
+                layout_height = content_h + 2 + padding * 2;
+            }
         }
 
         if (attributes.count("width")) {
@@ -271,6 +303,15 @@ public:
         }
         if (attributes.count("height")) {
             try { layout_height = std::stoi(attributes.at("height")); } catch(...) {}
+        }
+
+        int margin = 0;
+        if (attributes.count("margin")) {
+            try { margin = std::stoi(attributes.at("margin")); } catch(...) {}
+        }
+        if (margin > 0) {
+            layout_width += margin * 2;
+            layout_height += margin * 2;
         }
     }
 
@@ -281,18 +322,171 @@ public:
         if (attributes.count("padding")) {
             try { padding = std::stoi(attributes.at("padding")); } catch(...) {}
         }
+        int margin = 0;
+        if (attributes.count("margin")) {
+            try { margin = std::stoi(attributes.at("margin")); } catch(...) {}
+        }
 
-        if (type == "Column" || type == "Card" || type == "Container" || type == "Scrolling") {
-            int current_y = y + 1 + padding;
-            for (const auto& child : children) {
-                child.arrange(x + 1 + padding, current_y);
-                current_y += child.layout_height;
+        if (type == "Scrolling" || type == "Card" || type == "Container" || type == "Column" || type == "Row") {
+            std::string flex_dir = (type == "Row") ? "row" : "column";
+            if (attributes.count("flexDirection")) {
+                flex_dir = attributes.at("flexDirection");
             }
-        } else if (type == "Row") {
-            int current_x = x + 1 + padding;
+            int gap = 0;
+            if (attributes.count("gap")) {
+                try { gap = std::stoi(attributes.at("gap")); } catch(...) {}
+            }
+            std::string justify_content = "flex-start";
+            if (attributes.count("justifyContent")) {
+                justify_content = attributes.at("justifyContent");
+            }
+            std::string align_items = "flex-start";
+            if (attributes.count("alignItems")) {
+                align_items = attributes.at("alignItems");
+            }
+
+            int content_start_x = x + margin + 1 + padding;
+            int content_start_y = y + margin + 1 + padding;
+            int content_w = layout_width - margin * 2 - 2 - padding * 2;
+            int content_h = layout_height - margin * 2 - 2 - padding * 2;
+            if (content_w < 0) content_w = 0;
+            if (content_h < 0) content_h = 0;
+
+            int total_base_main = 0;
+            int total_flex_grow = 0;
+            int num_children = children.size();
+
             for (const auto& child : children) {
-                child.arrange(current_x, y + 1 + padding);
-                current_x += child.layout_width;
+                int child_grow = 0;
+                if (child.attributes.count("flexGrow")) {
+                    try { child_grow = std::stoi(child.attributes.at("flexGrow")); } catch(...) {}
+                }
+                total_flex_grow += child_grow;
+
+                if (flex_dir == "row") {
+                    total_base_main += child.layout_width;
+                } else {
+                    total_base_main += child.layout_height;
+                }
+            }
+
+            int total_gap = (num_children > 1) ? gap * (num_children - 1) : 0;
+            int remaining_space = 0;
+            if (flex_dir == "row") {
+                remaining_space = content_w - (total_base_main + total_gap);
+            } else {
+                remaining_space = content_h - (total_base_main + total_gap);
+            }
+            if (remaining_space < 0) remaining_space = 0;
+
+            // Distribute flex grow space
+            if (total_flex_grow > 0 && remaining_space > 0) {
+                int distributed_space = 0;
+                for (int i = 0; i < num_children; ++i) {
+                    const auto& child = children[i];
+                    int child_grow = 0;
+                    if (child.attributes.count("flexGrow")) {
+                        try { child_grow = std::stoi(child.attributes.at("flexGrow")); } catch(...) {}
+                    }
+                    if (child_grow > 0) {
+                        int add_space = 0;
+                        if (i == num_children - 1 || total_flex_grow == child_grow) {
+                            add_space = remaining_space - distributed_space;
+                        } else {
+                            add_space = (remaining_space * child_grow) / total_flex_grow;
+                        }
+                        distributed_space += add_space;
+
+                        if (flex_dir == "row") {
+                            child.layout_width += add_space;
+                        } else {
+                            child.layout_height += add_space;
+                        }
+                    }
+                }
+            }
+
+            // Apply align items stretch (runs before positioning to set child cross dimension)
+            if (align_items == "stretch") {
+                for (const auto& child : children) {
+                    if (flex_dir == "row") {
+                        child.layout_height = content_h;
+                    } else {
+                        child.layout_width = content_w;
+                    }
+                }
+            }
+
+            // Recalculate main size after grow space distribution
+            int total_main_size = 0;
+            for (const auto& child : children) {
+                if (flex_dir == "row") {
+                    total_main_size += child.layout_width;
+                } else {
+                    total_main_size += child.layout_height;
+                }
+            }
+            int total_main_with_gap = total_main_size + total_gap;
+            int main_free_space = 0;
+            if (flex_dir == "row") {
+                main_free_space = content_w - total_main_with_gap;
+            } else {
+                main_free_space = content_h - total_main_with_gap;
+            }
+            if (main_free_space < 0) main_free_space = 0;
+
+            int current_main = (flex_dir == "row" ? content_start_x : content_start_y);
+
+            // Apply justify content start offset
+            if (justify_content == "flex-end") {
+                current_main += main_free_space;
+            } else if (justify_content == "center") {
+                current_main += main_free_space / 2;
+            } else if (justify_content == "space-around") {
+                if (num_children > 0) {
+                    int space_unit = main_free_space / (num_children * 2);
+                    current_main += space_unit;
+                }
+            }
+
+            for (int i = 0; i < num_children; ++i) {
+                const auto& child = children[i];
+
+                int child_cross_pos = 0;
+                int child_cross_size = (flex_dir == "row" ? child.layout_height : child.layout_width);
+                int cross_free_space = (flex_dir == "row" ? content_h : content_w) - child_cross_size;
+                if (cross_free_space < 0) cross_free_space = 0;
+
+                if (align_items == "flex-start" || align_items == "stretch") {
+                    child_cross_pos = 0;
+                } else if (align_items == "center") {
+                    child_cross_pos = cross_free_space / 2;
+                } else if (align_items == "flex-end") {
+                    child_cross_pos = cross_free_space;
+                }
+
+                int child_x = 0, child_y = 0;
+                if (flex_dir == "row") {
+                    child_x = current_main;
+                    child_y = content_start_y + child_cross_pos;
+                } else {
+                    child_x = content_start_x + child_cross_pos;
+                    child_y = current_main;
+                }
+
+                child.arrange(child_x, child_y);
+
+                int child_main_size = (flex_dir == "row" ? child.layout_width : child.layout_height);
+                current_main += child_main_size;
+
+                if (i < num_children - 1) {
+                    current_main += gap;
+                    if (justify_content == "space-between" && num_children > 1) {
+                        current_main += main_free_space / (num_children - 1);
+                    } else if (justify_content == "space-around" && num_children > 0) {
+                        current_main += (main_free_space / (num_children * 2)) * 2;
+                    }
+                }
             }
         }
     }
@@ -324,6 +518,21 @@ public:
         if (attributes.count("padding")) {
             try { padding = std::stoi(attributes.at("padding")); } catch(...) {}
         }
+        int margin = 0;
+        if (attributes.count("margin")) {
+            try { margin = std::stoi(attributes.at("margin")); } catch(...) {}
+        }
+
+        int draw_w = layout_width;
+        int draw_h = layout_height;
+        if (margin > 0) {
+            abs_x += margin;
+            abs_y += margin;
+            draw_w -= margin * 2;
+            draw_h -= margin * 2;
+            if (draw_w < 0) draw_w = 0;
+            if (draw_h < 0) draw_h = 0;
+        }
 
         std::string border_style = "single";
         std::string border_color = "\033[36m";
@@ -353,19 +562,19 @@ public:
         std::string combined_style = bg_color + text_color;
 
         if (type == "Column") {
-            buffer.drawBox(abs_x, abs_y, layout_width, layout_height, "single", "\033[36m");
+            buffer.drawBox(abs_x, abs_y, draw_w, draw_h, "single", "\033[36m");
         } else if (type == "Row") {
-            buffer.drawBox(abs_x, abs_y, layout_width, layout_height, "single", "\033[35m");
+            buffer.drawBox(abs_x, abs_y, draw_w, draw_h, "single", "\033[35m");
         } else if (type == "Card") {
-            buffer.drawBox(abs_x, abs_y, layout_width, layout_height, "double", "\033[1;32m");
+            buffer.drawBox(abs_x, abs_y, draw_w, draw_h, "double", "\033[1;32m");
         } else if (type == "Container") {
-            buffer.drawBox(abs_x, abs_y, layout_width, layout_height, "single", "\033[34m");
+            buffer.drawBox(abs_x, abs_y, draw_w, draw_h, "single", "\033[34m");
         } else if (type == "Scrolling") {
-            buffer.drawBox(abs_x, abs_y, layout_width, layout_height, "single", "\033[33m");
-            int track_h = layout_height - 2;
+            buffer.drawBox(abs_x, abs_y, draw_w, draw_h, "single", "\033[33m");
+            int track_h = draw_h - 2;
             for (int i = 0; i < track_h; ++i) {
                 std::string thumb = (i == track_h / 3) ? "█" : "░";
-                buffer.setCell(abs_x + layout_width - 1, abs_y + 1 + i, thumb, "\033[33m");
+                buffer.setCell(abs_x + draw_w - 1, abs_y + 1 + i, thumb, "\033[33m");
             }
         }
         
@@ -380,19 +589,36 @@ public:
             }
             buffer.writeString(abs_x + padding, abs_y + padding, text_content, combined_style);
         } else if (type == "Button") {
-            buffer.drawBox(abs_x, abs_y, layout_width, layout_height, "double", "\033[33m");
+            buffer.drawBox(abs_x, abs_y, draw_w, draw_h, "double", "\033[33m");
             buffer.writeString(abs_x + 2 + padding, abs_y + 1 + padding, text_content, "\033[1;33m" + bg_color);
+        } else if (type == "TextField") {
+            buffer.drawBox(abs_x, abs_y, draw_w, draw_h, "single", "\033[36m");
+            std::string display_text = "";
+            std::string display_style = "\033[37m"; // default text color
+            if (attributes.count("value") && !attributes.at("value").empty()) {
+                display_text = attributes.at("value");
+            } else if (attributes.count("placeholder") && !attributes.at("placeholder").empty()) {
+                display_text = attributes.at("placeholder");
+                display_style = "\033[90m"; // gray color
+            } else if (!text_content.empty()) {
+                display_text = text_content;
+                display_style = "\033[90m";
+            }
+            if (display_text.length() > (size_t)draw_w - 4) {
+                display_text = display_text.substr(0, draw_w - 7) + "...";
+            }
+            buffer.writeString(abs_x + 2 + padding, abs_y + 1 + padding, display_text, display_style + bg_color);
         } else if (type == "Image") {
-            buffer.drawBox(abs_x, abs_y, layout_width, layout_height, "single", "\033[32m");
+            buffer.drawBox(abs_x, abs_y, draw_w, draw_h, "single", "\033[32m");
             buffer.writeString(abs_x + 2 + padding, abs_y + 1 + padding, "📷 IMAGE", "\033[1;32m");
             std::string url = text_content;
-            if (url.length() > (size_t)layout_width - 4) url = url.substr(0, layout_width - 7) + "...";
+            if (url.length() > (size_t)draw_w - 4) url = url.substr(0, draw_w - 7) + "...";
             buffer.writeString(abs_x + 2 + padding, abs_y + 2 + padding, url, "\033[37m");
         } else if (type == "Video") {
-            buffer.drawBox(abs_x, abs_y, layout_width, layout_height, "single", "\033[31m");
+            buffer.drawBox(abs_x, abs_y, draw_w, draw_h, "single", "\033[31m");
             buffer.writeString(abs_x + 2 + padding, abs_y + 1 + padding, "🎬 VIDEO: ▶", "\033[1;31m");
             std::string url = text_content;
-            if (url.length() > (size_t)layout_width - 4) url = url.substr(0, layout_width - 7) + "...";
+            if (url.length() > (size_t)draw_w - 4) url = url.substr(0, draw_w - 7) + "...";
             buffer.writeString(abs_x + 2 + padding, abs_y + 2 + padding, url, "\033[37m");
         } else {
             for (const auto& child : children) {
@@ -424,7 +650,35 @@ public:
             child.collectClickables(clickables);
         }
     }
+
+    void collectInteractives(std::vector<const UIElement*>& interactives) const {
+        if ((type == "Button" && attributes.count("onClick")) ||
+            (type == "TextField" && attributes.count("onChange"))) {
+            interactives.push_back(this);
+        }
+        for (const auto& child : children) {
+            child.collectInteractives(interactives);
+        }
+    }
 };
+
+template<typename T>
+void flatten_helper(std::vector<UIElement>& result, T&& item) {
+    if constexpr (std::is_same_v<std::decay_t<T>, UIElement>) {
+        result.push_back(std::forward<T>(item));
+    } else if constexpr (std::is_same_v<std::decay_t<T>, std::vector<UIElement>>) {
+        for (auto&& el : item) {
+            result.push_back(std::move(el));
+        }
+    }
+}
+
+template<typename... Args>
+std::vector<UIElement> make_children(Args&&... args) {
+    std::vector<UIElement> result;
+    (flatten_helper(result, std::forward<Args>(args)), ...);
+    return result;
+}
 
 namespace UI {
     inline UIElement Column(std::vector<UIElement> children, std::unordered_map<std::string, std::string> attrs = {}) {
@@ -438,6 +692,9 @@ namespace UI {
     }
     inline UIElement Button(std::string label, std::unordered_map<std::string, std::string> attrs = {}) {
         return UIElement::Button(std::move(label), std::move(attrs));
+    }
+    inline UIElement TextField(std::string placeholder, std::unordered_map<std::string, std::string> attrs = {}) {
+        return UIElement::TextField(std::move(placeholder), std::move(attrs));
     }
     inline UIElement Image(std::string url, std::unordered_map<std::string, std::string> attrs = {}) {
         return UIElement::Image(std::move(url), std::move(attrs));

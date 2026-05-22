@@ -353,6 +353,12 @@
                         el.style.width = val;
                     } else if (key === 'height') {
                         el.style.height = val;
+                    } else if (key === 'flexDirection') {
+                        el.style.flexDirection = val;
+                    } else if (key === 'justifyContent') {
+                        el.style.justifyContent = val;
+                    } else if (key === 'alignItems') {
+                        el.style.alignItems = val;
                     } else if (key === 'src' || key === 'url') {
                         el.src = val;
                     } else {
@@ -371,6 +377,10 @@
                         el.style.width = val + 'px';
                     } else if (key === 'height') {
                         el.style.height = val + 'px';
+                    } else if (key === 'flexGrow') {
+                        el.style.flexGrow = val;
+                    } else if (key === 'gap') {
+                        el.style.gap = val + 'px';
                     } else {
                         el.setAttribute(key, val.toString());
                     }

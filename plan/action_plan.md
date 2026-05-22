@@ -51,23 +51,43 @@ This document outlines the roadmap for the next development phases of the **Zeni
 
 ---
 
-## Phase 4: Production Runtime, Keyboard Interaction, and Real Networking (IN PROGRESS)
+## Phase 4: Production Runtime, Keyboard Interaction, and Real Networking (COMPLETED)
+* **Status:** Fully implemented.
+  * **4.1 Cross-Platform Network Runtime:** Integrated `libcurl` conditionally (alongside `WinHTTP` on Windows desktop and custom socket channels on Android) with robust JSON parser logic.
+  * **4.2 Interactive Terminal Loop:** Added collection of clickables, keyboard callback selection loops, reactive state re-renders, and TTY validation.
+  * **4.3 Styling Attributes Compilation:** Integrated properties (`color`, `fontWeight`, `padding`) into both the C++ terminal renderer and the web CSS outputs.
 
-### 4.1 Cross-Platform Network Runtime
-* **Goal:** Upgrade the C++ runtime to perform real, asynchronous HTTP requests using `libcurl` and parse LLM JSON payloads.
+---
+
+## Phase 5: Production Tooling, Type System, and Standard Library (ROADMAP)
+
+### 5.1 Advanced Type Inference & Generics
+* **Goal:** Extend validation capabilities of the compiler frontend and allow type-safe expressions with minimal boilerplate.
 * **Action Items:**
-  * Implement general `libcurl` bindings inside `zenith_runtime.h` for platform-agnostic HTTP POST/GET.
-  * Add support for header-only JSON parsing for incoming agentic completions.
+  - Implement Hindley-Milner / constraint-based type inference to allow developers to omit type definitions where possible.
+  - Implement templates/generics for standard container collections (e.g. `List<T>`, `Map<K, V>`).
 
-### 4.2 Interactive Terminal Loop
-* **Goal:** Support keyboard input and rendering updates inside the ANSI terminal application.
+### 5.2 Yoga & CSS Flexbox Layout Engine Integration
+* **Goal:** Adopt physical flexbox alignment and responsive coordinates on native and web platforms.
 * **Action Items:**
-  * Implement a main event loop that catches keyboard keystrokes (`w`, `a`, `s`, `d`, `enter`, `escape`).
-  * Propagate button click events (`onClick: increment`) from terminal actions.
+  - Link the C-based Yoga layout engine into the C++ runtime for native targets.
+  - Expose comprehensive padding, margins, flex-grow, flex-direction, and alignment properties in the Zenith AST.
+  - Standardize CSS Flexbox mapping on web targets to align with Yoga's rendering outputs.
 
-### 4.3 Styling Attributes Compilation
-* **Goal:** Support dynamic styling attributes (`color`, `backgroundColor`, `margin`, `padding`).
+### 5.3 Rich Component Library
+* **Goal:** Provide a comprehensive set of widgets for rich client user interfaces.
 * **Action Items:**
-  * Update AST and Parser to support color attributes.
-  * Map layout styles to ANSI colors in terminal and CSS values in JS/Wasm code generators.
+  - Standardize native rendering and web mapping for `Image` and `Video` components.
+  - Implement `Scrolling` (scroll view container) components with dynamic boundary constraints.
+  - Add standard user input fields (text inputs, checkboxes, forms) with interactive state callbacks.
 
+### 5.4 Developer Tooling (LSP & DAP)
+* **Goal:** Build rich IDE development support for modern editors.
+* **Action Items:**
+  - Build a Language Server Protocol (LSP) implementation for auto-completions, syntax highlighting, diagnostics, and jump-to-definition.
+  - Build a Debug Adapter Protocol (DAP) layer to support standard step-by-step debugger engines.
+
+### 5.5 Centralized Package Registry
+* **Goal:** Enable an ecosystem of reusable modular code.
+* **Action Items:**
+  - Create a CLI registry client (similar to cargo/npm) to retrieve, resolve, and link third-party modules.

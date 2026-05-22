@@ -56,6 +56,20 @@ class GalleryApp() {
                     Button("Fetch JSON", onClick: fetchData)
                 ),
                 padding: 1
+            ),
+
+            // CSS Flexbox Layout Test Panel
+            Card(
+                Text("4. CSS Flexbox Layout Demonstration", fontWeight: "bold", color: "magenta"),
+                Row(
+                    Text("[Grow 1]", color: "red", flexGrow: 1),
+                    Text("[Grow 2]", color: "green", flexGrow: 2),
+                    Text("[Grow 1]", color: "blue", flexGrow: 1),
+                    justifyContent: "space-around",
+                    gap: 1,
+                    width: 35
+                ),
+                padding: 1
             )
         );
     }

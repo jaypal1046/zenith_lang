@@ -193,8 +193,8 @@ inline void runInteractiveLoop(AppType& app) {
         root.measure();
         root.arrange(0, 0);
         
-        std::vector<const zenith::UIElement*> clickables;
-        root.collectClickables(clickables);
+        std::vector<const zenith::UIElement*> interactives;
+        root.collectInteractives(interactives);
         
         std::cout << "\033[2J\033[H";
         std::cout << "\n=== Rendered UI Layout Tree ===\n";
@@ -206,13 +206,26 @@ inline void runInteractiveLoop(AppType& app) {
         buffer.print();
         std::cout << "\n";
         
-        if (clickables.empty()) break;
+        if (interactives.empty()) break;
         
         std::cout << "=== Interactive Control Panel ===\n";
-        for (size_t i = 0; i < clickables.size(); ++i) {
-            std::cout << "[" << (i + 1) << "] " << clickables[i]->text_content;
-            if (clickables[i]->attributes.count("onClick")) {
-                std::cout << " (Action: " << clickables[i]->attributes.at("onClick") << ")";
+        for (size_t i = 0; i < interactives.size(); ++i) {
+            std::cout << "[" << (i + 1) << "] ";
+            if (interactives[i]->type == "Button") {
+                std::cout << "Button: " << interactives[i]->text_content;
+                if (interactives[i]->attributes.count("onClick")) {
+                    std::cout << " (Action: " << interactives[i]->attributes.at("onClick") << ")";
+                }
+            } else if (interactives[i]->type == "TextField") {
+                std::cout << "Input: " << (interactives[i]->attributes.count("placeholder") ? interactives[i]->attributes.at("placeholder") : interactives[i]->text_content);
+                std::string val = "";
+                if (interactives[i]->attributes.count("value")) {
+                    val = interactives[i]->attributes.at("value");
+                }
+                std::cout << " [Current: \"" << val << "\"]";
+                if (interactives[i]->attributes.count("onChange")) {
+                    std::cout << " (Action: " << interactives[i]->attributes.at("onChange") << ")";
+                }
             }
             std::cout << "\n";
         }
@@ -223,9 +236,17 @@ inline void runInteractiveLoop(AppType& app) {
         if (choice == 'q' || choice == 'Q') break;
         
         int idx = choice - '1';
-        if (idx >= 0 && idx < (int)clickables.size()) {
-            std::string action = clickables[idx]->attributes.at("onClick");
-            app.triggerCallback(action);
+        if (idx >= 0 && idx < (int)interactives.size()) {
+            if (interactives[idx]->type == "Button") {
+                std::string action = interactives[idx]->attributes.at("onClick");
+                app.triggerCallback(action);
+            } else if (interactives[idx]->type == "TextField") {
+                std::string action = interactives[idx]->attributes.at("onChange");
+                std::cout << "\nEnter new value: ";
+                std::string input_val;
+                std::getline(std::cin, input_val);
+                app.triggerCallback(action, input_val);
+            }
         }
     }
 }

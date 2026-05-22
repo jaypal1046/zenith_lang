@@ -44,7 +44,7 @@ echo -e "  ${GREEN}[OK]${RESET}    Build complete: mac/main_app"
 echo -e "  ${BOLD}[3/3]${RESET}   Launching  Zenith macOS App ..."
 echo ""
 echo "  +-------------------------------------------------+"
-echo "  |  Zenith App Output                              |"
+echo "  ^|  Zenith App Output                              ^|"
 echo "  +-------------------------------------------------+"
 echo ""
 

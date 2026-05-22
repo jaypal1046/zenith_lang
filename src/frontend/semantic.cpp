@@ -1,5 +1,44 @@
 #include "../../include/frontend/semantic.h"
 
+static void populateTypeNode(TypeNode* type_node, const std::string& type_str) {
+    size_t angle_pos = type_str.find('<');
+    if (angle_pos == std::string::npos) {
+        type_node->type_name = type_str;
+        type_node->generics.clear();
+        return;
+    }
+    
+    type_node->type_name = type_str.substr(0, angle_pos);
+    type_node->generics.clear();
+    
+    std::string inner = type_str.substr(angle_pos + 1, type_str.length() - angle_pos - 2);
+    int bracket_depth = 0;
+    std::string current_part = "";
+    for (char c : inner) {
+        if (c == '<') {
+            bracket_depth++;
+            current_part += c;
+        } else if (c == '>') {
+            bracket_depth--;
+            current_part += c;
+        } else if (c == ',' && bracket_depth == 0) {
+            auto sub_node = std::make_unique<TypeNode>("");
+            populateTypeNode(sub_node.get(), current_part);
+            type_node->generics.push_back(std::move(sub_node));
+            current_part = "";
+        } else {
+            if (c != ' ' || !current_part.empty()) {
+                current_part += c;
+            }
+        }
+    }
+    if (!current_part.empty()) {
+        auto sub_node = std::make_unique<TypeNode>("");
+        populateTypeNode(sub_node.get(), current_part);
+        type_node->generics.push_back(std::move(sub_node));
+    }
+}
+
 void SemanticAnalyzer::analyzeFunction(FunctionNode* node) {
     SymbolTable* function_scope = new SymbolTable(current_scope);
     SymbolTable* previous_scope = current_scope;
@@ -66,21 +105,32 @@ void SemanticAnalyzer::analyzeBlock(const std::vector<std::unique_ptr<ASTNode>>&
 void SemanticAnalyzer::analyzeStatement(ASTNode* stmt) {
     if (auto* var_decl = dynamic_cast<VarDeclNode*>(stmt)) {
         std::string expected_type = var_decl->type->type_name;
-        if (!var_decl->type->generics.empty()) {
-            expected_type += "<";
-            for (size_t i = 0; i < var_decl->type->generics.size(); ++i) {
-                expected_type += var_decl->type->generics[i]->type_name;
-                if (i < var_decl->type->generics.size() - 1) expected_type += ",";
+        if (expected_type == "Auto") {
+            if (!var_decl->initializer) {
+                error("Type Inference Error: Variable '" + var_decl->var_name + "' declared with 'let' must have an initializer.", var_decl);
+                expected_type = "Void";
+            } else {
+                std::string init_type = typeCheckExpression(var_decl->initializer.get());
+                populateTypeNode(var_decl->type.get(), init_type);
+                expected_type = init_type;
             }
-            expected_type += ">";
-        }
-        
-        if (var_decl->initializer) {
-            std::string init_type = typeCheckExpression(var_decl->initializer.get());
-            if (!isAssignable(init_type, expected_type) && 
-                !(init_type == "List<Void>" && expected_type.rfind("List<", 0) == 0) &&
-                !(init_type == "Map<Void,Void>" && expected_type.rfind("Map<", 0) == 0)) {
-                error("Type Mismatch: Cannot assign type '" + init_type + "' to variable '" + var_decl->var_name + "' of type '" + expected_type + "'", var_decl);
+        } else {
+            if (!var_decl->type->generics.empty()) {
+                expected_type += "<";
+                for (size_t i = 0; i < var_decl->type->generics.size(); ++i) {
+                    expected_type += var_decl->type->generics[i]->type_name;
+                    if (i < var_decl->type->generics.size() - 1) expected_type += ",";
+                }
+                expected_type += ">";
+            }
+            
+            if (var_decl->initializer) {
+                std::string init_type = typeCheckExpression(var_decl->initializer.get());
+                if (!isAssignable(init_type, expected_type) && 
+                    !(init_type == "List<Void>" && expected_type.rfind("List<", 0) == 0) &&
+                    !(init_type == "Map<Void,Void>" && expected_type.rfind("Map<", 0) == 0)) {
+                    error("Type Mismatch: Cannot assign type '" + init_type + "' to variable '" + var_decl->var_name + "' of type '" + expected_type + "'", var_decl);
+                }
             }
         }
         current_scope->define(var_decl->var_name, expected_type);
@@ -397,12 +447,31 @@ bool SemanticAnalyzer::analyze(ProgramNode* program) {
             }
 
             // Register and type-check custom class fields
-            for (const auto& field : class_decl->fields) {
+            for (auto& field : class_decl->fields) {
                 std::string expected_type = field->type->type_name;
-                if (field->initializer) {
-                    std::string init_type = typeCheckExpression(field->initializer.get());
-                    if (!isAssignable(init_type, expected_type)) {
-                        error("Type Mismatch: Cannot assign field initializer of type '" + init_type + "' to field '" + field->var_name + "' of type '" + expected_type + "'", field.get());
+                if (expected_type == "Auto") {
+                    if (!field->initializer) {
+                        error("Type Inference Error: Field '" + field->var_name + "' declared with 'let' must have an initializer.", field.get());
+                        expected_type = "Void";
+                    } else {
+                        std::string init_type = typeCheckExpression(field->initializer.get());
+                        populateTypeNode(field->type.get(), init_type);
+                        expected_type = init_type;
+                    }
+                } else {
+                    if (!field->type->generics.empty()) {
+                        expected_type += "<";
+                        for (size_t i = 0; i < field->type->generics.size(); ++i) {
+                            expected_type += field->type->generics[i]->type_name;
+                            if (i < field->type->generics.size() - 1) expected_type += ",";
+                        }
+                        expected_type += ">";
+                    }
+                    if (field->initializer) {
+                        std::string init_type = typeCheckExpression(field->initializer.get());
+                        if (!isAssignable(init_type, expected_type)) {
+                            error("Type Mismatch: Cannot assign field initializer of type '" + init_type + "' to field '" + field->var_name + "' of type '" + expected_type + "'", field.get());
+                        }
                     }
                 }
                 current_scope->define(field->var_name, expected_type);

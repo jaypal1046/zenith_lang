@@ -81,6 +81,18 @@ std::string CodeGenerator::generateExpression(ExprNode* expr) {
                 }
             }
         }
+        if (call->method_name == "map" && !call->arguments.empty()) {
+            std::string list_expr = generateExpression(call->object.get());
+            std::string callback_expr = generateExpression(call->arguments[0].get());
+            std::string res = "[&]() {\n";
+            res += "            std::vector<zenith::UIElement> _mapped_res;\n";
+            res += "            for (auto&& _item : " + list_expr + ") {\n";
+            res += "                _mapped_res.push_back(" + callback_expr + "(_item));\n";
+            res += "            }\n";
+            res += "            return _mapped_res;\n";
+            res += "        }()";
+            return res;
+        }
         std::string m_name = call->method_name;
         if (m_name == "push") m_name = "push_back";
         
@@ -106,14 +118,14 @@ std::string CodeGenerator::generateExpression(ExprNode* expr) {
         
         // Children / Positional arguments
         if (!ui->children.empty()) {
-            if (!is_custom) res += "{";
+            if (!is_custom) res += "zenith::make_children(";
             for (size_t i = 0; i < ui->children.size(); ++i) {
                 res += generateExpression(ui->children[i].get());
                 if (i < ui->children.size() - 1) res += ", ";
             }
-            if (!is_custom) res += "}";
+            if (!is_custom) res += ")";
         } else {
-            if (!is_custom) res += "{}";
+            if (!is_custom) res += "zenith::make_children()";
         }
         
         // Named arguments (attributes) - only for built-in UI components
@@ -328,12 +340,17 @@ void CodeGenerator::generateClass(ClassDeclNode* node) {
     }
 
     // Generate triggerCallback dispatcher
-    indent(); output << "void triggerCallback(std::string name) {\n";
+    indent(); output << "void triggerCallback(std::string name, std::string val = \"\") {\n";
     indent_level++;
     for (const auto& method : node->methods) {
-        if (method->function_name != "build" && method->parameters.empty()) {
-            indent();
-            output << "if (name == \"" << method->function_name << "\") { this->" << method->function_name << "(); return; }\n";
+        if (method->function_name != "build") {
+            if (method->parameters.empty()) {
+                indent();
+                output << "if (name == \"" << method->function_name << "\") { this->" << method->function_name << "(); return; }\n";
+            } else if (method->parameters.size() == 1 && mapType(method->parameters[0]->type.get()) == "std::string") {
+                indent();
+                output << "if (name == \"" << method->function_name << "\") { this->" << method->function_name << "(val); return; }\n";
+            }
         }
     }
     indent_level--;

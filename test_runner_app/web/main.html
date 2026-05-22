@@ -223,11 +223,6 @@
                 if (attrs.width) el.style.width = typeof attrs.width === 'number' ? attrs.width + 'px' : attrs.width;
                 if (attrs.height) el.style.height = typeof attrs.height === 'number' ? attrs.height + 'px' : attrs.height;
                 if (attrs.fontWeight) el.style.fontWeight = attrs.fontWeight;
-                if (attrs.flexDirection) el.style.flexDirection = attrs.flexDirection;
-                if (attrs.justifyContent) el.style.justifyContent = attrs.justifyContent;
-                if (attrs.alignItems) el.style.alignItems = attrs.alignItems;
-                if (attrs.flexGrow !== undefined) el.style.flexGrow = attrs.flexGrow;
-                if (attrs.gap) el.style.gap = typeof attrs.gap === 'number' ? attrs.gap + 'px' : attrs.gap;
                 if (attrs.onClick && typeof attrs.onClick === 'function') {
                     el.onclick = attrs.onClick;
                 }
@@ -376,21 +371,89 @@
         };
     </script>
     <script>
-function getVerificationStatus() {
-    return " [Status: Verified (Custom import)]";
-}
-class CounterApp {
+class AppCommon {
     constructor() {
-        this.count = 0;
-        this.label = "Counter Value: ";
+    }
+    getCommonMessage() {
+        return "Shared Code Block";
+    }
+}
+class AppDesktop {
+    constructor() {
+    }
+    getPlatformName() {
+        return "Desktop Native Application";
+    }
+}
+class AppAndroid {
+    constructor() {
+    }
+    getPlatformName() {
+        return "Android Client";
+    }
+}
+class AppIos {
+    constructor() {
+    }
+    getPlatformName() {
+        return "iOS Client";
+    }
+}
+class AppWeb {
+    constructor() {
+    }
+    getPlatformName() {
+        return "Web Application";
+    }
+}
+class AppLinux {
+    constructor() {
+    }
+    getPlatformName() {
+        return "Linux Native Application";
+    }
+}
+class AppWindows {
+    constructor() {
+    }
+    getPlatformName() {
+        return "Windows Native Application";
+    }
+}
+class AppMac {
+    constructor() {
+    }
+    getPlatformName() {
+        return "macOS Native Application";
+    }
+}
+class MyApp {
+    constructor() {
+        this.title = "Zenith Cross-Platform App";
+        this.counter = 0;
+        this.api_result = "No data fetched.";
+        this.common = new AppCommon();
+        this.desktop = new AppDesktop();
+        this.android = new AppAndroid();
+        this.ios = new AppIos();
+        this.web = new AppWeb();
+        this.linux = new AppLinux();
+        this.windows = new AppWindows();
+        this.mac = new AppMac();
         counterGlobalInstance = this;
     }
     build() {
-        return UI.Column([UI.Text([this.label + this.count], {})], {});
+        return UI.Column([UI.Container([UI.Text([this.title + " (" + this.common.getCommonMessage() + ")"], {fontWeight: "bold", color: "cyan"})], {padding: 1}), UI.Card([UI.Text(["Platform Modules Loaded:"], {fontWeight: "bold", color: "blue"}), UI.Text([" - Common: " + this.common.getCommonMessage()], {}), UI.Text([" - Desktop module target: " + this.desktop.getPlatformName()], {}), UI.Text([" - Android module target: " + this.android.getPlatformName()], {}), UI.Text([" - iOS module target: " + this.ios.getPlatformName()], {}), UI.Text([" - Web module target: " + this.web.getPlatformName()], {}), UI.Text([" - Linux module target: " + this.linux.getPlatformName()], {}), UI.Text([" - Windows module target: " + this.windows.getPlatformName()], {}), UI.Text([" - macOS module target: " + this.mac.getPlatformName()], {})], {padding: 1}), UI.Card([UI.Text(["Click Counter Sample"], {fontWeight: "bold", color: "yellow"}), UI.Row([UI.Text(["Value: " + this.counter], {color: "green"}), UI.Button(["Increment"], {onClick: this.handleIncrement.bind(this)})], {})], {padding: 1}), UI.Card([UI.Text(["REST Network API Verification"], {fontWeight: "bold", color: "magenta"}), UI.Row([UI.Text(["API Payload: " + this.api_result], {}), UI.Button(["Fetch Data"], {onClick: this.handleFetch.bind(this)})], {})], {padding: 1})], {});
     }
-    increment() {
+    handleIncrement() {
         this.setState(() => {
-            this.count = this.count + 1;
+            this.counter = this.counter + 1;
+        });
+    }
+    async handleFetch() {
+        let res = await httpGet("https://jsonplaceholder.typicode.com/todos/1");
+        this.setState(() => {
+            this.api_result = res;
         });
     }
     render() {
@@ -410,53 +473,11 @@ class CounterApp {
         this.render();
     }
 }
-class Circle {
-    constructor(radius) {
-        this.radius = radius;
-    }
-    getArea() {
-        return 3.14159 * this.radius * this.radius;
-    }
-}
-class Database {
-    constructor(url) {
-        this.url = url;
-    }
-    async summarizeDocument(text) {
-        return await zenith.llmPrompt(this.url, `Extract the three most important bullet points from this text: ${text} using ${this.url}`);
-    }
-}
-async function ChatScreen() {
-    let active_users = ["Jay", "Alex"];
-    let scores = {"Jay": 100, "Alex": 95};
-    let active = true;
-    let retry = 0;
-    let inf_local_str = " (Type inferred locally)";
-    let ver_status = getVerificationStatus();
-    let full_status = ver_status + inf_local_str;
-    active_users.push("Sam");
-    if (active == true) {
-        while (retry < 3) {
-            retry = retry + 1;
-        }
-    }
-    let db = new Database("http://localhost:11434");
-    let response = await db.summarizeDocument("This is a document payload.");
-    return UI.Column([UI.Text(["AI Summary:"], {fontWeight: "bold"}), UI.Row([UI.Text([response], {}), UI.Text([full_status], {})], {})], {});
-}
 async function main() {
-    UI.println(["--- Booting Zenith App ---"], {});
-    let app = await ChatScreen();
-    app.render();
-    UI.println(["\n--- Testing Counter App setState ---"], {});
-    let counter = new CounterApp();
-    counter.build().render();
-    counter.increment();
-    counter.increment();
-    UI.println(["\n--- Testing Interface Polymorphism ---"], {});
-    let my_shape = new Circle(10.0);
-    UI.println(["Circle Area: " + my_shape.getArea()], {});
-    UI.println(["--- Zenith App Shutdown ---"], {});
+    UI.println(["Initializing Reorganized Zenith Application..."], {});
+    let app = new MyApp();
+    app.build().render();
+    UI.println(["Zenith Application Shutdown."], {});
 }
         let counterGlobalInstance = null;
         function triggerIncrement() {

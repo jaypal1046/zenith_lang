@@ -992,6 +992,12 @@ std::string WASMCodeGenerator::generateHTMLWrapper() {
     html << "                        el.style.width = val;\n";
     html << "                    } else if (key === 'height') {\n";
     html << "                        el.style.height = val;\n";
+    html << "                    } else if (key === 'flexDirection') {\n";
+    html << "                        el.style.flexDirection = val;\n";
+    html << "                    } else if (key === 'justifyContent') {\n";
+    html << "                        el.style.justifyContent = val;\n";
+    html << "                    } else if (key === 'alignItems') {\n";
+    html << "                        el.style.alignItems = val;\n";
     html << "                    } else if (key === 'src' || key === 'url') {\n";
     html << "                        el.src = val;\n";
     html << "                    } else {\n";
@@ -1010,6 +1016,10 @@ std::string WASMCodeGenerator::generateHTMLWrapper() {
     html << "                        el.style.width = val + 'px';\n";
     html << "                    } else if (key === 'height') {\n";
     html << "                        el.style.height = val + 'px';\n";
+    html << "                    } else if (key === 'flexGrow') {\n";
+    html << "                        el.style.flexGrow = val;\n";
+    html << "                    } else if (key === 'gap') {\n";
+    html << "                        el.style.gap = val + 'px';\n";
     html << "                    } else {\n";
     html << "                        el.setAttribute(key, val.toString());\n";
     html << "                    }\n";

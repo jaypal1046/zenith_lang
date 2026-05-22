@@ -228,6 +228,11 @@ void JSCodeGenerator::generateClass(ClassDeclNode* node) {
         current_class_methods.insert(method->function_name);
     }
 
+    bool has_build = false;
+    for (const auto& method : node->methods) {
+        if (method->function_name == "build") has_build = true;
+    }
+
     output << "class " << node->class_name << " {\n";
     indent_level++;
     
@@ -250,6 +255,10 @@ void JSCodeGenerator::generateClass(ClassDeclNode* node) {
         indent();
         output << "this." << member->var_name << " = " 
                << (member->initializer ? generateExpression(member->initializer.get()) : "null") << ";\n";
+    }
+    if (has_build) {
+        indent();
+        output << "counterGlobalInstance = this;\n";
     }
     
     indent_level--;
@@ -323,7 +332,7 @@ void JSCodeGenerator::generateClass(ClassDeclNode* node) {
     }
     
     // Special render method if it has build()
-    bool has_build = false;
+    has_build = false;
     for (const auto& method : node->methods) {
         if (method->function_name == "build") has_build = true;
     }
@@ -628,6 +637,23 @@ std::string JSCodeGenerator::generate(ProgramNode* program) {
     output << "            border-radius: 8px;\n";
     output << "            box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.8);\n";
     output << "        }\n";
+    output << "        .zenith-input {\n";
+    output << "            background: rgba(15, 23, 42, 0.6);\n";
+    output << "            border: 1px solid rgba(0, 242, 254, 0.3);\n";
+    output << "            border-radius: 8px;\n";
+    output << "            padding: 8px 12px;\n";
+    output << "            color: #f8fafc;\n";
+    output << "            font-family: inherit;\n";
+    output << "            font-size: 0.95rem;\n";
+    output << "            outline: none;\n";
+    output << "            transition: all 0.3s ease;\n";
+    output << "            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);\n";
+    output << "        }\n";
+    output << "        .zenith-input:focus {\n";
+    output << "            border-color: #00f2fe;\n";
+    output << "            box-shadow: 0 0 10px rgba(0, 242, 254, 0.4);\n";
+    output << "            background: rgba(15, 23, 42, 0.8);\n";
+    output << "        }\n";
     output << "        .interactive-btn {\n";
     output << "            background: linear-gradient(135deg, #059669, #10b981);\n";
     output << "            color: white;\n";
@@ -737,14 +763,23 @@ std::string JSCodeGenerator::generate(ProgramNode* program) {
     output << "                if (attrs.width) el.style.width = typeof attrs.width === 'number' ? attrs.width + 'px' : attrs.width;\n";
     output << "                if (attrs.height) el.style.height = typeof attrs.height === 'number' ? attrs.height + 'px' : attrs.height;\n";
     output << "                if (attrs.fontWeight) el.style.fontWeight = attrs.fontWeight;\n";
+    output << "                if (attrs.flexDirection) el.style.flexDirection = attrs.flexDirection;\n";
+    output << "                if (attrs.justifyContent) el.style.justifyContent = attrs.justifyContent;\n";
+    output << "                if (attrs.alignItems) el.style.alignItems = attrs.alignItems;\n";
+    output << "                if (attrs.flexGrow !== undefined) el.style.flexGrow = attrs.flexGrow;\n";
+    output << "                if (attrs.gap) el.style.gap = typeof attrs.gap === 'number' ? attrs.gap + 'px' : attrs.gap;\n";
     output << "                if (attrs.onClick && typeof attrs.onClick === 'function') {\n";
     output << "                    el.onclick = attrs.onClick;\n";
+    output << "                }\n";
+    output << "                if (attrs.onChange && typeof attrs.onChange === 'function') {\n";
+    output << "                    el.oninput = function() { attrs.onChange(el.value); };\n";
     output << "                }\n";
     output << "            },\n";
     output << "            Column: function(children, attrs = {}) {\n";
     output << "                const el = document.createElement('div');\n";
     output << "                el.className = 'zenith-column';\n";
-    output << "                for (const child of children) {\n";
+    output << "                const flatChildren = Array.isArray(children) ? children.flat() : [];\n";
+    output << "                for (const child of flatChildren) {\n";
     output << "                    if (child) el.appendChild(child);\n";
     output << "                }\n";
     output << "                UI.applyStyles(el, attrs);\n";
@@ -757,7 +792,8 @@ std::string JSCodeGenerator::generate(ProgramNode* program) {
     output << "            Row: function(children, attrs = {}) {\n";
     output << "                const el = document.createElement('div');\n";
     output << "                el.className = 'zenith-row';\n";
-    output << "                for (const child of children) {\n";
+    output << "                const flatChildren = Array.isArray(children) ? children.flat() : [];\n";
+    output << "                for (const child of flatChildren) {\n";
     output << "                    if (child) el.appendChild(child);\n";
     output << "                }\n";
     output << "                UI.applyStyles(el, attrs);\n";
@@ -782,6 +818,19 @@ std::string JSCodeGenerator::generate(ProgramNode* program) {
     output << "                const el = document.createElement('button');\n";
     output << "                el.className = 'interactive-btn';\n";
     output << "                el.textContent = Array.isArray(label) ? label.join('') : label;\n";
+    output << "                UI.applyStyles(el, attrs);\n";
+    output << "                el.render = function() {\n";
+    output << "                    UI.render(el);\n";
+    output << "                    return el;\n";
+    output << "                };\n";
+    output << "                return el;\n";
+    output << "            },\n";
+    output << "            TextField: function(placeholder, attrs = {}) {\n";
+    output << "                const el = document.createElement('input');\n";
+    output << "                el.type = 'text';\n";
+    output << "                el.placeholder = Array.isArray(placeholder) ? placeholder.join('') : placeholder;\n";
+    output << "                el.className = 'zenith-input';\n";
+    output << "                if (attrs.value) el.value = attrs.value;\n";
     output << "                UI.applyStyles(el, attrs);\n";
     output << "                el.render = function() {\n";
     output << "                    UI.render(el);\n";
@@ -828,7 +877,8 @@ std::string JSCodeGenerator::generate(ProgramNode* program) {
     output << "                el.style.padding = '12px';\n";
     output << "                el.style.borderRadius = '12px';\n";
     output << "                el.style.background = 'rgba(0, 0, 0, 0.3)';\n";
-    output << "                for (const child of children) {\n";
+    output << "                const flatChildren = Array.isArray(children) ? children.flat() : [];\n";
+    output << "                for (const child of flatChildren) {\n";
     output << "                    if (child) el.appendChild(child);\n";
     output << "                }\n";
     output << "                UI.applyStyles(el, attrs);\n";
@@ -849,7 +899,8 @@ std::string JSCodeGenerator::generate(ProgramNode* program) {
     output << "                el.style.padding = '20px';\n";
     output << "                el.style.margin = '10px 0';\n";
     output << "                el.style.boxShadow = '0 20px 40px rgba(0, 0, 0, 0.4)';\n";
-    output << "                for (const child of children) {\n";
+    output << "                const flatChildren = Array.isArray(children) ? children.flat() : [];\n";
+    output << "                for (const child of flatChildren) {\n";
     output << "                    if (child) el.appendChild(child);\n";
     output << "                }\n";
     output << "                UI.applyStyles(el, attrs);\n";
@@ -867,7 +918,8 @@ std::string JSCodeGenerator::generate(ProgramNode* program) {
     output << "                el.style.borderRadius = '12px';\n";
     output << "                el.style.padding = '16px';\n";
     output << "                el.style.background = 'rgba(255, 255, 255, 0.02)';\n";
-    output << "                for (const child of children) {\n";
+    output << "                const flatChildren = Array.isArray(children) ? children.flat() : [];\n";
+    output << "                for (const child of flatChildren) {\n";
     output << "                    if (child) el.appendChild(child);\n";
     output << "                }\n";
     output << "                UI.applyStyles(el, attrs);\n";
@@ -908,18 +960,13 @@ std::string JSCodeGenerator::generate(ProgramNode* program) {
     output << "        let counterGlobalInstance = null;\n";
     output << "        function triggerIncrement() {\n";
     output << "            if (counterGlobalInstance) {\n";
-    output << "                counterGlobalInstance.increment();\n";
+    output << "                if (typeof counterGlobalInstance.increment === 'function') {\n";
+    output << "                    counterGlobalInstance.increment();\n";
+    output << "                } else if (typeof counterGlobalInstance.handleIncrement === 'function') {\n";
+    output << "                    counterGlobalInstance.handleIncrement();\n";
+    output << "                }\n";
     output << "            }\n";
     output << "        }\n\n";
-    
-    output << "        // Hook CounterApp initialization to set the global trigger\n";
-    output << "        const originalCounterApp = CounterApp;\n";
-    output << "        CounterApp = class extends originalCounterApp {\n";
-    output << "            constructor(...args) {\n";
-    output << "                super(...args);\n";
-    output << "                counterGlobalInstance = this;\n";
-    output << "            }\n";
-    output << "        };\n\n";
     
     output << "        window.onload = () => {\n";
     output << "            main();\n";

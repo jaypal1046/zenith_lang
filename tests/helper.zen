@@ -4,11 +4,12 @@ String getVerificationStatus() {
 }
 
 class CounterApp() {
-    Int count = 0;
+    let count = 0;
+    let label = "Counter Value: ";
     
     UI build() {
         return Column(
-            Text("Counter Value: " + count)
+            Text(label + count)
         );
     }
     

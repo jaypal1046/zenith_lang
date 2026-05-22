@@ -1,28 +1,25 @@
 ```
 # Compiled and build artifacts
-*.cpp
 *.o
 *.obj
 *.out
-test_inf
-test_inf_output
-test_inf2_output.cpp
-tests/simple_inference
-tests/simple_inference_bin
-tests/test_main.cpp
-tests/type_inference_test.cpp
-zenith
+test_yoga
+tests/test_type_inference
+zenith_compiler
 
 # Dependencies
 node_modules/
 venv/
 .venv/
 __pycache__/
+.mypy_cache/
+.pytest_cache/
+target/
+.gradle/
 
 # Logs and temp files
 *.log
 *.tmp
-*.swp
 
 # Editors
 .vscode/
@@ -38,7 +35,27 @@ coverage/
 htmlcov/
 .coverage
 
-# OS
-.DS_Store
-Thumbs.db
+# Compressed files
+*.zip
+*.gz
+*.tar
+*.tgz
+*.bz2
+*.xz
+*.7z
+*.rar
+*.zst
+*.lz4
+*.lzh
+*.cab
+*.arj
+*.rpm
+*.deb
+*.Z
+*.lz
+*.lzo
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+*.tar.zst
 ```

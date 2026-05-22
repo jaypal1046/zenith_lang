@@ -2,6 +2,7 @@
 #define SEMANTIC_H
 
 #include "../ast/ast.h"
+#include "type_inference.hpp"
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -41,6 +42,9 @@ private:
     SymbolTable* current_scope;
     bool has_errors = false;
     
+    // Type inference support
+    TypeInferencer type_inferencer;
+    
     // Global tracking of structures and routines
     std::unordered_map<std::string, ClassDeclNode*> classes;
     std::unordered_map<std::string, InterfaceDeclNode*> interfaces;
@@ -60,6 +64,10 @@ private:
     void analyzeStatement(ASTNode* stmt);
     void analyzeBlock(const std::vector<std::unique_ptr<ASTNode>>& block);
     std::string typeCheckExpression(ExprNode* expr);
+    
+    // Type inference helpers
+    std::string inferAndValidateVarDecl(VarDeclNode* var_decl);
+    std::string inferFunctionReturnType(FunctionNode* func);
     
     std::string current_fn_return_type;
     std::vector<std::unique_ptr<FunctionNode>> builtin_fns;

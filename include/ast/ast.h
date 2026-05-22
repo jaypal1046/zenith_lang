@@ -146,6 +146,14 @@ public:
         : object(std::move(obj)), property_name(std::move(prop)) {}
 };
 
+class FunctionCallNode : public ExprNode {
+public:
+    std::string function_name;
+    std::vector<std::unique_ptr<ExprNode>> arguments;
+    
+    FunctionCallNode(std::string name) : function_name(std::move(name)) {}
+};
+
 class MethodCallNode : public ExprNode {
 public:
     std::unique_ptr<ExprNode> object;

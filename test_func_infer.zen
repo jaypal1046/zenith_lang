@@ -1,0 +1,18 @@
+// Test function parameter type inference
+Void greet(name = "World", count = 1) {
+    print("Hello ");
+    print(name);
+    print("Count: ");
+    print(count);
+}
+
+Void main() {
+    greet();
+    greet("Developer", 5);
+    
+    let x = 10;
+    let y = 20;
+    let sum = x + y;
+    print("Sum: ");
+    print(sum);
+}

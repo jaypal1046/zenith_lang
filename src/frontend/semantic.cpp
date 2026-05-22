@@ -1,5 +1,84 @@
 #include "../../include/frontend/semantic.h"
 
+// Forward declaration
+static void populateTypeNode(TypeNode* type_node, const std::string& type_str);
+
+// Type inference helper implementations
+std::string SemanticAnalyzer::inferAndValidateVarDecl(VarDeclNode* var_decl) {
+    std::string expected_type;
+    
+    // Check if type is explicitly declared or needs inference
+    if (var_decl->type->is_inferred || var_decl->type->type_name == "Auto" || 
+        var_decl->type->type_name == "let" || var_decl->type->type_name.empty()) {
+        
+        // Type inference required
+        if (!var_decl->initializer) {
+            error("Type Inference Error: Variable '" + var_decl->var_name + 
+                  "' declared with 'let' must have an initializer.", var_decl);
+            expected_type = "Void";
+        } else {
+            // Infer type from initializer expression
+            std::string init_type = type_inferencer.inferType(var_decl->initializer.get());
+            
+            if (init_type.empty()) {
+                // Fall back to type checking if inference fails
+                init_type = typeCheckExpression(var_decl->initializer.get());
+            }
+            
+            if (init_type.empty()) {
+                error("Type Inference Error: Cannot infer type for variable '" + 
+                      var_decl->var_name + "'", var_decl);
+                expected_type = "Void";
+            } else {
+                // Update the type node with inferred type
+                populateTypeNode(var_decl->type.get(), init_type);
+                var_decl->type->is_inferred = true;
+                expected_type = init_type;
+            }
+        }
+    } else {
+        // Explicit type - validate against initializer if present
+        expected_type = var_decl->type->type_name;
+        
+        // Add generic parameters to type string
+        if (!var_decl->type->generics.empty()) {
+            expected_type += "<";
+            for (size_t i = 0; i < var_decl->type->generics.size(); ++i) {
+                expected_type += var_decl->type->generics[i]->type_name;
+                if (i < var_decl->type->generics.size() - 1) expected_type += ",";
+            }
+            expected_type += ">";
+        }
+        
+        if (var_decl->initializer) {
+            std::string init_type = typeCheckExpression(var_decl->initializer.get());
+            if (!isAssignable(init_type, expected_type) && 
+                !(init_type == "List<Void>" && expected_type.rfind("List<", 0) == 0) &&
+                !(init_type == "Map<Void,Void>" && expected_type.rfind("Map<", 0) == 0)) {
+                error("Type Mismatch: Cannot assign type '" + init_type + 
+                      "' to variable '" + var_decl->var_name + "' of type '" + 
+                      expected_type + "'", var_decl);
+            }
+        }
+    }
+    
+    return expected_type;
+}
+
+std::string SemanticAnalyzer::inferFunctionReturnType(FunctionNode* func) {
+    // If return type is already specified, use it
+    if (!func->return_type->is_inferred && 
+        func->return_type->type_name != "Auto" && 
+        !func->return_type->type_name.empty()) {
+        return func->return_type->type_name;
+    }
+    
+    // For now, we don't implement full return type inference
+    // This would require analyzing all return statements in the function body
+    // and unifying their types. Return Void as default.
+    return "Void";
+}
+
 static void populateTypeNode(TypeNode* type_node, const std::string& type_str) {
     size_t angle_pos = type_str.find('<');
     if (angle_pos == std::string::npos) {
@@ -44,11 +123,36 @@ void SemanticAnalyzer::analyzeFunction(FunctionNode* node) {
     SymbolTable* previous_scope = current_scope;
     current_scope = function_scope;
     
-    current_fn_return_type = node->return_type->type_name;
+    // Support return type inference
+    if (node->return_type->is_inferred || node->return_type->type_name == "Auto") {
+        current_fn_return_type = inferFunctionReturnType(node);
+        populateTypeNode(node->return_type.get(), current_fn_return_type);
+    } else {
+        current_fn_return_type = node->return_type->type_name;
+    }
     
-    // Register parameters
+    // Register parameters with type inference support
     for (const auto& param : node->parameters) {
-        current_scope->define(param->var_name, param->type->type_name);
+        std::string param_type;
+        
+        // Handle type inference for parameters with default values
+        if (param->type->is_inferred && param->initializer) {
+            std::string init_type = type_inferencer.inferType(param->initializer.get());
+            if (init_type.empty()) {
+                init_type = typeCheckExpression(param->initializer.get());
+            }
+            if (!init_type.empty()) {
+                populateTypeNode(param->type.get(), init_type);
+                param->type->is_inferred = true;
+                param_type = init_type;
+            } else {
+                param_type = param->type->type_name;
+            }
+        } else {
+            param_type = param->type->type_name;
+        }
+        
+        current_scope->define(param->var_name, param_type);
     }
     
     // Analyze block
@@ -104,35 +208,8 @@ void SemanticAnalyzer::analyzeBlock(const std::vector<std::unique_ptr<ASTNode>>&
 
 void SemanticAnalyzer::analyzeStatement(ASTNode* stmt) {
     if (auto* var_decl = dynamic_cast<VarDeclNode*>(stmt)) {
-        std::string expected_type = var_decl->type->type_name;
-        if (expected_type == "Auto") {
-            if (!var_decl->initializer) {
-                error("Type Inference Error: Variable '" + var_decl->var_name + "' declared with 'let' must have an initializer.", var_decl);
-                expected_type = "Void";
-            } else {
-                std::string init_type = typeCheckExpression(var_decl->initializer.get());
-                populateTypeNode(var_decl->type.get(), init_type);
-                expected_type = init_type;
-            }
-        } else {
-            if (!var_decl->type->generics.empty()) {
-                expected_type += "<";
-                for (size_t i = 0; i < var_decl->type->generics.size(); ++i) {
-                    expected_type += var_decl->type->generics[i]->type_name;
-                    if (i < var_decl->type->generics.size() - 1) expected_type += ",";
-                }
-                expected_type += ">";
-            }
-            
-            if (var_decl->initializer) {
-                std::string init_type = typeCheckExpression(var_decl->initializer.get());
-                if (!isAssignable(init_type, expected_type) && 
-                    !(init_type == "List<Void>" && expected_type.rfind("List<", 0) == 0) &&
-                    !(init_type == "Map<Void,Void>" && expected_type.rfind("Map<", 0) == 0)) {
-                    error("Type Mismatch: Cannot assign type '" + init_type + "' to variable '" + var_decl->var_name + "' of type '" + expected_type + "'", var_decl);
-                }
-            }
-        }
+        // Use the new type inference helper
+        std::string expected_type = inferAndValidateVarDecl(var_decl);
         current_scope->define(var_decl->var_name, expected_type);
     }
     else if (auto* if_stmt = dynamic_cast<IfStmtNode*>(stmt)) {

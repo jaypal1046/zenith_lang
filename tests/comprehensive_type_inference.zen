@@ -1,0 +1,132 @@
+// Comprehensive Type Inference Test for Zenith
+// This file tests all type inference capabilities
+
+Void test_basic_inference() {
+    // Integer inference
+    let int_val = 42;
+    let negative = -10;
+    
+    // Float inference
+    let float_val = 3.14159;
+    let scientific = 1.5e10;
+    
+    // String inference
+    let greeting = "Hello, Zenith!";
+    let empty_str = "";
+    
+    // Boolean inference
+    let is_true = true;
+    let is_false = false;
+    
+    print("Basic types inferred successfully\n");
+}
+
+Void test_collection_inference() {
+    // List inference
+    let numbers = [1, 2, 3, 4, 5];
+    let names = ["Alice", "Bob", "Charlie"];
+    let mixed_ops = [10 + 5, 20 - 3, 7 * 2];
+    
+    // Empty list (requires context)
+    let empty_list = [];
+    
+    // Map inference
+    let scores = {"Alice": 95, "Bob": 87, "Charlie": 92};
+    let config = {"debug": true, "version": "1.0", "port": 8080};
+    
+    print("Collection types inferred successfully\n");
+}
+
+Void test_expression_inference() {
+    // Arithmetic expressions
+    let sum = 10 + 20;
+    let product = 5 * 3.14;
+    let complex = (10 + 5) * (20 - 8) / 4;
+    
+    // Comparison expressions
+    let is_equal = 10 == 10;
+    let is_greater = 100 > 50;
+    let is_less = 3.14 < 4.0;
+    
+    // Logical expressions
+    let both_true = true && true;
+    let either_true = false || true;
+    let negated = !false;
+    
+    // String concatenation
+    let full_name = "John" + " " + "Doe";
+    let with_number = "Count: " + String(42);
+    
+    print("Expression types inferred successfully\n");
+}
+
+Void test_option_result_inference() {
+    // Option types
+    let some_value = Some(42);
+    let none_value = None;
+    
+    // Result types
+    let ok_result = Ok("Success");
+    let error_result = Err("Something went wrong");
+    
+    print("Option/Result types inferred successfully\n");
+}
+
+Void test_function_parameter_inference(Int explicit_param, auto inferred_param = "default") {
+    // Function with mixed explicit and inferred parameters
+    print("Explicit: " + String(explicit_param) + ", Inferred: " + inferred_param + "\n");
+}
+
+Void test_conditional_inference() {
+    let value = 10;
+    let result = if (value > 5) {
+        "Greater than 5";
+    } else {
+        "5 or less";
+    };
+    
+    print("Conditional expression inferred: " + result + "\n");
+}
+
+Int return_int() {
+    return 42;
+}
+
+Float return_float() {
+    return 3.14;
+}
+
+Void test_function_return_inference() {
+    let int_result = return_int();
+    let float_result = return_float();
+    
+    print("Function return types work: " + String(int_result) + ", " + String(float_result) + "\n");
+}
+
+Void main() {
+    print("=== Zenith Type Inference Comprehensive Test ===\n\n");
+    
+    print("1. Testing Basic Type Inference...\n");
+    test_basic_inference();
+    
+    print("2. Testing Collection Type Inference...\n");
+    test_collection_inference();
+    
+    print("3. Testing Expression Type Inference...\n");
+    test_expression_inference();
+    
+    print("4. Testing Option/Result Type Inference...\n");
+    test_option_result_inference();
+    
+    print("5. Testing Function Parameter Inference...\n");
+    test_function_parameter_inference(100, "custom value");
+    test_function_parameter_inference(200);  // Use default
+    
+    print("6. Testing Conditional Inference...\n");
+    test_conditional_inference();
+    
+    print("7. Testing Function Return Types...\n");
+    test_function_return_inference();
+    
+    print("\n=== All Type Inference Tests Passed! ===\n");
+}

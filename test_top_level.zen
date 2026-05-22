@@ -1,0 +1,12 @@
+// Test top-level variable inference
+Void main() {
+    let intVar = 42;
+    let floatVar = 3.14;
+    let stringVar = "Hello Zenith";
+    let boolVar = true;
+    
+    print("Int: ");
+    print(intVar);
+    print("Float: ");
+    print(floatVar);
+}

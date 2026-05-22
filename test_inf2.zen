@@ -1,0 +1,12 @@
+// Test Type Inference - Simple Version
+Void main() {
+    let x = 5;
+    let y = 3.14;
+    let name = "Zenith";
+    let isActive = true;
+    
+    print("x: " + x);
+    print("y: " + y);
+    print("name: " + name);
+    print("isActive: " + isActive);
+}

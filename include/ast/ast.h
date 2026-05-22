@@ -4,6 +4,23 @@
 #include <string>
 #include <vector>
 #include <memory>
+#include <cstdint>
+
+// Type aliases for common types
+using f32 = float;
+using f64 = double;
+using i8 = int8_t;
+using i16 = int16_t;
+using i32 = int32_t;
+using i64 = int64_t;
+using u8 = uint8_t;
+using u16 = uint16_t;
+using u32 = uint32_t;
+using u64 = uint64_t;
+
+// Alias for Int type used in Zenith
+using Int = i32;
+using Bool = bool;
 
 // Base Node
 class ASTNode {
@@ -13,12 +30,34 @@ public:
     virtual ~ASTNode() = default;
 };
 
-// Type Node
+// Type Node with inference support
 class TypeNode : public ASTNode {
 public:
     std::string type_name;
     std::vector<std::unique_ptr<TypeNode>> generics;
+    bool is_inferred = false;  // For type inference (let x = ...)
+    bool is_nullable = false;  // For Option<T> types
+    bool is_async = false;     // For async types
+    
     TypeNode(std::string name) : type_name(std::move(name)) {}
+    
+    // Check if this is an Option type
+    bool isOption() const {
+        return type_name == "Option" || is_nullable;
+    }
+    
+    // Check if this is a Result type
+    bool isResult() const {
+        return type_name == "Result";
+    }
+    
+    // Get the inner type for Option/Result
+    TypeNode* getInnerType() {
+        if (!generics.empty()) {
+            return generics[0].get();
+        }
+        return nullptr;
+    }
 };
 
 // Expressions
@@ -38,7 +77,36 @@ public:
 class IdentifierNode : public ExprNode {
 public:
     std::string name;
+    std::string type_hint;  // For type inference resolution
     IdentifierNode(std::string n) : name(std::move(n)) {}
+};
+
+// Null literal for Option types
+class NullLiteralNode : public ExprNode {
+public:
+    NullLiteralNode() {}
+};
+
+// Option/Some/None expressions for safe null handling
+class OptionExprNode : public ExprNode {
+public:
+    enum class OptionKind { Some, None };
+    OptionKind kind;
+    std::unique_ptr<ExprNode> value;  // Only used for Some
+    
+    OptionExprNode(OptionKind k, std::unique_ptr<ExprNode> val = nullptr) 
+        : kind(k), value(std::move(val)) {}
+};
+
+// Result expression for error handling (Result<T, E>)
+class ResultExprNode : public ExprNode {
+public:
+    enum class ResultKind { Ok, Err };
+    ResultKind kind;
+    std::unique_ptr<ExprNode> value;
+    
+    ResultExprNode(ResultKind k, std::unique_ptr<ExprNode> val) 
+        : kind(k), value(std::move(val)) {}
 };
 
 class StringLiteralNode : public ExprNode {
@@ -88,15 +156,6 @@ public:
         : object(std::move(obj)), method_name(std::move(method)) {}
 };
 
-class UIComponentNode : public ExprNode {
-public:
-    std::string component_type; // e.g. Column, Text
-    std::vector<std::pair<std::string, std::unique_ptr<ExprNode>>> named_args;
-    std::vector<std::unique_ptr<ExprNode>> children;
-    
-    UIComponentNode(std::string type) : component_type(std::move(type)) {}
-};
-
 // Variable Declaration (let x: String = "val" or String x = "val")
 class VarDeclNode : public ASTNode {
 public:
@@ -140,6 +199,38 @@ public:
     SetStateStmtNode(std::vector<std::unique_ptr<ASTNode>> body_stmts) : body(std::move(body_stmts)) {}
 };
 
+// Async/Await support (defined after FunctionNode)
+class AwaitExprNode : public ExprNode {
+public:
+    std::unique_ptr<ExprNode> expression;
+    AwaitExprNode(std::unique_ptr<ExprNode> expr) : expression(std::move(expr)) {}
+};
+
+// Try-Catch for Result types
+class TryExprNode : public ExprNode {
+public:
+    std::unique_ptr<ExprNode> expression;
+    TryExprNode(std::unique_ptr<ExprNode> expr) : expression(std::move(expr)) {}
+};
+
+class MatchExprNode : public ExprNode {
+public:
+    std::unique_ptr<ExprNode> subject;
+    std::vector<std::pair<std::string, std::unique_ptr<ExprNode>>> arms;  // pattern -> expression
+    
+    MatchExprNode(std::unique_ptr<ExprNode> subj) : subject(std::move(subj)) {}
+};
+
+// Closure/Lambda expressions
+class LambdaNode : public ExprNode {
+public:
+    std::vector<std::unique_ptr<VarDeclNode>> parameters;
+    std::unique_ptr<TypeNode> return_type;
+    std::vector<std::unique_ptr<ASTNode>> body;
+    
+    LambdaNode(std::unique_ptr<TypeNode> ret_type) : return_type(std::move(ret_type)) {}
+};
+
 // Functions
 class FunctionNode : public ASTNode {
 public:
@@ -152,16 +243,32 @@ public:
         : return_type(std::move(ret_type)), function_name(std::move(name)) {}
 };
 
-// Agentic Functions
+// Enhanced Agentic Functions with streaming and multi-modal support
 class AgenticFunctionNode : public FunctionNode {
 public:
     std::string prompt_template;
-
+    bool is_streaming = false;      // For streaming LLM responses
+    std::string model_name;         // Specific LLM model to use
+    f32 temperature = 0.7f;         // Temperature for generation
+    Int max_tokens = 1024;          // Max tokens to generate
+    std::vector<std::string> tools; // Available tools/functions for the agent
+    
     AgenticFunctionNode(std::unique_ptr<TypeNode> ret_type, std::string name, std::string prompt)
         : FunctionNode(std::move(ret_type), std::move(name)), prompt_template(std::move(prompt)) {}
 };
 
-// Classes with Primary Constructors (Kotlin style)
+// Agent orchestration - coordinate multiple AI agents
+class AgentOrchestrationNode : public ASTNode {
+public:
+    std::string orchestration_name;
+    std::vector<std::string> agents;  // List of agent function names
+    std::string strategy;             // "sequential", "parallel", "conditional"
+    std::vector<std::unique_ptr<ASTNode>> body;
+    
+    AgentOrchestrationNode(std::string name) : orchestration_name(std::move(name)) {}
+};
+
+// Classes with Primary Constructors (Kotlin style) and Reactivity
 class ClassDeclNode : public ASTNode {
 public:
     std::string class_name;
@@ -169,8 +276,38 @@ public:
     std::vector<std::unique_ptr<VarDeclNode>> primary_constructor_args;
     std::vector<std::unique_ptr<VarDeclNode>> fields;
     std::vector<std::unique_ptr<FunctionNode>> methods;
+    bool is_reactive = false;  // For reactive state management
+    bool is_component = false; // For UI components
     
     ClassDeclNode(std::string name) : class_name(std::move(name)) {}
+};
+
+// Enhanced UI Components with Yoga layout properties
+class UIComponentNode : public ExprNode {
+public:
+    std::string component_type; // e.g. Column, Text, Row
+    std::vector<std::pair<std::string, std::unique_ptr<ExprNode>>> named_args;
+    std::vector<std::unique_ptr<ExprNode>> children;
+    
+    // Yoga Flexbox properties
+    std::string flex_direction = "column";
+    std::string justify_content = "flex-start";
+    std::string align_items = "stretch";
+    f32 flex_grow = 0.0f;
+    f32 flex_shrink = 1.0f;
+    f32 flex_basis = -1.0f;  // -1 means auto
+    f32 margin_top = 0.0f, margin_right = 0.0f, margin_bottom = 0.0f, margin_left = 0.0f;
+    f32 padding_top = 0.0f, padding_right = 0.0f, padding_bottom = 0.0f, padding_left = 0.0f;
+    f32 width = -1.0f;   // -1 means auto
+    f32 height = -1.0f;  // -1 means auto
+    
+    UIComponentNode(std::string type) : component_type(std::move(type)) {}
+    
+    // Helper to check if this is a semantic HTML element
+    bool isSemanticElement() const {
+        return component_type == "Text" || component_type == "Button" || 
+               component_type == "Image" || component_type == "Link";
+    }
 };
 
 class InterfaceDeclNode : public ASTNode {

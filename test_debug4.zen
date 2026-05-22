@@ -1,0 +1,5 @@
+Void main() {
+    let count = 42;
+    let msg = "hello";
+    print(msg);
+}

@@ -1,0 +1,4 @@
+Void main() {
+    let count = 42;
+    print("test");
+}

@@ -159,6 +159,10 @@ void CodeGenerator::generateStatement(ASTNode* stmt) {
     } else if (auto* var_decl = dynamic_cast<VarDeclNode*>(stmt)) {
         indent();
         std::string type_name = var_decl->type->type_name;
+        
+        // Handle type inference - use 'auto' for inferred types
+        bool use_auto = var_decl->type->is_inferred && var_decl->initializer != nullptr;
+        
         if (interface_names.count(type_name)) {
             if (var_decl->initializer) {
                 if (auto* id = dynamic_cast<IdentifierNode*>(var_decl->initializer.get())) {
@@ -172,11 +176,20 @@ void CodeGenerator::generateStatement(ASTNode* stmt) {
                 output << type_name << "* " << var_decl->var_name << " = nullptr;\n";
             }
         } else {
-            output << mapType(var_decl->type.get()) << " " << var_decl->var_name;
-            if (var_decl->initializer) {
-                output << " = " << generateExpression(var_decl->initializer.get());
+            if (use_auto) {
+                // Use C++ auto keyword for type inference
+                output << "auto " << var_decl->var_name;
+                if (var_decl->initializer) {
+                    output << " = " << generateExpression(var_decl->initializer.get());
+                }
+                output << ";\n";
+            } else {
+                output << mapType(var_decl->type.get()) << " " << var_decl->var_name;
+                if (var_decl->initializer) {
+                    output << " = " << generateExpression(var_decl->initializer.get());
+                }
+                output << ";\n";
             }
-            output << ";\n";
         }
     } else if (auto* if_stmt = dynamic_cast<IfStmtNode*>(stmt)) {
         indent();
@@ -267,7 +280,35 @@ void CodeGenerator::generateFunction(FunctionNode* node) {
     }
     
     for (size_t i = 0; i < node->parameters.size(); ++i) {
-        output << mapType(node->parameters[i]->type.get()) << " " << node->parameters[i]->var_name;
+        auto& param = node->parameters[i];
+        
+        // Support type inference for parameters with default values
+        // For C++17 compatibility, we infer the actual type from the default value instead of using 'auto'
+        bool use_inferred = param->type->is_inferred && param->initializer != nullptr;
+        
+        if (use_inferred) {
+            // Infer type from the initializer expression
+            std::string inferred_type = "std::string"; // Default for string literals
+            
+            if (auto* num_lit = dynamic_cast<NumberLiteralNode*>(param->initializer.get())) {
+                inferred_type = num_lit->value.find('.') != std::string::npos ? "double" : "int";
+            } else if (auto* bool_lit = dynamic_cast<BoolLiteralNode*>(param->initializer.get())) {
+                inferred_type = "bool";
+            } else if (auto* str_lit = dynamic_cast<StringLiteralNode*>(param->initializer.get())) {
+                inferred_type = "std::string";
+            }
+            
+            output << inferred_type << " " << param->var_name;
+            if (param->initializer) {
+                output << " = " << generateExpression(param->initializer.get());
+            }
+        } else {
+            output << mapType(param->type.get()) << " " << param->var_name;
+            if (param->initializer) {
+                output << " = " << generateExpression(param->initializer.get());
+            }
+        }
+        
         if (i < node->parameters.size() - 1) output << ", ";
     }
     output << ") {\n";

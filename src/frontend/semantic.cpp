@@ -432,7 +432,39 @@ bool SemanticAnalyzer::analyze(ProgramNode* program) {
 
     // Second pass: Analyze all entities in scope
     for (const auto& stmt : program->statements) {
-        if (auto* class_decl = dynamic_cast<ClassDeclNode*>(stmt.get())) {
+        if (auto* var_decl = dynamic_cast<VarDeclNode*>(stmt.get())) {
+            // Handle top-level global variables with type inference
+            std::string expected_type = var_decl->type->type_name;
+            if (expected_type == "Auto") {
+                if (!var_decl->initializer) {
+                    error("Type Inference Error: Variable '" + var_decl->var_name + "' declared with 'let' must have an initializer.", var_decl);
+                    expected_type = "Void";
+                } else {
+                    std::string init_type = typeCheckExpression(var_decl->initializer.get());
+                    populateTypeNode(var_decl->type.get(), init_type);
+                    expected_type = init_type;
+                }
+            } else {
+                if (!var_decl->type->generics.empty()) {
+                    expected_type += "<";
+                    for (size_t i = 0; i < var_decl->type->generics.size(); ++i) {
+                        expected_type += var_decl->type->generics[i]->type_name;
+                        if (i < var_decl->type->generics.size() - 1) expected_type += ",";
+                    }
+                    expected_type += ">";
+                }
+                if (var_decl->initializer) {
+                    std::string init_type = typeCheckExpression(var_decl->initializer.get());
+                    if (!isAssignable(init_type, expected_type) && 
+                        !(init_type == "List<Void>" && expected_type.rfind("List<", 0) == 0) &&
+                        !(init_type == "Map<Void,Void>" && expected_type.rfind("Map<", 0) == 0)) {
+                        error("Type Mismatch: Cannot assign type '" + init_type + "' to variable '" + var_decl->var_name + "' of type '" + expected_type + "'", var_decl);
+                    }
+                }
+            }
+            current_scope->define(var_decl->var_name, expected_type);
+        }
+        else if (auto* class_decl = dynamic_cast<ClassDeclNode*>(stmt.get())) {
             SymbolTable* class_scope = new SymbolTable(current_scope);
             current_scope = class_scope; // Enter class scope
 

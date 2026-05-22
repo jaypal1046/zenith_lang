@@ -1,0 +1,42 @@
+// Test advanced type inference features
+
+// 1. Variable inference with different types
+let count = 42;
+let price = 19.99;
+let message = "Hello Zenith";
+let isActive = true;
+
+// 2. Function with inferred parameters
+Void greet(name: String = "Developer", age: Int = 25) {
+    print("Hello " + name + ", age " + String(age));
+}
+
+// 3. Collection inference
+let numbers = [1, 2, 3, 4, 5];
+let names = ["Alice", "Bob", "Charlie"];
+let mixed = [1, 2.5, 3];
+
+// 4. Explicit type still works
+let explicit: Int = 100;
+let explicitFloat: Float = 3.14;
+
+// Main execution
+Void main() {
+    print("=== Type Inference Tests ===");
+    print("count: " + String(count));
+    print("price: " + String(price));
+    print("message: " + message);
+    print("isActive: " + String(isActive));
+    
+    greet();
+    greet("Alice");
+    greet("Bob", 30);
+    
+    print("numbers length: " + String(numbers.length()));
+    print("names length: " + String(names.length()));
+    
+    print("explicit: " + String(explicit));
+    print("explicitFloat: " + String(explicitFloat));
+    
+    print("=== All tests passed! ===");
+}

@@ -229,10 +229,23 @@ std::vector<std::unique_ptr<ASTNode>> Parser::parseBlock() {
             const Token& start_tok = prev();
             std::string var_name(current().value);
             expect(TokenType::ID, "Expected variable name");
+            
+            // Optional type annotation for let: let x: Int = 5
+            std::unique_ptr<TypeNode> type = nullptr;
+            if (match(TokenType::PUNCT, ":")) {
+                type = parseType();
+            }
+            
             expect(TokenType::OP, "=");
             auto init = parseExpression();
             expect(TokenType::PUNCT, "Expected ';'");
-            auto type = locate(std::make_unique<TypeNode>("Auto"), start_tok);
+            
+            // If no type specified, mark for inference
+            if (!type) {
+                type = locate(std::make_unique<TypeNode>("Auto"), start_tok);
+                type->is_inferred = true;
+            }
+            
             statements.push_back(locate(std::make_unique<VarDeclNode>(std::move(type), var_name, std::move(init)), start_tok));
         } else if (current().type == TokenType::TYPE || 
                    (current().type == TokenType::ID && std::isupper(static_cast<unsigned char>(current().value[0])) && 
@@ -245,6 +258,9 @@ std::vector<std::unique_ptr<ASTNode>> Parser::parseBlock() {
             std::unique_ptr<ExprNode> init = nullptr;
             if (match(TokenType::OP, "=")) {
                 init = parseExpression();
+            } else {
+                // Allow declaration without initialization for class fields
+                // Type inference not applicable here as no initializer exists
             }
             expect(TokenType::PUNCT, "Expected ';'");
             statements.push_back(locate(std::make_unique<VarDeclNode>(std::move(type), var_name, std::move(init)), start_tok));
@@ -287,10 +303,48 @@ std::unique_ptr<WhileStmtNode> Parser::parseWhileStatement() {
 
 std::unique_ptr<VarDeclNode> Parser::parseParameter() {
     const Token& start_tok = current();
-    auto param_type = parseType();
-    std::string param_name(current().value);
-    expect(TokenType::ID, "Expected parameter name");
-    return locate(std::make_unique<VarDeclNode>(std::move(param_type), param_name), start_tok);
+    
+    // Support type inference for parameters with default values
+    // Syntax: fn name(param: Int = 5) or fn name(param = 5) [inferred]
+    std::unique_ptr<TypeNode> param_type = nullptr;
+    std::string param_name;
+    std::unique_ptr<ExprNode> default_value = nullptr;
+    
+    // Check if parameter starts with identifier (could be name-only for inference)
+    if (current().type == TokenType::ID) {
+        param_name = std::string(current().value);
+        advance();
+        
+        // Check for optional type annotation
+        if (match(TokenType::PUNCT, ":")) {
+            param_type = parseType();
+        }
+        
+        // Check for default value
+        if (match(TokenType::OP, "=")) {
+            default_value = parseExpression();
+            
+            // If no type specified but has default value, mark for inference
+            if (!param_type && default_value) {
+                param_type = locate(std::make_unique<TypeNode>("Auto"), start_tok);
+                param_type->is_inferred = true;
+            }
+        }
+        
+        // Require type if no default value
+        if (!param_type && !default_value) {
+            std::cerr << "Parser Error: Parameter '" << param_name << "' must have a type annotation or default value at line " << start_tok.line << "\n";
+            exit(1);
+        }
+    } else {
+        // Traditional syntax: Type name
+        param_type = parseType();
+        param_name = std::string(current().value);
+        expect(TokenType::ID, "Expected parameter name");
+    }
+    
+    auto param_node = locate(std::make_unique<VarDeclNode>(std::move(param_type), param_name, std::move(default_value)), start_tok);
+    return param_node;
 }
 
 std::unique_ptr<FunctionNode> Parser::parseFunction(bool is_agentic, std::unique_ptr<TypeNode> return_type) {

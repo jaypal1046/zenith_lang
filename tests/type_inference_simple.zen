@@ -1,0 +1,54 @@
+// Simple Type Inference Tests
+
+// 1. Basic variable inference
+let intVar = 42;
+let floatVar = 3.14;
+let stringVar = "Hello Zenith";
+let boolVar = true;
+
+// 2. Function with inferred parameters
+Void greet(name = "Developer", count = 1) {
+    print("Hello " + name);
+    print("Count: ");
+    print(count);
+}
+
+// 3. Array inference
+let numbers = [1, 2, 3, 4, 5];
+let names = ["Alice", "Bob", "Charlie"];
+
+// 4. Expression inference
+let sum = intVar + 10;
+let product = floatVar * 2.0;
+let message = stringVar + " World";
+
+// Main execution
+Void main() {
+    print("=== Type Inference Tests ===");
+    
+    print("Int: ");
+    print(intVar);
+    print("Float: ");
+    print(floatVar);
+    print("String: ");
+    print(stringVar);
+    print("Bool: ");
+    print(boolVar);
+    
+    greet();
+    greet("User", 5);
+    
+    print("Numbers count: ");
+    print(numbers.length);
+    print("Names count: ");
+    print(names.length);
+    
+    print("Sum: ");
+    print(sum);
+    print("Product: ");
+    print(product);
+    print("Message: ");
+    print(message);
+    
+    print("=== All Tests Passed ===");
+}

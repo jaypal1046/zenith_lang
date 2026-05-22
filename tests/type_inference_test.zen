@@ -1,0 +1,49 @@
+// Test Type Inference Feature
+
+Void main() {
+    // Test 1: Basic type inference with let
+    let count = 42;
+    let name = "Zenith";
+    let pi = 3.14159;
+    let is_active = true;
+    
+    println("=== Type Inference Tests ===");
+    println("count (inferred Int): " + count);
+    println("name (inferred String): " + name);
+    println("pi (inferred Float): " + pi);
+    println("is_active (inferred Bool): " + is_active);
+    
+    // Test 2: Explicit type annotation with let
+    let explicit_int: Int = 100;
+    let explicit_str: String = "Explicit";
+    println("explicit_int: " + explicit_int);
+    println("explicit_str: " + explicit_str);
+    
+    // Test 3: Function with inferred parameter
+    Void greet(name = "World") {
+        println("Hello, " + name + "!");
+    }
+    
+    greet();
+    greet("Developer");
+    
+    // Test 4: List and Map inference
+    let numbers = [1, 2, 3, 4, 5];
+    let fruits = ["apple", "banana", "cherry"];
+    let scores = {"Alice": 95, "Bob": 87};
+    
+    println("First number: " + numbers[0]);
+    println("First fruit: " + fruits[0]);
+    println("Alice's score: " + scores["Alice"]);
+    
+    // Test 5: Expression type inference
+    let sum = count + explicit_int;
+    let message = name + " is awesome";
+    let result = is_active && true;
+    
+    println("sum: " + sum);
+    println("message: " + message);
+    println("result: " + result);
+    
+    println("=== All Type Inference Tests Passed! ===");
+}

@@ -1,37 +1,44 @@
-# Compiled compiler and application executables
-*.exe
-zenith.exe
-tests/zenith_app_android
-
-# Object files and assembly
+```
+# Compiled and build artifacts
+*.cpp
 *.o
 *.obj
-*.wat
+*.out
+test_inf
+test_inf_output
+test_inf2_output.cpp
+tests/simple_inference
+tests/simple_inference_bin
+tests/test_main.cpp
+tests/type_inference_test.cpp
+zenith
 
-# Transpiled artifacts (re-generatable during build)
-tests/main.cpp
+# Dependencies
+node_modules/
+venv/
+.venv/
+__pycache__/
 
-# Temporary screenshots / emulator assets
-tests/screen.png
+# Logs and temp files
+*.log
+*.tmp
+*.swp
 
-# Legacy Flutter Android shell
-zenith_android/
-
-# IDE / system folders
+# Editors
 .vscode/
 .idea/
-.vs/
-*.db
-*.user
-*.suo
 
-# Scaffolded test projects and temporary test directories
-scaffold_test_app/
-test_app/
+# Environment
+.env
+.env.local
+*.env.*
 
-# Generated test and build outputs
-tests/*.cpp
-tests/*.html
-tests/*.wat
-tests/*.wasm
+# Coverage
+coverage/
+htmlcov/
+.coverage
 
+# OS
+.DS_Store
+Thumbs.db
+```

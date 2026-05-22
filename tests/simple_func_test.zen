@@ -1,0 +1,6 @@
+Void greet(name = "World") {
+    print("Hello, " + name);
+}
+
+greet();
+greet("Developer");

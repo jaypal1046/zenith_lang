@@ -117,15 +117,39 @@ std::string CodeGenerator::generateExpression(ExprNode* expr) {
         }
         
         // Children / Positional arguments
-        if (!ui->children.empty()) {
-            if (!is_custom) res += "zenith::make_children(";
-            for (size_t i = 0; i < ui->children.size(); ++i) {
-                res += generateExpression(ui->children[i].get());
-                if (i < ui->children.size() - 1) res += ", ";
+        if (!is_custom) {
+            bool is_string_param = (
+                ui->component_type == "Text" ||
+                ui->component_type == "Button" ||
+                ui->component_type == "TextField" ||
+                ui->component_type == "Image" ||
+                ui->component_type == "Video"
+            );
+            if (is_string_param) {
+                if (!ui->children.empty()) {
+                    res += generateExpression(ui->children[0].get());
+                } else {
+                    res += "\"\"";
+                }
+            } else {
+                if (!ui->children.empty()) {
+                    res += "zenith::make_children(";
+                    for (size_t i = 0; i < ui->children.size(); ++i) {
+                        res += generateExpression(ui->children[i].get());
+                        if (i < ui->children.size() - 1) res += ", ";
+                    }
+                    res += ")";
+                } else {
+                    res += "zenith::make_children()";
+                }
             }
-            if (!is_custom) res += ")";
         } else {
-            if (!is_custom) res += "zenith::make_children()";
+            if (!ui->children.empty()) {
+                for (size_t i = 0; i < ui->children.size(); ++i) {
+                    res += generateExpression(ui->children[i].get());
+                    if (i < ui->children.size() - 1) res += ", ";
+                }
+            }
         }
         
         // Named arguments (attributes) - only for built-in UI components

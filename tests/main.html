@@ -110,6 +110,23 @@
             border-radius: 8px;
             box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.8);
         }
+        .zenith-input {
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid rgba(0, 242, 254, 0.3);
+            border-radius: 8px;
+            padding: 8px 12px;
+            color: #f8fafc;
+            font-family: inherit;
+            font-size: 0.95rem;
+            outline: none;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        .zenith-input:focus {
+            border-color: #00f2fe;
+            box-shadow: 0 0 10px rgba(0, 242, 254, 0.4);
+            background: rgba(15, 23, 42, 0.8);
+        }
         .interactive-btn {
             background: linear-gradient(135deg, #059669, #10b981);
             color: white;
@@ -231,11 +248,15 @@
                 if (attrs.onClick && typeof attrs.onClick === 'function') {
                     el.onclick = attrs.onClick;
                 }
+                if (attrs.onChange && typeof attrs.onChange === 'function') {
+                    el.oninput = function() { attrs.onChange(el.value); };
+                }
             },
             Column: function(children, attrs = {}) {
                 const el = document.createElement('div');
                 el.className = 'zenith-column';
-                for (const child of children) {
+                const flatChildren = Array.isArray(children) ? children.flat() : [];
+                for (const child of flatChildren) {
                     if (child) el.appendChild(child);
                 }
                 UI.applyStyles(el, attrs);
@@ -248,7 +269,8 @@
             Row: function(children, attrs = {}) {
                 const el = document.createElement('div');
                 el.className = 'zenith-row';
-                for (const child of children) {
+                const flatChildren = Array.isArray(children) ? children.flat() : [];
+                for (const child of flatChildren) {
                     if (child) el.appendChild(child);
                 }
                 UI.applyStyles(el, attrs);
@@ -273,6 +295,19 @@
                 const el = document.createElement('button');
                 el.className = 'interactive-btn';
                 el.textContent = Array.isArray(label) ? label.join('') : label;
+                UI.applyStyles(el, attrs);
+                el.render = function() {
+                    UI.render(el);
+                    return el;
+                };
+                return el;
+            },
+            TextField: function(placeholder, attrs = {}) {
+                const el = document.createElement('input');
+                el.type = 'text';
+                el.placeholder = Array.isArray(placeholder) ? placeholder.join('') : placeholder;
+                el.className = 'zenith-input';
+                if (attrs.value) el.value = attrs.value;
                 UI.applyStyles(el, attrs);
                 el.render = function() {
                     UI.render(el);
@@ -319,7 +354,8 @@
                 el.style.padding = '12px';
                 el.style.borderRadius = '12px';
                 el.style.background = 'rgba(0, 0, 0, 0.3)';
-                for (const child of children) {
+                const flatChildren = Array.isArray(children) ? children.flat() : [];
+                for (const child of flatChildren) {
                     if (child) el.appendChild(child);
                 }
                 UI.applyStyles(el, attrs);
@@ -340,7 +376,8 @@
                 el.style.padding = '20px';
                 el.style.margin = '10px 0';
                 el.style.boxShadow = '0 20px 40px rgba(0, 0, 0, 0.4)';
-                for (const child of children) {
+                const flatChildren = Array.isArray(children) ? children.flat() : [];
+                for (const child of flatChildren) {
                     if (child) el.appendChild(child);
                 }
                 UI.applyStyles(el, attrs);
@@ -358,7 +395,8 @@
                 el.style.borderRadius = '12px';
                 el.style.padding = '16px';
                 el.style.background = 'rgba(255, 255, 255, 0.02)';
-                for (const child of children) {
+                const flatChildren = Array.isArray(children) ? children.flat() : [];
+                for (const child of flatChildren) {
                     if (child) el.appendChild(child);
                 }
                 UI.applyStyles(el, attrs);

@@ -1,0 +1,15 @@
+#!/bin/sh
+# Simple configure script for Zenith compiler build system
+
+echo "Configuring Zenith Language Compiler build system..."
+
+# Check for compiler
+if command -v g++ >/dev/null 2>&1; then
+    echo "Found g++ compiler."
+else
+    echo "Error: g++ compiler not found!" >&2
+    exit 1
+fi
+
+echo "Configuration completed successfully. You can now run 'make'."
+exit 0

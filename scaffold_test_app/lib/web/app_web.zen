@@ -1,0 +1,5 @@
+class AppWeb() {
+    String getPlatformName() {
+        return "Web Application";
+    }
+}

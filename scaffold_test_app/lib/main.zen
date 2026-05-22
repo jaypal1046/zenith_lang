@@ -1,0 +1,88 @@
+// Zenith Multiplatform Reorganized Application
+import std.io;
+import "common/app_common.zen";
+import "desktop/app_desktop.zen";
+import "android/app_android.zen";
+import "ios/app_ios.zen";
+import "web/app_web.zen";
+import "linux/app_linux.zen";
+import "windows/app_windows.zen";
+import "mac/app_mac.zen";
+
+class MyApp() {
+    String title = "Zenith Cross-Platform App";
+    Int counter = 0;
+    String api_result = "No data fetched.";
+    AppCommon common = AppCommon();
+    AppDesktop desktop = AppDesktop();
+    AppAndroid android = AppAndroid();
+    AppIos ios = AppIos();
+    AppWeb web = AppWeb();
+    AppLinux linux = AppLinux();
+    AppWindows windows = AppWindows();
+    AppMac mac = AppMac();
+
+    UI build() {
+        return Column(
+            // Header
+            Container(
+                Text(title + " (" + common.getCommonMessage() + ")", fontWeight: "bold", color: "cyan"),
+                padding: 1
+            ),
+
+            // Platform details
+            Card(
+                Text("Platform Modules Loaded:", fontWeight: "bold", color: "blue"),
+                Text(" - Common: " + common.getCommonMessage()),
+                Text(" - Desktop module target: " + desktop.getPlatformName()),
+                Text(" - Android module target: " + android.getPlatformName()),
+                Text(" - iOS module target: " + ios.getPlatformName()),
+                Text(" - Web module target: " + web.getPlatformName()),
+                Text(" - Linux module target: " + linux.getPlatformName()),
+                Text(" - Windows module target: " + windows.getPlatformName()),
+                Text(" - macOS module target: " + mac.getPlatformName()),
+                padding: 1
+            ),
+
+            // Counter section (Reactive)
+            Card(
+                Text("Click Counter Sample", fontWeight: "bold", color: "yellow"),
+                Row(
+                    Text("Value: " + counter, color: "green"),
+                    Button("Increment", onClick: handleIncrement)
+                ),
+                padding: 1
+            ),
+
+            // REST API Integration
+            Card(
+                Text("REST Network API Verification", fontWeight: "bold", color: "magenta"),
+                Row(
+                    Text("API Payload: " + api_result),
+                    Button("Fetch Data", onClick: handleFetch)
+                ),
+                padding: 1
+            )
+        );
+    }
+
+    Void handleIncrement() {
+        setState {
+            counter = counter + 1;
+        }
+    }
+
+    Void handleFetch() {
+        String res = httpGet("https://jsonplaceholder.typicode.com/todos/1");
+        setState {
+            api_result = res;
+        }
+    }
+}
+
+Void main() {
+    println("Initializing Reorganized Zenith Application...");
+    MyApp app = MyApp();
+    app.build().render();
+    println("Zenith Application Shutdown.");
+}

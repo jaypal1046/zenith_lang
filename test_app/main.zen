@@ -1,0 +1,58 @@
+// Zenith Standard Application
+import std.io;
+
+class MyApp() {
+    String title = "Zenith Cross-Platform App";
+    Int counter = 0;
+    String api_result = "No data fetched.";
+
+    UI build() {
+        return Column(
+            // Header
+            Container(
+                Text(title, fontWeight: "bold", color: "cyan"),
+                padding: 1
+            ),
+
+            // Counter section (Reactive)
+            Card(
+                Text("Click Counter Sample", fontWeight: "bold", color: "yellow"),
+                Row(
+                    Text("Value: " + counter, color: "green"),
+                    Button("Increment", onClick: handleIncrement)
+                ),
+                padding: 1
+            ),
+
+            // REST API Integration
+            Card(
+                Text("REST Network API Verification", fontWeight: "bold", color: "magenta"),
+                Row(
+                    Text("API Payload: " + api_result),
+                    Button("Fetch Data", onClick: handleFetch)
+                ),
+                padding: 1
+            )
+        );
+    }
+
+    Void handleIncrement() {
+        setState {
+            counter = counter + 1;
+        }
+    }
+
+    Void handleFetch() {
+        String res = httpGet("https://jsonplaceholder.typicode.com/todos/1");
+        setState {
+            api_result = res;
+        }
+    }
+}
+
+Void main() {
+    println("Initializing Zenith Application...");
+    MyApp app = MyApp();
+    app.build().render();
+    println("Zenith Application Shutdown.");
+}

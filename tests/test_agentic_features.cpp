@@ -92,63 +92,68 @@ public:
     }
 };
 
-class Node : public zenith::mem::Managed {
-private:
-public:
-    std::string value;
+std::string streamAgent(std::string query) {
+    // --- AUTO-GENERATED AGENTIC BINDING ---
+    std::string prompt = R"(You are a streaming assistant. Query: {query})";
+    prompt = std::regex_replace(prompt, std::regex("\\{query\\}"), query);
+    zenith::LLMClient client("http://localhost:11434/api/generate");
+    std::string response = client.promptStream(prompt, [](const std::string& chunk) { std::cout << chunk << std::flush; });
+    return response;
+}
 
-    Node()  {}
-    Node(const std::string& v) : value(v) {}
+std::string visionAgent(std::string query, std::string imagePath) {
+    // --- AUTO-GENERATED AGENTIC BINDING ---
+    std::string prompt = R"(Look at this image {imagePath} and answer: {query})";
+    prompt = std::regex_replace(prompt, std::regex("\\{query\\}"), query);
+    prompt = std::regex_replace(prompt, std::regex("\\{imagePath\\}"), imagePath);
+    zenith::LLMClient client("http://localhost:11434/api/generate");
+    std::string response = client.prompt(prompt, imagePath);
+    return response;
+}
 
-    void __gc_enumerate(std::vector<zenith::mem::RcBlock*>& out) override {
-    }
+std::string summaryAgent(std::string text) {
+    // --- AUTO-GENERATED AGENTIC BINDING ---
+    std::string prompt = R"(Summarize this: {text})";
+    prompt = std::regex_replace(prompt, std::regex("\\{text\\}"), text);
+    zenith::LLMClient client("http://localhost:11434/api/generate");
+    std::string response = client.prompt(prompt);
+    return response;
+}
 
-    void triggerCallback(std::string name, std::string val = "") {
-    }
+std::string sequentialPipe(std::string input) {
+    std::string current_val = input;
+    current_val = streamAgent(current_val);
+    current_val = summaryAgent(current_val);
+    return current_val;
+}
 
-};
-
-class Counter : public zenith::mem::Managed {
-private:
-public:
-    int count;
-
-    Counter()  {}
-    Counter(int c) : count(c) {}
-
-    void __gc_enumerate(std::vector<zenith::mem::RcBlock*>& out) override {
-    }
-
-    void triggerCallback(std::string name, std::string val = "") {
-    }
-
-};
+std::vector<std::string> parallelPipe(std::string input) {
+    auto f0 = std::async(std::launch::async, streamAgent, input);
+    auto f1 = std::async(std::launch::async, summaryAgent, input);
+    std::vector<std::string> results;
+    results.push_back(f0.get());
+    results.push_back(f1.get());
+    return results;
+}
 
 int main() {
     // --- Zenith RC+GC Memory Manager: Start background cycle collector ---
     zenith::mem::GcHeap::instance().start_background_gc(5000);
 
-    println("=== Zenith Hybrid RC + GC Memory Test ===");
-    println("\n[Test 1] Basic Ref<T> — Strong Reference Counting:");
-    zenith::mem::Ref<Node> nodeA = zenith::mem::make_ref<Node>("hello-rc");
-    println("Created Ref<Node> with value: hello-rc");
-    println("Ref<T> strong ownership established.");
-    println("\n[Test 2] Weak<T> — Weak Reference (no RC increment):");
-    zenith::mem::Weak<Node> weakRef = zenith::mem::Weak<Node>(nodeA);
-    println("Weak<Node> created. Does not prevent collection.");
-    println("Weak ref is non-owning — breaks potential cycles.");
-    println("\n[Test 3] @managed class — inherits zenith::mem::Managed:");
-    zenith::mem::Ref<Counter> counter = zenith::mem::make_ref<Counter>(42);
-    println("Counter object created with count: 42");
-    println("Counter is heap-tracked by GcHeap.");
-    println("\n[Test 4] GC Statistics:");
-    std::string stats = gcStats();
-    println(zenith::concat("GC Stats: ", stats));
-    println("\n[Test 5] Scope Exit — RC Deallocation:");
-    println("All Ref<T> objects will be freed when they go out of scope.");
-    println("GcHeap background thread running every 5000ms for cycle detection.");
-    println("\n=== Memory Test Complete ===");
-    println("RC frees acyclic objects. GC collects cycles. Both run transparently.");
+    println("=== Zenith Agentic Features Test ===");
+    println("\n[Test 1] Streaming Agent:");
+    std::string resStream = streamAgent("Hello stream agent");
+    println(zenith::concat("Final Stream Output: ", resStream));
+    println("\n[Test 2] Multimodal Agent:");
+    std::string resVision = visionAgent("What is in this image?", "tests/screen.png");
+    println(zenith::concat("Vision Agent Output: ", resVision));
+    println("\n[Test 3] Sequential Orchestration:");
+    std::string resSeq = sequentialPipe("Initial pipeline input");
+    println(zenith::concat("Sequential Pipeline Result: ", resSeq));
+    println("\n[Test 4] Parallel Orchestration:");
+    std::vector<std::string> resPar = parallelPipe("Initial parallel input");
+    println("Parallel Pipeline executed successfully.");
+    println("=== All Tests Completed ===");
 
 // --- Zenith RC+GC Memory Manager: Shutdown ---
 zenith::mem::GcHeap::instance().stop_background_gc();

@@ -13,12 +13,6 @@
 
 using json = nlohmann::json;
 
-inline void print(std::string msg) { std::cout << msg; }
-inline void println(std::string msg) { std::cout << msg << std::endl; }
-inline std::string httpGet(std::string url) { return zenith::httpGet(url); }
-inline std::string httpPost(std::string url, std::string json_body) { return zenith::httpPost(url, json_body); }
-inline std::string gcStats() { return zenith::mem::gcStatsString(); }
-
 template<typename T>
 void print_t(const T& value) {
     std::cout << value << std::endl;
@@ -92,69 +86,56 @@ public:
     }
 };
 
-class Node : public zenith::mem::Managed {
-private:
-public:
-    std::string value;
-
-    Node()  {}
-    Node(const std::string& v) : value(v) {}
-
-    void __gc_enumerate(std::vector<zenith::mem::RcBlock*>& out) override {
-    }
-
-    void triggerCallback(std::string name, std::string val = "") {
-    }
-
-};
-
-class Counter : public zenith::mem::Managed {
-private:
-public:
-    int count;
-
-    Counter()  {}
-    Counter(int c) : count(c) {}
-
-    void __gc_enumerate(std::vector<zenith::mem::RcBlock*>& out) override {
-    }
-
-    void triggerCallback(std::string name, std::string val = "") {
-    }
-
-};
-
-int main() {
-    // --- Zenith RC+GC Memory Manager: Start background cycle collector ---
-    zenith::mem::GcHeap::instance().start_background_gc(5000);
-
-    println("=== Zenith Hybrid RC + GC Memory Test ===");
-    println("\n[Test 1] Basic Ref<T> — Strong Reference Counting:");
-    zenith::mem::Ref<Node> nodeA = zenith::mem::make_ref<Node>("hello-rc");
-    println("Created Ref<Node> with value: hello-rc");
-    println("Ref<T> strong ownership established.");
-    println("\n[Test 2] Weak<T> — Weak Reference (no RC increment):");
-    zenith::mem::Weak<Node> weakRef = zenith::mem::Weak<Node>(nodeA);
-    println("Weak<Node> created. Does not prevent collection.");
-    println("Weak ref is non-owning — breaks potential cycles.");
-    println("\n[Test 3] @managed class — inherits zenith::mem::Managed:");
-    zenith::mem::Ref<Counter> counter = zenith::mem::make_ref<Counter>(42);
-    println("Counter object created with count: 42");
-    println("Counter is heap-tracked by GcHeap.");
-    println("\n[Test 4] GC Statistics:");
-    std::string stats = gcStats();
-    println(zenith::concat("GC Stats: ", stats));
-    println("\n[Test 5] Scope Exit — RC Deallocation:");
-    println("All Ref<T> objects will be freed when they go out of scope.");
-    println("GcHeap background thread running every 5000ms for cycle detection.");
-    println("\n=== Memory Test Complete ===");
-    println("RC frees acyclic objects. GC collects cycles. Both run transparently.");
-
-// --- Zenith RC+GC Memory Manager: Shutdown ---
-zenith::mem::GcHeap::instance().stop_background_gc();
-zenith::mem::GcHeap::instance().collect(); // Final cycle sweep
-#ifdef ZENITH_GC_STATS
-std::cout << zenith::mem::gcStatsString() << std::endl;
-#endif
+std::string getVerificationStatus() {
+    return " [Status: Verified (Custom import)]";
 }
+
+class CounterApp {
+private:
+public:
+    int count = 0;
+    std::string label = "Counter Value: ";
+
+    CounterApp()  {}
+
+    zenith::UIElement build() {
+        return zenith::UI::Column(zenith::make_children(zenith::UI::Text(zenith::concat(label, count), {})), {});
+    }
+
+    void increment() {
+        {
+            count = count + 1;
+            std::cout << "\n[Runtime] setState: Re-rendering UI Layout...\n";
+            this->build().render();
+        }
+    }
+
+    void triggerCallback(std::string name, std::string val = "") {
+        if (name == "increment") { this->increment(); return; }
+    }
+
+};
+
+class Shape {
+public:
+    virtual ~Shape() = default;
+    virtual float getArea() = 0;
+};
+
+class Circle : public Shape {
+private:
+    float radius;
+public:
+
+    Circle(float radius) : radius(radius) {}
+
+    float getArea() {
+        return 3.14159 * radius * radius;
+    }
+
+    void triggerCallback(std::string name, std::string val = "") {
+        if (name == "getArea") { this->getArea(); return; }
+    }
+
+};
 

@@ -13,11 +13,11 @@
 #include <iterator>
 
 #include <cstdio>
+#include <cmath>
 
 #ifdef YOGA_AVAILABLE
 #include "zenith/ui/yoga_layout.h"
 #include <memory>
-#include <cmath>
 #endif
 
 namespace zenith {
@@ -175,6 +175,18 @@ public:
         UIElement el("Text");
         el.text_content = std::move(text);
         el.attributes = std::move(attrs);
+        return el;
+    }
+
+    // Overload for Text with children (for compatibility with codegen)
+    static UIElement Text(std::vector<UIElement> children, std::unordered_map<std::string, std::string> attrs = {}) {
+        UIElement el("Text");
+        el.children = std::move(children);
+        el.attributes = std::move(attrs);
+        // Extract text content from first child if it's a string-like element
+        if (!el.children.empty() && el.children[0].type == "Literal") {
+            el.text_content = el.children[0].text_content;
+        }
         return el;
     }
 
@@ -1020,6 +1032,9 @@ namespace UI {
     inline UIElement Text(std::string text, std::unordered_map<std::string, std::string> attrs = {}) {
         return UIElement::Text(std::move(text), std::move(attrs));
     }
+    inline UIElement Text(std::vector<UIElement> children, std::unordered_map<std::string, std::string> attrs = {}) {
+        return UIElement::Text(std::move(children), std::move(attrs));
+    }
     inline UIElement Button(std::string label, std::unordered_map<std::string, std::string> attrs = {}) {
         return UIElement::Button(std::move(label), std::move(attrs));
     }
@@ -1188,6 +1203,36 @@ inline std::string base64_encode_file(const std::string& file_path) {
     }
     std::string data((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
     return base64_encode(data);
+}
+
+// Runtime helper functions for codegen
+inline void print(const std::string& msg) { 
+    std::cout << msg; 
+}
+
+inline void println(const std::string& msg) { 
+    std::cout << msg << std::endl; 
+}
+
+inline std::string String(int val) {
+    return std::to_string(val);
+}
+
+inline std::string String(double val) {
+    return std::to_string(val);
+}
+
+inline std::string String(bool val) {
+    return val ? "true" : "false";
+}
+
+inline std::string String(const std::string& val) {
+    return val;
+}
+
+template<typename T>
+inline std::string String(const T& val) {
+    return toString(val);
 }
 
 } // namespace zenith

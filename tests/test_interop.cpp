@@ -92,34 +92,58 @@ public:
     }
 };
 
-class Node : public zenith::mem::Managed {
+extern "C" int abs(int x);
+
+void alert(std::string msg) {
+    std::cerr << "[Warning] JS interop function 'alert' is not supported on desktop platform." << std::endl;
+    return;
+}
+
+int compute_square(int n) {
+    std::string cmd = "python -c \"import sys; sys.path.append('.'); import bridge; print(bridge.compute_square(" + std::to_string(n) + "))\"";
+    std::string res = zenith::run_cmd(cmd);
+    while (!res.empty() && (res.back() == '\n' || res.back() == '\r')) res.pop_back();
+    try { return std::stoi(res); } catch (...) { return 0; }
+}
+
+#ifdef _WIN32
+extern "C" __declspec(dllexport)
+#else
+extern "C"
+#endif
+int zenith_add(int a, int b) {
+    return a + b;
+}
+
+class InteropApp {
 private:
 public:
-    std::string value;
 
-    Node()  {}
-    Node(const std::string& v) : value(v) {}
+    InteropApp()  {}
 
-    void __gc_enumerate(std::vector<zenith::mem::RcBlock*>& out) override {
+    zenith::UIElement build() {
+        return zenith::UI::Column(zenith::make_children(zenith::UI::Text("ZENITH NATIVE INTEROP VERIFICATION", {{"fontWeight", zenith::toString("bold")}, {"color", zenith::toString("cyan")}}), zenith::UI::Card(zenith::make_children(zenith::UI::Text("1. C standard FFI: abs(0 - 42)", {{"color", zenith::toString("yellow")}}), zenith::UI::Button("Execute Call", {{"onClick", zenith::toString("handleCallC")}})), {{"padding", zenith::toString(1)}}), zenith::UI::Card(zenith::make_children(zenith::UI::Text("2. Python bridge: compute_square(5)", {{"color", zenith::toString("green")}}), zenith::UI::Button("Execute Call", {{"onClick", zenith::toString("handleCallPython")}})), {{"padding", zenith::toString(1)}}), zenith::UI::Card(zenith::make_children(zenith::UI::Text("3. JavaScript bridge: alert('Hello')", {{"color", zenith::toString("magenta")}}), zenith::UI::Button("Execute Call", {{"onClick", zenith::toString("handleCallJS")}})), {{"padding", zenith::toString(1)}})), {});
+    }
+
+    void handleCallC() {
+        int res = abs(0 - 42);
+        println(zenith::concat("[Interop] C abs(0 - 42) returned: ", res));
+    }
+
+    void handleCallPython() {
+        int res = compute_square(5);
+        println(zenith::concat("[Interop] Python compute_square(5) returned: ", res));
+    }
+
+    void handleCallJS() {
+        alert("Hello from Zenith Web/WASM Interop!");
+        println("[Interop] JS alert function called!");
     }
 
     void triggerCallback(std::string name, std::string val = "") {
-    }
-
-};
-
-class Counter : public zenith::mem::Managed {
-private:
-public:
-    int count;
-
-    Counter()  {}
-    Counter(int c) : count(c) {}
-
-    void __gc_enumerate(std::vector<zenith::mem::RcBlock*>& out) override {
-    }
-
-    void triggerCallback(std::string name, std::string val = "") {
+        if (name == "handleCallC") { this->handleCallC(); return; }
+        if (name == "handleCallPython") { this->handleCallPython(); return; }
+        if (name == "handleCallJS") { this->handleCallJS(); return; }
     }
 
 };
@@ -128,27 +152,14 @@ int main() {
     // --- Zenith RC+GC Memory Manager: Start background cycle collector ---
     zenith::mem::GcHeap::instance().start_background_gc(5000);
 
-    println("=== Zenith Hybrid RC + GC Memory Test ===");
-    println("\n[Test 1] Basic Ref<T> — Strong Reference Counting:");
-    zenith::mem::Ref<Node> nodeA = zenith::mem::make_ref<Node>("hello-rc");
-    println("Created Ref<Node> with value: hello-rc");
-    println("Ref<T> strong ownership established.");
-    println("\n[Test 2] Weak<T> — Weak Reference (no RC increment):");
-    zenith::mem::Weak<Node> weakRef = zenith::mem::Weak<Node>(nodeA);
-    println("Weak<Node> created. Does not prevent collection.");
-    println("Weak ref is non-owning — breaks potential cycles.");
-    println("\n[Test 3] @managed class — inherits zenith::mem::Managed:");
-    zenith::mem::Ref<Counter> counter = zenith::mem::make_ref<Counter>(42);
-    println("Counter object created with count: 42");
-    println("Counter is heap-tracked by GcHeap.");
-    println("\n[Test 4] GC Statistics:");
-    std::string stats = gcStats();
-    println(zenith::concat("GC Stats: ", stats));
-    println("\n[Test 5] Scope Exit — RC Deallocation:");
-    println("All Ref<T> objects will be freed when they go out of scope.");
-    println("GcHeap background thread running every 5000ms for cycle detection.");
-    println("\n=== Memory Test Complete ===");
-    println("RC frees acyclic objects. GC collects cycles. Both run transparently.");
+    println("--- Direct Interop Testing ---");
+    InteropApp app = InteropApp();
+    app.handleCallC();
+    app.handleCallPython();
+    app.handleCallJS();
+    println("--- Testing exported function zenith_add(10, 20) ---");
+    int sum = zenith_add(10, 20);
+    println(zenith::concat("[Export] zenith_add(10, 20) returned: ", sum));
 
 // --- Zenith RC+GC Memory Manager: Shutdown ---
 zenith::mem::GcHeap::instance().stop_background_gc();

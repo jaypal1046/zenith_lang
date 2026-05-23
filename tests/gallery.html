@@ -173,8 +173,34 @@
             println: function(msg) {
                 this.print(msg + '\n');
             },
-            llmPrompt: async function(url, promptStr) {
+            encodeImageToBase64: async function(pathOrUrl) {
+                if (!pathOrUrl) return "";
+                if (pathOrUrl.startsWith("data:")) return pathOrUrl.split(",")[1];
+                try {
+                    const response = await fetch(pathOrUrl);
+                    const blob = await response.blob();
+                    return new Promise((resolve) => {
+                        const reader = new FileReader();
+                        reader.onloadend = () => {
+                            const base64String = reader.result.split(',')[1];
+                            resolve(base64String);
+                        };
+                        reader.readAsDataURL(blob);
+                    });
+                } catch (e) {
+                    return "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+                }
+            },
+            llmPrompt: async function(url, promptStr, isStreaming, imagePath) {
+                let imageBase64 = "";
+                if (imagePath) {
+                    this.println('[Runtime] Loading and encoding image: ' + imagePath);
+                    imageBase64 = await this.encodeImageToBase64(imagePath);
+                }
                 this.println('\n[Runtime] LLMClient sending prompt to local backend (' + url + '): "' + promptStr + '"');
+                if (imageBase64) {
+                    this.println('[Runtime] Image attached (Base64 length: ' + imageBase64.length + ' chars)');
+                }
                 try {
                     const response = await fetch(url + '/api/generate', {
                         method: 'POST',
@@ -182,18 +208,68 @@
                         body: JSON.stringify({
                             model: 'llama3',
                             prompt: promptStr,
-                            stream: false
+                            stream: !!isStreaming,
+                            images: imageBase64 ? [imageBase64] : undefined
                         })
                     });
                     if (response.ok) {
-                        const json = await response.json();
-                        return json.response;
+                        if (isStreaming) {
+                            const reader = response.body.getReader();
+                            const decoder = new TextDecoder("utf-8");
+                            let buffer = "";
+                            let fullResponse = "";
+                            while (true) {
+                                const { value, done } = await reader.read();
+                                if (done) break;
+                                buffer += decoder.decode(value, { stream: true });
+                                const lines = buffer.split("\n");
+                                buffer = lines.pop();
+                                for (const line of lines) {
+                                    if (line.trim() === "") continue;
+                                    try {
+                                        const json = JSON.parse(line);
+                                        if (json.response) {
+                                            fullResponse += json.response;
+                                            this.print(json.response);
+                                        }
+                                    } catch (err) {}
+                                }
+                            }
+                            if (buffer.trim() !== "") {
+                                try {
+                                    const json = JSON.parse(buffer);
+                                    if (json.response) {
+                                        fullResponse += json.response;
+                                        this.print(json.response);
+                                    }
+                                } catch (err) {}
+                            }
+                            this.println("");
+                            return fullResponse;
+                        } else {
+                            const json = await response.json();
+                            return json.response;
+                        }
                     }
                 } catch(e) {}
                 this.println('[Runtime Warning] Ollama backend not reachable. Falling back to simulated completion.');
-                return "- Zenith compiles UI declarations straight to native bindings.\n" +
-                       "- LLM prompts are statically validated at compile-time.\n" +
-                       "- Zero runtime latency wrapper on top of pure C++ loops.";
+                let simulated = "Simulated response for prompt: '" + promptStr + "'";
+                if (imageBase64) {
+                    simulated += " with image '" + imagePath + "'";
+                }
+                if (isStreaming) {
+                    const tokens = simulated.split(" ");
+                    let fullText = "";
+                    for (const tok of tokens) {
+                        this.print(tok + " ");
+                        await new Promise(r => setTimeout(r, 50));
+                        fullText += tok + " ";
+                    }
+                    this.println("");
+                    return fullText;
+                } else {
+                    return simulated;
+                }
             }
         };
 
@@ -453,10 +529,10 @@ class GalleryApp {
     }
 }
 async function main() {
-    UI.println(["--- Booting Zenith Multi-Platform Gallery App ---"], {});
+    println("--- Booting Zenith Multi-Platform Gallery App ---");
     let app = new GalleryApp();
     app.build().render();
-    UI.println(["--- Gallery Loaded Successfully. Interactive loop started! ---"], {});
+    println("--- Gallery Loaded Successfully. Interactive loop started! ---");
 }
         let counterGlobalInstance = null;
         function triggerIncrement() {

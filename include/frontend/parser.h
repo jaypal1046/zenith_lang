@@ -26,6 +26,7 @@ private:
     std::unique_ptr<ExprNode> parseListLiteral(); // Parses [1, 2, 3]
     std::unique_ptr<ExprNode> parseMapLiteral(); // Parses {"key": "val"}
     std::unique_ptr<ExprNode> parseUIComponent(); // Parses Column(...) etc
+    std::unique_ptr<ExprNode> parseLambda(); // Parses lambda expression (params) => { body }
     
     // Control Flow
     std::vector<std::unique_ptr<ASTNode>> parseBlock();

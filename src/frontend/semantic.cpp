@@ -1,4 +1,5 @@
 #include "../../include/frontend/semantic.h"
+#include <functional>
 
 // Forward declaration
 static void populateTypeNode(TypeNode* type_node, const std::string& type_str);
@@ -51,7 +52,7 @@ std::string SemanticAnalyzer::inferAndValidateVarDecl(VarDeclNode* var_decl) {
         }
         
         if (var_decl->initializer) {
-            std::string init_type = typeCheckExpression(var_decl->initializer.get());
+            std::string init_type = typeCheckExpression(var_decl->initializer.get(), expected_type);
             
             // Skip type mismatch check for RC/GC smart pointer types —
             // Ref<T> and Weak<T> constructors return opaque types; the declared type is authoritative.
@@ -84,10 +85,97 @@ std::string SemanticAnalyzer::inferFunctionReturnType(FunctionNode* func) {
         return func->return_type->type_name;
     }
     
-    // For now, we don't implement full return type inference
-    // This would require analyzing all return statements in the function body
-    // and unifying their types. Return Void as default.
-    return "Void";
+    return inferBlockReturnType(func->body);
+}
+
+std::string SemanticAnalyzer::inferBlockReturnType(const std::vector<std::unique_ptr<ASTNode>>& block) {
+    std::vector<std::string> return_types;
+    
+    std::function<void(ASTNode*)> find_returns = [&](ASTNode* node) {
+        if (!node) return;
+        if (auto* ret = dynamic_cast<ReturnStmtNode*>(node)) {
+            std::string type = "Void";
+            if (ret->expression) {
+                type = typeCheckExpression(ret->expression.get());
+            }
+            return_types.push_back(type);
+        } else if (auto* if_stmt = dynamic_cast<IfStmtNode*>(node)) {
+            for (const auto& s : if_stmt->then_branch) find_returns(s.get());
+            for (const auto& s : if_stmt->else_branch) find_returns(s.get());
+        } else if (auto* while_stmt = dynamic_cast<WhileStmtNode*>(node)) {
+            for (const auto& s : while_stmt->body) find_returns(s.get());
+        } else if (auto* set_state = dynamic_cast<SetStateStmtNode*>(node)) {
+            for (const auto& s : set_state->body) find_returns(s.get());
+        }
+    };
+    
+    for (const auto& stmt : block) {
+        find_returns(stmt.get());
+    }
+    
+    if (return_types.empty()) return "Void";
+    
+    std::string unified = return_types[0];
+    for (size_t i = 1; i < return_types.size(); ++i) {
+        if (unified != return_types[i]) {
+            if (type_inferencer.unifyTypes(unified, return_types[i], nullptr)) {
+                // Compatible - we can keep the current unified type
+            } else {
+                error("Type Inference Error: Mismatched return types in function/lambda body: '" + unified + "' and '" + return_types[i] + "'");
+            }
+        }
+    }
+    return unified;
+}
+
+static std::vector<std::string> getGenericParams(const std::string& type) {
+    std::vector<std::string> params;
+    size_t start = type.find('<');
+    if (start == std::string::npos) return params;
+    
+    start++;
+    int depth = 0;
+    std::string current;
+    
+    for (size_t i = start; i < type.length(); i++) {
+        char c = type[i];
+        if (c == '<') depth++;
+        else if (c == '>') {
+            if (depth == 0) {
+                if (!current.empty()) {
+                    current.erase(0, current.find_first_not_of(" \t\r\n"));
+                    current.erase(current.find_last_not_of(" \t\r\n") + 1);
+                    params.push_back(current);
+                }
+                break;
+            }
+            depth--;
+        }
+        else if (c == ',' && depth == 0) {
+            if (!current.empty()) {
+                current.erase(0, current.find_first_not_of(" \t\r\n"));
+                current.erase(current.find_last_not_of(" \t\r\n") + 1);
+                params.push_back(current);
+            }
+            current.clear();
+        }
+        else {
+            current += c;
+        }
+    }
+    
+    return params;
+}
+
+static bool parseFunctionType(const std::string& type_str, std::vector<std::string>& out_params, std::string& out_ret) {
+    if (type_str.rfind("Function<", 0) != 0 || type_str.back() != '>') return false;
+    auto params = getGenericParams(type_str);
+    if (params.empty()) return false;
+    out_ret = params.back();
+    for (size_t i = 0; i < params.size() - 1; ++i) {
+        out_params.push_back(params[i]);
+    }
+    return true;
 }
 
 static void populateTypeNode(TypeNode* type_node, const std::string& type_str) {
@@ -243,7 +331,7 @@ void SemanticAnalyzer::analyzeStatement(ASTNode* stmt) {
         current_scope->define(var_decl->var_name, expected_type);
     }
     else if (auto* if_stmt = dynamic_cast<IfStmtNode*>(stmt)) {
-        std::string cond_type = typeCheckExpression(if_stmt->condition.get());
+        std::string cond_type = typeCheckExpression(if_stmt->condition.get(), "Bool");
         if (cond_type != "Bool") {
             error("Type Mismatch: If statement condition must be of type 'Bool', got '" + cond_type + "'", if_stmt);
         }
@@ -253,7 +341,7 @@ void SemanticAnalyzer::analyzeStatement(ASTNode* stmt) {
         }
     }
     else if (auto* while_stmt = dynamic_cast<WhileStmtNode*>(stmt)) {
-        std::string cond_type = typeCheckExpression(while_stmt->condition.get());
+        std::string cond_type = typeCheckExpression(while_stmt->condition.get(), "Bool");
         if (cond_type != "Bool") {
             error("Type Mismatch: While loop condition must be of type 'Bool', got '" + cond_type + "'", while_stmt);
         }
@@ -262,7 +350,7 @@ void SemanticAnalyzer::analyzeStatement(ASTNode* stmt) {
     else if (auto* return_stmt = dynamic_cast<ReturnStmtNode*>(stmt)) {
         std::string ret_type = "Void";
         if (return_stmt->expression) {
-            ret_type = typeCheckExpression(return_stmt->expression.get());
+            ret_type = typeCheckExpression(return_stmt->expression.get(), current_fn_return_type);
         }
         if (!isAssignable(ret_type, current_fn_return_type)) {
             error("Type Mismatch: Function return type expected '" + current_fn_return_type + "', but returned '" + ret_type + "'", return_stmt);
@@ -278,9 +366,10 @@ void SemanticAnalyzer::analyzeStatement(ASTNode* stmt) {
     }
 }
 
-std::string SemanticAnalyzer::typeCheckExpression(ExprNode* expr) {
+std::string SemanticAnalyzer::typeCheckExpression(ExprNode* expr, const std::string& expected_type) {
     if (auto* await_expr = dynamic_cast<AwaitExprNode*>(expr)) {
-        std::string inner_type = typeCheckExpression(await_expr->expression.get());
+        std::string awaited_expected = expected_type.empty() ? "" : "Future<" + expected_type + ">";
+        std::string inner_type = typeCheckExpression(await_expr->expression.get(), awaited_expected);
         if (inner_type.rfind("Future<", 0) == 0 && !inner_type.empty() && inner_type.back() == '>') {
             return inner_type.substr(7, inner_type.length() - 8);
         }
@@ -294,6 +383,138 @@ std::string SemanticAnalyzer::typeCheckExpression(ExprNode* expr) {
     }
     if (auto* b = dynamic_cast<BoolLiteralNode*>(expr)) {
         return "Bool";
+    }
+    if (auto* opt = dynamic_cast<OptionExprNode*>(expr)) {
+        if (opt->kind == OptionExprNode::OptionKind::None) {
+            if (expected_type.rfind("Option<", 0) == 0 && expected_type.back() == '>') {
+                return expected_type;
+            }
+            return "Option<Void>";
+        } else {
+            std::string inner_expected = "";
+            if (expected_type.rfind("Option<", 0) == 0 && expected_type.back() == '>') {
+                inner_expected = expected_type.substr(7, expected_type.length() - 8);
+            }
+            std::string inner_type = typeCheckExpression(opt->value.get(), inner_expected);
+            return "Option<" + inner_type + ">";
+        }
+    }
+    if (auto* res = dynamic_cast<ResultExprNode*>(expr)) {
+        std::string inner_expected = "";
+        if (expected_type.rfind("Result<", 0) == 0 && expected_type.back() == '>') {
+            auto params = getGenericParams(expected_type);
+            if (res->kind == ResultExprNode::ResultKind::Ok && params.size() > 0) {
+                inner_expected = params[0];
+            } else if (res->kind == ResultExprNode::ResultKind::Err && params.size() > 1) {
+                inner_expected = params[1];
+            }
+        }
+        std::string inner_type = typeCheckExpression(res->value.get(), inner_expected);
+        if (res->kind == ResultExprNode::ResultKind::Ok) {
+            return "Result<" + inner_type + ", Error>";
+        } else {
+            return "Result<Void, " + inner_type + ">";
+        }
+    }
+    if (dynamic_cast<NullLiteralNode*>(expr)) {
+        if (expected_type.rfind("Option<", 0) == 0 && expected_type.back() == '>') {
+            return expected_type;
+        }
+        return "Null";
+    }
+    if (auto* try_expr = dynamic_cast<TryExprNode*>(expr)) {
+        std::string result_type = typeCheckExpression(try_expr->expression.get());
+        if (result_type.rfind("Result<", 0) == 0 && result_type.back() == '>') {
+            auto params = getGenericParams(result_type);
+            if (params.size() > 0) return params[0];
+        }
+        return result_type;
+    }
+    if (auto* match = dynamic_cast<MatchExprNode*>(expr)) {
+        std::string subject_type = typeCheckExpression(match->subject.get());
+        std::string unified_type = "";
+        for (const auto& arm : match->arms) {
+            std::string arm_type = typeCheckExpression(arm.second.get(), expected_type);
+            if (unified_type.empty()) {
+                unified_type = arm_type;
+            } else if (unified_type != arm_type) {
+                if (!type_inferencer.unifyTypes(unified_type, arm_type, match)) {
+                    error("Type Error: Mismatched types in match expression arms: '" + unified_type + "' and '" + arm_type + "'", match);
+                }
+            }
+        }
+        return unified_type;
+    }
+    if (auto* lambda = dynamic_cast<LambdaNode*>(expr)) {
+        std::vector<std::string> expected_params;
+        std::string expected_ret = "Void";
+        bool has_context = false;
+        
+        if (!expected_type.empty()) {
+            has_context = parseFunctionType(expected_type, expected_params, expected_ret);
+        }
+        
+        SymbolTable* lambda_scope = new SymbolTable(current_scope);
+        SymbolTable* previous_scope = current_scope;
+        current_scope = lambda_scope;
+        
+        for (size_t i = 0; i < lambda->parameters.size(); ++i) {
+            auto* param = lambda->parameters[i].get();
+            std::string param_type = "Void";
+            
+            if (param->type && !param->type->is_inferred && param->type->type_name != "Auto" && !param->type->type_name.empty()) {
+                param_type = param->type->type_name;
+            } else if (has_context && i < expected_params.size()) {
+                param_type = expected_params[i];
+                if (param->type) {
+                    populateTypeNode(param->type.get(), param_type);
+                    param->type->is_inferred = true;
+                }
+            } else if (param->initializer) {
+                param_type = typeCheckExpression(param->initializer.get());
+                if (param->type) {
+                    populateTypeNode(param->type.get(), param_type);
+                    param->type->is_inferred = true;
+                }
+            } else {
+                error("Type Inference Error: Cannot infer type for lambda parameter '" + param->var_name + "'", lambda);
+            }
+            current_scope->define(param->var_name, param_type);
+        }
+        
+        std::string old_fn_ret = current_fn_return_type;
+        std::string inferred_ret = "Void";
+        
+        if (has_context) {
+            current_fn_return_type = expected_ret;
+            inferred_ret = expected_ret;
+        } else if (lambda->return_type && !lambda->return_type->is_inferred && lambda->return_type->type_name != "Auto" && !lambda->return_type->type_name.empty()) {
+            current_fn_return_type = lambda->return_type->type_name;
+            inferred_ret = lambda->return_type->type_name;
+        } else {
+            current_fn_return_type = "Auto";
+        }
+        
+        analyzeBlock(lambda->body);
+        
+        if (current_fn_return_type == "Auto") {
+            inferred_ret = inferBlockReturnType(lambda->body);
+            if (lambda->return_type) {
+                populateTypeNode(lambda->return_type.get(), inferred_ret);
+                lambda->return_type->is_inferred = true;
+            }
+        }
+        
+        current_fn_return_type = old_fn_ret;
+        current_scope = previous_scope;
+        delete lambda_scope;
+        
+        std::string sig = "";
+        for (size_t i = 0; i < lambda->parameters.size(); ++i) {
+            sig += lambda->parameters[i]->type->type_name + ",";
+        }
+        sig += inferred_ret;
+        return "Function<" + sig + ">";
     }
     if (auto* ident = dynamic_cast<IdentifierNode*>(expr)) {
         std::string t = current_scope->getType(ident->name);
@@ -310,29 +531,59 @@ std::string SemanticAnalyzer::typeCheckExpression(ExprNode* expr) {
     }
     if (auto* list_lit = dynamic_cast<ListLiteralNode*>(expr)) {
         if (list_lit->elements.empty()) {
+            if (expected_type.rfind("List<", 0) == 0 && expected_type.back() == '>') {
+                return expected_type;
+            }
             return "List<Void>";
         }
-        std::string elem_type = typeCheckExpression(list_lit->elements[0].get());
+        std::string elem_expected = "";
+        if (expected_type.rfind("List<", 0) == 0 && expected_type.back() == '>') {
+            elem_expected = expected_type.substr(5, expected_type.length() - 6);
+        }
+        std::string elem_type = typeCheckExpression(list_lit->elements[0].get(), elem_expected);
+        for (size_t i = 1; i < list_lit->elements.size(); ++i) {
+            std::string t = typeCheckExpression(list_lit->elements[i].get(), elem_expected);
+            if (t != elem_type) {
+                if (!type_inferencer.unifyTypes(elem_type, t, list_lit)) {
+                    error("Type Mismatch: elements in List have mismatched types '" + elem_type + "' and '" + t + "'", list_lit);
+                }
+            }
+        }
         return "List<" + elem_type + ">";
     }
     if (auto* map_lit = dynamic_cast<MapLiteralNode*>(expr)) {
         if (map_lit->entries.empty()) {
+            if (expected_type.rfind("Map<", 0) == 0 && expected_type.back() == '>') {
+                return expected_type;
+            }
             return "Map<Void,Void>";
         }
-        std::string key_type = typeCheckExpression(map_lit->entries[0].first.get());
-        std::string val_type = typeCheckExpression(map_lit->entries[0].second.get());
+        std::string key_expected = "", val_expected = "";
+        if (expected_type.rfind("Map<", 0) == 0 && expected_type.back() == '>') {
+            std::string inner = expected_type.substr(4, expected_type.length() - 5);
+            size_t comma = inner.find(',');
+            if (comma != std::string::npos) {
+                key_expected = inner.substr(0, comma);
+                val_expected = inner.substr(comma + 1);
+            }
+        }
+        std::string key_type = typeCheckExpression(map_lit->entries[0].first.get(), key_expected);
+        std::string val_type = typeCheckExpression(map_lit->entries[0].second.get(), val_expected);
         return "Map<" + key_type + "," + val_type + ">";
     }
     if (auto* binary = dynamic_cast<BinaryExprNode*>(expr)) {
-        std::string type_l = typeCheckExpression(binary->left.get());
-        std::string type_r = typeCheckExpression(binary->right.get());
-        
         if (binary->op == "=") {
+            std::string type_l = typeCheckExpression(binary->left.get());
+            std::string type_r = typeCheckExpression(binary->right.get(), type_l);
             if (!isAssignable(type_r, type_l)) {
                 error("Type Mismatch: Cannot assign '" + type_r + "' to '" + type_l + "'", binary);
             }
             return type_l;
         }
+        
+        std::string type_l = typeCheckExpression(binary->left.get(), expected_type);
+        std::string type_r = typeCheckExpression(binary->right.get(), expected_type);
+        
         if (binary->op == "==" || binary->op == "!=" || binary->op == "<" || binary->op == ">" || binary->op == "<=" || binary->op == ">=") {
             if (type_l != type_r) {
                 error("Type Mismatch: Comparison operands must match, got '" + type_l + "' and '" + type_r + "'", binary);
@@ -354,12 +605,30 @@ std::string SemanticAnalyzer::typeCheckExpression(ExprNode* expr) {
         return "";
     }
     if (auto* ui = dynamic_cast<UIComponentNode*>(expr)) {
-        std::vector<std::string> child_types;
-        for (const auto& child : ui->children) {
-            child_types.push_back(typeCheckExpression(child.get()));
-        }
         for (const auto& arg : ui->named_args) {
             typeCheckExpression(arg.second.get());
+        }
+
+        // If component_type is a variable in scope holding a Function
+        if (current_scope->lookup(ui->component_type)) {
+            std::string var_type = current_scope->getType(ui->component_type);
+            std::vector<std::string> params;
+            std::string ret_type;
+            if (parseFunctionType(var_type, params, ret_type)) {
+                if (ui->children.size() != params.size()) {
+                    error("Call Error: Variable function '" + ui->component_type + "' expects " +
+                          std::to_string(params.size()) + " arguments, got " +
+                          std::to_string(ui->children.size()), ui);
+                } else {
+                    for (size_t i = 0; i < ui->children.size(); ++i) {
+                        std::string arg_type = typeCheckExpression(ui->children[i].get(), params[i]);
+                        if (!isAssignable(arg_type, params[i])) {
+                            error("Call Argument Mismatch: expected '" + params[i] + "', got '" + arg_type + "'", ui);
+                        }
+                    }
+                }
+                return ret_type;
+            }
         }
 
         if (classes.count(ui->component_type)) {
@@ -370,8 +639,8 @@ std::string SemanticAnalyzer::typeCheckExpression(ExprNode* expr) {
                       std::to_string(ui->children.size()), ui);
             } else {
                 for (size_t i = 0; i < ui->children.size(); ++i) {
-                    std::string arg_type = child_types[i];
                     std::string param_type = class_decl->primary_constructor_args[i]->type->type_name;
+                    std::string arg_type = typeCheckExpression(ui->children[i].get(), param_type);
                     if (!isAssignable(arg_type, param_type)) {
                         error("Constructor Argument Mismatch: expected '" + param_type + "', got '" + arg_type + "'", ui);
                     }
@@ -387,8 +656,8 @@ std::string SemanticAnalyzer::typeCheckExpression(ExprNode* expr) {
                       std::to_string(ui->children.size()), ui);
             } else {
                 for (size_t i = 0; i < ui->children.size(); ++i) {
-                    std::string arg_type = child_types[i];
                     std::string param_type = fn->parameters[i]->type->type_name;
+                    std::string arg_type = typeCheckExpression(ui->children[i].get(), param_type);
                     if (!isAssignable(arg_type, param_type)) {
                         error("Call Argument Mismatch: expected '" + param_type + "', got '" + arg_type + "'", ui);
                     }
@@ -404,7 +673,7 @@ std::string SemanticAnalyzer::typeCheckExpression(ExprNode* expr) {
             if (ui->children.size() != 1) {
                 error("Orchestration Call Error: Orchestration '" + ui->component_type + "' expects exactly 1 argument, got " + std::to_string(ui->children.size()), ui);
             } else {
-                std::string arg_type = child_types[0];
+                std::string arg_type = typeCheckExpression(ui->children[0].get(), "String");
                 if (!isAssignable(arg_type, "String")) {
                     error("Orchestration Call Argument Mismatch: expected 'String', got '" + arg_type + "'", ui);
                 }
@@ -414,6 +683,9 @@ std::string SemanticAnalyzer::typeCheckExpression(ExprNode* expr) {
             } else {
                 return "List<String>";
             }
+        }
+        for (const auto& child : ui->children) {
+            typeCheckExpression(child.get());
         }
         return "UI";
     }
@@ -454,8 +726,8 @@ std::string SemanticAnalyzer::typeCheckExpression(ExprNode* expr) {
                               std::to_string(call->arguments.size()), call);
                     } else {
                         for (size_t i = 0; i < call->arguments.size(); ++i) {
-                            std::string arg_type = typeCheckExpression(call->arguments[i].get());
                             std::string param_type = method->parameters[i]->type->type_name;
+                            std::string arg_type = typeCheckExpression(call->arguments[i].get(), param_type);
                             if (!isAssignable(arg_type, param_type)) {
                                 error("Method Call Argument Mismatch: expected '" + param_type + "', got '" + arg_type + "'", call);
                             }
@@ -480,8 +752,8 @@ std::string SemanticAnalyzer::typeCheckExpression(ExprNode* expr) {
                               std::to_string(call->arguments.size()), call);
                     } else {
                         for (size_t i = 0; i < call->arguments.size(); ++i) {
-                            std::string arg_type = typeCheckExpression(call->arguments[i].get());
                             std::string param_type = method->parameters[i]->type->type_name;
+                            std::string arg_type = typeCheckExpression(call->arguments[i].get(), param_type);
                             if (!isAssignable(arg_type, param_type)) {
                                 error("Method Call Argument Mismatch: expected '" + param_type + "', got '" + arg_type + "'", call);
                             }
@@ -502,10 +774,10 @@ std::string SemanticAnalyzer::typeCheckExpression(ExprNode* expr) {
                     error("Method Call Error: push expects 1 argument, got " + std::to_string(call->arguments.size()), call);
                     return "Void";
                 }
-                std::string arg_type = typeCheckExpression(call->arguments[0].get());
                 size_t start = obj_type.find('<') + 1;
                 size_t end = obj_type.rfind('>');
                 std::string generic_type = obj_type.substr(start, end - start);
+                std::string arg_type = typeCheckExpression(call->arguments[0].get(), generic_type);
                 if (arg_type != generic_type) {
                     error("Type Mismatch: Cannot push item of type '" + arg_type + "' into list of type '" + obj_type + "'", call);
                 }
@@ -598,7 +870,7 @@ bool SemanticAnalyzer::analyze(ProgramNode* program) {
                     expected_type += ">";
                 }
                 if (var_decl->initializer) {
-                    std::string init_type = typeCheckExpression(var_decl->initializer.get());
+                    std::string init_type = typeCheckExpression(var_decl->initializer.get(), expected_type);
                     if (!isAssignable(init_type, expected_type) && 
                         !(init_type == "List<Void>" && expected_type.rfind("List<", 0) == 0) &&
                         !(init_type == "Map<Void,Void>" && expected_type.rfind("Map<", 0) == 0)) {
@@ -644,7 +916,7 @@ bool SemanticAnalyzer::analyze(ProgramNode* program) {
                         expected_type += ">";
                     }
                     if (field->initializer) {
-                        std::string init_type = typeCheckExpression(field->initializer.get());
+                        std::string init_type = typeCheckExpression(field->initializer.get(), expected_type);
                         if (!isAssignable(init_type, expected_type)) {
                             error("Type Mismatch: Cannot assign field initializer of type '" + init_type + "' to field '" + field->var_name + "' of type '" + expected_type + "'", field.get());
                         }

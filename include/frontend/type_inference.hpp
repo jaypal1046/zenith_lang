@@ -70,18 +70,25 @@ private:
         int depth = 0;
         std::string current;
         
+        auto add_param = [&](const std::string& s) {
+            std::string trimmed = s;
+            trimmed.erase(0, trimmed.find_first_not_of(" \t\r\n"));
+            trimmed.erase(trimmed.find_last_not_of(" \t\r\n") + 1);
+            if (!trimmed.empty()) params.push_back(trimmed);
+        };
+        
         for (size_t i = start; i < type.length(); i++) {
             char c = type[i];
             if (c == '<') depth++;
             else if (c == '>') {
                 if (depth == 0) {
-                    if (!current.empty()) params.push_back(current);
+                    add_param(current);
                     break;
                 }
                 depth--;
             }
             else if (c == ',' && depth == 0) {
-                if (!current.empty()) params.push_back(current);
+                add_param(current);
                 current.clear();
             }
             else {
@@ -146,6 +153,11 @@ private:
     
 public:
     TypeInferencer() = default;
+    
+    // Public wrapper for unification helper
+    bool unifyTypes(const std::string& t1, const std::string& t2, ASTNode* node = nullptr) {
+        return unify(t1, t2, node);
+    }
     
     /**
      * Infer type from an expression node
@@ -255,22 +267,17 @@ public:
         if (auto* lambda = dynamic_cast<LambdaNode*>(expr)) {
             std::string ret_type = lambda->return_type ? lambda->return_type->type_name : "Void";
             
-            // Build function type signature
-            std::string sig = "(";
+            // Build function type signature: Function<Arg1, Arg2, Ret>
+            std::string sig = "Function<";
             for (size_t i = 0; i < lambda->parameters.size(); i++) {
-                if (i > 0) sig += ", ";
-                
-                // Infer parameter type from initializer if not specified
                 if (lambda->parameters[i]->type->is_inferred && lambda->parameters[i]->initializer) {
-                    std::string param_type = inferType(lambda->parameters[i]->initializer.get());
-                    sig += param_type;
+                    sig += inferType(lambda->parameters[i]->initializer.get()) + ", ";
                 } else {
-                    sig += lambda->parameters[i]->type->type_name;
+                    sig += lambda->parameters[i]->type->type_name + ", ";
                 }
             }
-            sig += ") -> " + ret_type;
-            
-            return "Function<" + sig + ">";
+            sig += ret_type + ">";
+            return sig;
         }
         
         // Await expressions - unwrap async type

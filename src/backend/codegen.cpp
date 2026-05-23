@@ -23,6 +23,16 @@ std::string CodeGenerator::mapType(TypeNode* type) {
     else if (base == "Promise") base = "zenith::stdlib::Promise";
     else if (base == "Ref") base = "zenith::mem::Ref";
     else if (base == "Weak") base = "zenith::mem::Weak";
+    else if (base == "Function") {
+        if (type->generics.empty()) return "std::function<void()>";
+        std::string ret = mapType(type->generics.back().get());
+        std::string args;
+        for (size_t i = 0; i < type->generics.size() - 1; ++i) {
+            args += mapType(type->generics[i].get());
+            if (i < type->generics.size() - 2) args += ", ";
+        }
+        return "std::function<" + ret + "(" + args + ")>";
+    }
 
     if (!type->generics.empty()) {
         base += "<";
@@ -78,6 +88,9 @@ std::string CodeGenerator::generateExpression(ExprNode* expr) {
         return res;
     }
     if (auto* prop = dynamic_cast<PropertyAccessNode*>(expr)) {
+        if (prop->property_name == "size") {
+            return generateExpression(prop->object.get()) + ".size()";
+        }
         return generateExpression(prop->object.get()) + "." + prop->property_name;
     }
     if (auto* call = dynamic_cast<MethodCallNode*>(expr)) {
@@ -140,11 +153,38 @@ std::string CodeGenerator::generateExpression(ExprNode* expr) {
         res += ")";
         return res;
     }
+    if (auto* lambda = dynamic_cast<LambdaNode*>(expr)) {
+        std::string res = "[=](";
+        for (size_t i = 0; i < lambda->parameters.size(); ++i) {
+            res += mapType(lambda->parameters[i]->type.get()) + " " + lambda->parameters[i]->var_name;
+            if (i < lambda->parameters.size() - 1) res += ", ";
+        }
+        res += ") {\n";
+        
+        std::stringstream ss;
+        std::streambuf* old_buf = static_cast<std::ostream&>(output).rdbuf(ss.rdbuf());
+        
+        indent_level++;
+        for (const auto& s : lambda->body) {
+            generateStatement(s.get());
+        }
+        indent_level--;
+        
+        static_cast<std::ostream&>(output).rdbuf(old_buf);
+        res += ss.str();
+        
+        for (int i = 0; i < indent_level * 4; ++i) {
+            res += " ";
+        }
+        res += "}";
+        return res;
+    }
     if (auto* ui = dynamic_cast<UIComponentNode*>(expr)) {
         std::string res;
         bool is_class = class_names.count(ui->component_type) > 0;
         bool is_fn = function_names.count(ui->component_type) > 0;
-        bool is_custom = is_class || is_fn;
+        bool is_variable_call = !ui->component_type.empty() && std::islower(static_cast<unsigned char>(ui->component_type[0]));
+        bool is_custom = is_class || is_fn || is_variable_call;
         
         if (is_custom) {
             res = ui->component_type + "(";
@@ -701,6 +741,7 @@ std::string CodeGenerator::generate(ProgramNode* program) {
     output << "#include <regex>\n";
     output << "#include <future>\n";
     output << "#include <iostream>\n";
+    output << "#include <functional>\n";
     output << "#include \"zenith_runtime.h\"\n";
     output << "#include \"zenith/std/concurrency.hpp\"\n\n";
 

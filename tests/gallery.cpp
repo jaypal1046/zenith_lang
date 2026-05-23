@@ -2,6 +2,9 @@
 #include <vector>
 #include <unordered_map>
 #include <regex>
+#include <future>
+#include <iostream>
+#include <functional>
 #include "zenith_runtime.h"
 #include "zenith/std/concurrency.hpp"
 
@@ -9,6 +12,7 @@ inline void print(std::string msg) { std::cout << msg; }
 inline void println(std::string msg) { std::cout << msg << std::endl; }
 inline std::string httpGet(std::string url) { return zenith::httpGet(url); }
 inline std::string httpPost(std::string url, std::string json_body) { return zenith::httpPost(url, json_body); }
+inline std::string gcStats() { return zenith::mem::gcStatsString(); }
 
 class GalleryApp {
 private:
@@ -48,9 +52,19 @@ public:
 };
 
 int main() {
+    // --- Zenith RC+GC Memory Manager: Start background cycle collector ---
+    zenith::mem::GcHeap::instance().start_background_gc(5000);
+
     println("--- Booting Zenith Multi-Platform Gallery App ---");
     GalleryApp app = GalleryApp();
     zenith::runInteractiveLoop(app);
     println("--- Gallery Loaded Successfully. Interactive loop started! ---");
+
+// --- Zenith RC+GC Memory Manager: Shutdown ---
+zenith::mem::GcHeap::instance().stop_background_gc();
+zenith::mem::GcHeap::instance().collect(); // Final cycle sweep
+#ifdef ZENITH_GC_STATS
+std::cout << zenith::mem::gcStatsString() << std::endl;
+#endif
 }
 

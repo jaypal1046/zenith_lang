@@ -65,11 +65,12 @@ private:
     void analyzeFunction(FunctionNode* node);
     void analyzeStatement(ASTNode* stmt);
     void analyzeBlock(const std::vector<std::unique_ptr<ASTNode>>& block);
-    std::string typeCheckExpression(ExprNode* expr);
+    std::string typeCheckExpression(ExprNode* expr, const std::string& expected_type = "");
     
     // Type inference helpers
     std::string inferAndValidateVarDecl(VarDeclNode* var_decl);
     std::string inferFunctionReturnType(FunctionNode* func);
+    std::string inferBlockReturnType(const std::vector<std::unique_ptr<ASTNode>>& block);
     
     std::string current_fn_return_type;
     std::vector<std::unique_ptr<FunctionNode>> builtin_fns;

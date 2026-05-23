@@ -121,10 +121,29 @@ void testCanInferFromContext() {
     std::cout << "✓ Cannot infer from identifier (needs context)\n";
 }
 
+void testUnification() {
+    TypeInferencer inferencer;
+    
+    assert(inferencer.unifyTypes("Int", "Int") == true);
+    assert(inferencer.unifyTypes("String", "String") == true);
+    assert(inferencer.unifyTypes("Int", "i32") == true);
+    assert(inferencer.unifyTypes("Float", "f64") == true);
+    assert(inferencer.unifyTypes("Int", "Float") == false);
+    assert(inferencer.unifyTypes("List<Int>", "List<Int>") == true);
+    assert(inferencer.unifyTypes("List<Int>", "List<i32>") == true);
+    assert(inferencer.unifyTypes("List<Int>", "List<Float>") == false);
+    assert(inferencer.unifyTypes("Map<String, Int>", "Map<String, i32>") == true);
+    
+    std::cout << "✓ Type unification tests passed\n";
+}
+
 int main() {
     std::cout << "=== Type Inference System Tests ===\n\n";
     
-    std::cout << "--- Literal Type Inference ---\n";
+    std::cout << "--- Type Unification ---\n";
+    testUnification();
+    
+    std::cout << "\n--- Literal Type Inference ---\n";
     testLiteralInference();
     
     std::cout << "\n--- Collection Type Inference ---\n";

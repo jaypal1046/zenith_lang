@@ -61,6 +61,33 @@ bool JSCodeGenerator::containsAsyncCall(ASTNode* node, const std::unordered_set<
 std::string JSCodeGenerator::generateExpression(ExprNode* expr) {
     if (!expr) return "";
     
+    if (auto* lambda = dynamic_cast<LambdaNode*>(expr)) {
+        std::string res = "(";
+        for (size_t i = 0; i < lambda->parameters.size(); ++i) {
+            res += lambda->parameters[i]->var_name;
+            if (i < lambda->parameters.size() - 1) res += ", ";
+        }
+        res += ") => {\n";
+        
+        std::stringstream ss;
+        std::streambuf* old_buf = static_cast<std::ostream&>(output).rdbuf(ss.rdbuf());
+        
+        indent_level++;
+        for (const auto& s : lambda->body) {
+            generateStatement(s.get());
+        }
+        indent_level--;
+        
+        static_cast<std::ostream&>(output).rdbuf(old_buf);
+        res += ss.str();
+        
+        for (int i = 0; i < indent_level * 4; ++i) {
+            res += " ";
+        }
+        res += "}";
+        return res;
+    }
+    
     if (auto* id = dynamic_cast<IdentifierNode*>(expr)) {
         if (id->name == "print") return "zenith.print";
         if (id->name == "println") return "zenith.println";
@@ -120,7 +147,8 @@ std::string JSCodeGenerator::generateExpression(ExprNode* expr) {
         bool is_class = class_names.count(ui->component_type) > 0;
         bool is_fn = function_names.count(ui->component_type) > 0;
         bool is_method = is_inside_class_method && current_class_methods.count(ui->component_type);
-        bool is_custom = is_class || is_fn || is_method;
+        bool is_variable_call = !ui->component_type.empty() && std::islower(static_cast<unsigned char>(ui->component_type[0]));
+        bool is_custom = is_class || is_fn || is_method || is_variable_call;
         
         if (is_custom) {
             if (is_class) {

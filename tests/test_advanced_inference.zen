@@ -1,0 +1,32 @@
+import std.io;
+
+Auto multiBranchReturn(cond: Bool) {
+    if (cond) {
+        return 42;
+    } else {
+        return 0;
+    }
+}
+
+Void main() {
+    println("=== Zenith Advanced Type Inference Test ===");
+
+    // 1. Lambda parameter inference via variable declaration
+    Function<Int, Int> doubler = (x) => {
+        return x * 2;
+    };
+    let d_res = doubler(10);
+    println("Lambda parameter inference (expected 20): " + d_res);
+
+    // 2. Full return type inference for function body
+    let multi_result = multiBranchReturn(true);
+    println("Function return type inference (expected 42): " + multi_result);
+
+    // 3. Bidirectional checking on collection literals and Options
+    List<Int> numbers = [];
+    numbers.push(10);
+    numbers.push(20);
+    println("List size (expected 2): " + numbers.size);
+
+    println("=== Test Complete ===");
+}

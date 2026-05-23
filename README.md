@@ -81,3 +81,27 @@ UI ChatScreen() {
 4. [ ] **Semantic Analyzer**: Type checking and memory safety validation.
 5. [ ] **LLVM IR Generator**: Translates the AST into LLVM Intermediate Representation.
 6. [ ] **Yoga UI Bridge**: Translates UI nodes into cross-platform Flexbox instructions.
+
+Feature Category	Status	Completed Elements	Uncompleted / Next Steps
+Type System Enhancements	🟢 Partial	Core Hindley-Milner engine (
+
+type_inference.hpp
+), literal, collection, Option/Result, binary expressions, and SemanticAnalyzer integration.	Lambda parameter inference, full return type inference, bidirectional/context-driven checks.
+Yoga Layout Engine	🟡 Partial	Full C++ API layout node wrappers (
+
+yoga_layout.h
+ / 
+
+yoga_layout.cpp
+), properties configuration, fluent LayoutBuilder API, tree LayoutContext management, and 14 tests passing.	Linking the physical C-based Facebook Yoga library (conditionally compiled via YOGA_AVAILABLE), mapping calculated layout output coordinates to Zenith's terminal/native renderer.
+Standard Library	🟢 Partial	Transpilation support for async/await, concurrency primitives (
+
+concurrency.hpp
+) including Future/Promise, channels, thread-pool executor, and Erlang-style actors.	Rich widget UI library (advanced components like Image, Video, Scrolling, and form inputs).
+Developer Experience	🟢 Partial	JSON-RPC LSP Server (
+
+lsp.cpp
+) supporting hover type signatures and diagnostic publishing, and AST pretty-printer formatter (
+
+formatter.cpp
+).	Compiler daemon hot-reloads, package manager client CLI/package registry.

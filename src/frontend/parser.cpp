@@ -138,7 +138,77 @@ std::unique_ptr<ExprNode> Parser::parseUIComponent() {
     return ui_node;
 }
 
+std::unique_ptr<ExprNode> Parser::parseLambda() {
+    const Token& start_tok = current();
+    expect(TokenType::PUNCT, "Expected '(' for lambda parameters");
+    
+    std::vector<std::unique_ptr<VarDeclNode>> parameters;
+    if (current().type != TokenType::PUNCT || current().value != ")") {
+        do {
+            const Token& param_tok = current();
+            std::string param_name(current().value);
+            expect(TokenType::ID, "Expected lambda parameter name");
+            
+            std::unique_ptr<TypeNode> param_type = nullptr;
+            if (match(TokenType::PUNCT, ":")) {
+                param_type = parseType();
+            } else {
+                param_type = locate(std::make_unique<TypeNode>("Auto"), param_tok);
+                param_type->is_inferred = true;
+            }
+            
+            parameters.push_back(locate(std::make_unique<VarDeclNode>(std::move(param_type), param_name, nullptr), param_tok));
+        } while (match(TokenType::PUNCT, ","));
+    }
+    expect(TokenType::PUNCT, "Expected ')' to close lambda parameters");
+    
+    // Expect "=>"
+    expect(TokenType::OP, "=");
+    expect(TokenType::OP, ">");
+    
+    std::vector<std::unique_ptr<ASTNode>> body;
+    if (current().type == TokenType::PUNCT && current().value == "{") {
+        body = parseBlock();
+    } else {
+        const Token& body_tok = current();
+        auto expr = parseExpression();
+        body.push_back(locate(std::make_unique<ReturnStmtNode>(std::move(expr)), body_tok));
+    }
+    
+    auto ret_type = locate(std::make_unique<TypeNode>("Auto"), start_tok);
+    ret_type->is_inferred = true;
+    
+    auto lambda_node = locate(std::make_unique<LambdaNode>(std::move(ret_type)), start_tok);
+    lambda_node->parameters = std::move(parameters);
+    lambda_node->body = std::move(body);
+    
+    return lambda_node;
+}
+
 std::unique_ptr<ExprNode> Parser::parseExpression() {
+    // If it is a lambda expression, parse it
+    if (current().type == TokenType::PUNCT && current().value == "(") {
+        size_t scan_pos = pos + 1;
+        int paren_depth = 1;
+        while (scan_pos < tokens.size() && paren_depth > 0) {
+            if (tokens[scan_pos].type == TokenType::PUNCT && tokens[scan_pos].value == "(") {
+                paren_depth++;
+            } else if (tokens[scan_pos].type == TokenType::PUNCT && tokens[scan_pos].value == ")") {
+                paren_depth--;
+            }
+            if (paren_depth == 0) {
+                break;
+            }
+            scan_pos++;
+        }
+        if (paren_depth == 0 && scan_pos + 2 < tokens.size()) {
+            if (tokens[scan_pos + 1].type == TokenType::OP && tokens[scan_pos + 1].value == "=" &&
+                tokens[scan_pos + 2].type == TokenType::OP && tokens[scan_pos + 2].value == ">") {
+                return parseLambda();
+            }
+        }
+    }
+
     // If it's an await expression
     if (current().type == TokenType::KEYWORD && current().value == "await") {
         const Token& await_tok = current();

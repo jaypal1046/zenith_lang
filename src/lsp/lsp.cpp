@@ -493,6 +493,97 @@ void handleHover(const std::string& id_str, const std::string& uri, int line_0, 
     sendResponse(resp);
 }
 
+
+// ============================================================================
+// LSP COMPLETION ENGINE
+// ============================================================================
+
+void handleCompletion(const std::string& id_str, const std::string& uri, int line_0, int col_0) {
+    (void)line_0; (void)col_0;
+
+    // Static Zenith keyword completions
+    static const std::vector<std::pair<std::string,std::string>> keywords = {
+        {"class",      "keyword"},  {"interface",  "keyword"},
+        {"import",     "keyword"},  {"return",     "keyword"},
+        {"if",         "keyword"},  {"else",       "keyword"},
+        {"while",      "keyword"},  {"for",        "keyword"},
+        {"setState",   "keyword"},  {"await",      "keyword"},
+        {"async",      "keyword"},  {"match",      "keyword"},
+        {"try",        "keyword"},  {"catch",      "keyword"},
+        // Built-in types
+        {"String",     "type"},     {"Int",        "type"},
+        {"Float",      "type"},     {"Bool",       "type"},
+        {"Void",       "type"},     {"List",       "type"},
+        {"Map",        "type"},     {"Future",     "type"},
+        {"Option",     "type"},     {"Result",     "type"},
+        // Stdlib
+        {"println",    "function"}, {"print",      "function"},
+        {"httpGet",    "function"}, {"httpPost",   "function"},
+        {"gcStats",    "function"},
+        // UI components
+        {"Column",     "component"},{"Row",        "component"},
+        {"Text",       "component"},{"Button",     "component"},
+        {"Card",       "component"},{"Container",  "component"},
+        {"TextField",  "component"},{"Image",      "component"},
+        {"Video",      "component"},{"Scrolling",  "component"},
+        {"Checkbox",   "component"},{"Slider",     "component"},
+        {"Toggle",     "component"},{"Dropdown",   "component"},
+    };
+
+    // Item kind mapping for LSP protocol:
+    // 1=Text 2=Method 3=Function 6=Variable 9=Module 14=Keyword 7=Constructor 15=Snippet
+    auto kindOf = [](const std::string& k) -> int {
+        if (k == "keyword")   return 14;
+        if (k == "type")      return 7;
+        if (k == "function")  return 3;
+        if (k == "component") return 9;
+        return 6;
+    };
+
+    std::string items_json = "[";
+    bool first = true;
+
+    auto emit = [&](const std::string& label, const std::string& cat, const std::string& detail) {
+        if (!first) items_json += ",";
+        first = false;
+        items_json += "{";
+        items_json += "\"label\":\"" + label + "\",";
+        items_json += "\"kind\":" + std::to_string(kindOf(cat)) + ",";
+        items_json += "\"detail\":\"" + detail + "\",";
+        items_json += "\"insertText\":\"" + label + "\"";
+        items_json += "}";
+    };
+
+    for (const auto& kw : keywords) {
+        emit(kw.first, kw.second, kw.second);
+    }
+
+    // Add live symbols from AST cache
+    auto it = ast_cache.find(uri);
+    if (it != ast_cache.end() && it->second) {
+        for (const auto& stmt : it->second->statements) {
+            if (auto* cls = dynamic_cast<ClassDeclNode*>(stmt.get())) {
+                emit(cls->class_name, "type", "class " + cls->class_name);
+                for (const auto& m : cls->methods) {
+                    emit(m->function_name, "function", "method " + m->function_name);
+                }
+            } else if (auto* fn = dynamic_cast<FunctionNode*>(stmt.get())) {
+                emit(fn->function_name, "function", "function " + fn->function_name);
+            } else if (auto* var = dynamic_cast<VarDeclNode*>(stmt.get())) {
+                emit(var->var_name, "function", "variable " + var->var_name);
+            }
+        }
+    }
+
+    items_json += "]";
+
+    std::string resp = "{\"jsonrpc\":\"2.0\",\"id\":" + id_str + ",\"result\":{";
+    resp += "\"isIncomplete\":false,";
+    resp += "\"items\":" + items_json;
+    resp += "}}";
+    sendResponse(resp);
+}
+
 void runLspServer() {
 #ifdef _WIN32
     _setmode(_fileno(stdout), _O_BINARY);
@@ -552,10 +643,14 @@ void runLspServer() {
         
         if (method == "initialize") {
             std::string resp = "{\"jsonrpc\":\"2.0\",\"id\":" + id_str + ",\"result\":{\"capabilities\":{";
-            resp += "\"textDocumentSync\":1,"; // Full sync
-            resp += "\"hoverProvider\":true";
+            resp += "\"textDocumentSync\":1,";        // Full sync
+            resp += "\"hoverProvider\":true,";
+            resp += "\"completionProvider\":{\"triggerCharacters\":[\".\",\" \",\"(\",\":\"]}";
             resp += "}}}";
             sendResponse(resp);
+        }
+        else if (method == "initialized") {
+            // Client acknowledgement — no response needed
         }
         else if (method == "textDocument/didOpen") {
             std::string uri = val["params"]["textDocument"]["uri"].str_val;
@@ -567,11 +662,25 @@ void runLspServer() {
             std::string text = val["params"]["contentChanges"][0]["text"].str_val;
             publishDiagnostics(uri, text);
         }
+        else if (method == "textDocument/didSave") {
+            std::string uri = val["params"]["textDocument"]["uri"].str_val;
+            // Re-run diagnostics on save
+            if (val["params"].hasKey("text")) {
+                std::string text = val["params"]["text"].str_val;
+                publishDiagnostics(uri, text);
+            }
+        }
         else if (method == "textDocument/hover") {
             std::string uri = val["params"]["textDocument"]["uri"].str_val;
             int hover_line = (int)val["params"]["position"]["line"].num_val;
             int hover_char = (int)val["params"]["position"]["character"].num_val;
             handleHover(id_str, uri, hover_line, hover_char);
+        }
+        else if (method == "textDocument/completion") {
+            std::string uri = val["params"]["textDocument"]["uri"].str_val;
+            int comp_line = (int)val["params"]["position"]["line"].num_val;
+            int comp_char = (int)val["params"]["position"]["character"].num_val;
+            handleCompletion(id_str, uri, comp_line, comp_char);
         }
         else if (method == "shutdown") {
             std::string resp = "{\"jsonrpc\":\"2.0\",\"id\":" + id_str + ",\"result\":null}";

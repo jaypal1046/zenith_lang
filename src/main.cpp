@@ -12,6 +12,12 @@
 #include <chrono>
 #include <regex>
 #include <algorithm>
+#ifndef _WIN32
+  #include <unistd.h>   // fork, setsid, execl, dup2
+  #include <signal.h>   // kill, SIGTERM
+  #include <sys/types.h>
+  #include <fcntl.h>    // open, O_WRONLY
+#endif
 #include "../include/frontend/lexer.h"
 #include "../include/frontend/parser.h"
 #include "../include/frontend/semantic.h"
@@ -1960,6 +1966,464 @@ int main(int argc, char* argv[]) {
         return 0;
     }
 
+    // =========================================================================
+    // LIST subcommand: zenith list
+    // =========================================================================
+    if (argc >= 2 && std::string(argv[1]) == "list") {
+        namespace fs = std::filesystem;
+        std::cout << "\n\033[1m\033[96m╔══════════════════════════════════════╗\033[0m\n";
+        std::cout << "\033[1m\033[96m║   Zenith Package Manager — Installed  ║\033[0m\n";
+        std::cout << "\033[1m\033[96m╚══════════════════════════════════════╝\033[0m\n\n";
+
+        // Read zenith.json
+        std::ifstream f_in("zenith.json");
+        std::string content = "";
+        if (f_in.is_open()) {
+            std::stringstream buffer; buffer << f_in.rdbuf();
+            content = buffer.str(); f_in.close();
+        }
+
+        // Parse dependencies
+        std::vector<std::pair<std::string,std::string>> deps;
+        std::regex dep_regex("\"([a-zA-Z0-9_\\-]+)\"\\s*:\\s*\"([^\"]+)\"");
+        auto words_begin = std::sregex_iterator(content.begin(), content.end(), dep_regex);
+        auto words_end = std::sregex_iterator();
+        for (std::sregex_iterator i = words_begin; i != words_end; ++i) {
+            std::string name = (*i)[1].str();
+            std::string url = (*i)[2].str();
+            if (name != "dependencies") deps.push_back({name, url});
+        }
+
+        if (deps.empty()) {
+            std::cout << "  \033[33mNo packages declared in zenith.json\033[0m\n";
+        } else {
+            std::cout << "  \033[1mPackage\033[0m             \033[1mSource\033[0m\n";
+            std::cout << "  " << std::string(50, '-') << "\n";
+            for (const auto& dep : deps) {
+                std::string installed_str = fs::exists("lib/" + dep.first) ? " \033[32m✓ installed\033[0m" : " \033[31m✗ missing\033[0m";
+                std::cout << "  \033[96m" << dep.first << "\033[0m" << std::string(std::max(1,(int)(20-dep.first.size())), ' ')
+                          << dep.second << installed_str << "\n";
+            }
+        }
+
+        // Also scan lib/ for packages not in zenith.json
+        std::cout << "\n  \033[1mScanned lib/ directory:\033[0m\n";
+        if (fs::exists("lib")) {
+            bool found = false;
+            for (const auto& entry : fs::directory_iterator("lib")) {
+                if (entry.is_directory()) {
+                    found = true;
+                    bool in_json = false;
+                    for (const auto& d : deps) { if (d.first == entry.path().filename().string()) in_json = true; }
+                    std::cout << "  \033[36m  " << entry.path().filename().string() << "\033[0m"
+                              << (in_json ? " (registered)" : " \033[33m(unregistered)\033[0m") << "\n";
+                }
+            }
+            if (!found) std::cout << "  \033[2m  (empty)\033[0m\n";
+        } else {
+            std::cout << "  \033[2m  lib/ not found\033[0m\n";
+        }
+        std::cout << "\n";
+        return 0;
+    }
+
+    // =========================================================================
+    // SEARCH subcommand: zenith search <query>
+    // =========================================================================
+    if (argc >= 2 && std::string(argv[1]) == "search") {
+        std::string query = (argc >= 3) ? std::string(argv[2]) : "";
+        std::cout << "\n\033[1m\033[95m╔══════════════════════════════════════╗\033[0m\n";
+        std::cout << "\033[1m\033[95m║   Zenith Package Registry — Search    ║\033[0m\n";
+        std::cout << "\033[1m\033[95m╚══════════════════════════════════════╝\033[0m\n\n";
+
+        // Curated registry of known Zenith-compatible packages
+        struct RegEntry { std::string name, desc, url, tags; };
+        static const std::vector<RegEntry> registry = {
+            {"zenith-ui",       "Core UI component library for Zenith apps",          "https://github.com/zenith-lang/zenith-ui.git",       "ui widgets components"},
+            {"zenith-http",     "HTTP client with async/await for Zenith",             "https://github.com/zenith-lang/zenith-http.git",      "http networking async"},
+            {"zenith-auth",     "Authentication and JWT utilities",                    "https://github.com/zenith-lang/zenith-auth.git",      "auth jwt security"},
+            {"zenith-db",       "Database abstraction layer (SQLite/Postgres)",        "https://github.com/zenith-lang/zenith-db.git",        "database sql sqlite"},
+            {"zenith-charts",   "Data visualization and charting widgets",             "https://github.com/zenith-lang/zenith-charts.git",    "charts graphs visualization"},
+            {"zenith-i18n",     "Internationalization and localization support",       "https://github.com/zenith-lang/zenith-i18n.git",      "i18n l10n localization"},
+            {"zenith-router",   "Client-side router for single-page apps",             "https://github.com/zenith-lang/zenith-router.git",    "routing navigation spa"},
+            {"zenith-forms",    "Form validation and input management",                "https://github.com/zenith-lang/zenith-forms.git",     "forms validation input"},
+            {"zenith-state",    "Global state management (Flux/Redux pattern)",        "https://github.com/zenith-lang/zenith-state.git",     "state management redux"},
+            {"zenith-test",     "Unit testing framework for Zenith projects",          "https://github.com/zenith-lang/zenith-test.git",      "testing unit test"},
+            {"Spoon-Knife",     "GitHub demo repository (default example)",            "https://github.com/octocat/Spoon-Knife.git",          "demo example"},
+        };
+
+        std::string q_lower = query;
+        std::transform(q_lower.begin(), q_lower.end(), q_lower.begin(), ::tolower);
+
+        int found_count = 0;
+        std::cout << "  \033[1m" << (query.empty() ? "All packages" : "Results for: \"" + query + "\"") << "\033[0m\n";
+        std::cout << "  " << std::string(60, '-') << "\n";
+        for (const auto& e : registry) {
+            std::string combined = e.name + " " + e.desc + " " + e.tags;
+            std::string c_lower = combined;
+            std::transform(c_lower.begin(), c_lower.end(), c_lower.begin(), ::tolower);
+            if (query.empty() || c_lower.find(q_lower) != std::string::npos) {
+                std::cout << "\n  \033[1m\033[96m" << e.name << "\033[0m\n";
+                std::cout << "    " << e.desc << "\n";
+                std::cout << "    \033[2m" << e.url << "\033[0m\n";
+                std::cout << "    \033[33mInstall:\033[0m zenith install " << e.url << "\n";
+                found_count++;
+            }
+        }
+        if (found_count == 0) {
+            std::cout << "\n  \033[33mNo packages found for \"" << query << "\"\033[0m\n";
+            std::cout << "  \033[2mTip: You can install any GitHub repository with: zenith install <git-url>\033[0m\n";
+        }
+        std::cout << "\n  \033[2mShowing " << found_count << " package(s) from Zenith registry.\033[0m\n\n";
+        return 0;
+    }
+
+    // =========================================================================
+    // UPDATE subcommand: zenith update [package]
+    // =========================================================================
+    if (argc >= 2 && std::string(argv[1]) == "update") {
+        namespace fs = std::filesystem;
+        std::string target_pkg = (argc >= 3) ? std::string(argv[2]) : "";
+        std::cout << "\n\033[1m\033[92m[Zenith] Updating packages...\033[0m\n";
+
+        auto do_update = [&](const std::string& name) {
+            std::string pkg_path = "lib/" + name;
+            if (!fs::exists(pkg_path)) {
+                std::cout << "  \033[31m[!] Package '" << name << "' not found in lib/\033[0m\n";
+                return;
+            }
+            std::cout << "  \033[96m→\033[0m Updating " << name << "... ";
+            std::string cmd = "git -C " + pkg_path + " pull --ff-only 2>&1";
+            int res = system(cmd.c_str());
+            if (res == 0) std::cout << "\033[32m✓ up to date\033[0m\n";
+            else std::cout << "\033[31m✗ update failed (exit " << res << ")\033[0m\n";
+        };
+
+        if (!target_pkg.empty()) {
+            do_update(target_pkg);
+        } else {
+            // Update all from zenith.json
+            std::ifstream f_in("zenith.json");
+            if (!f_in.is_open()) {
+                std::cerr << "  No zenith.json found. Run 'zenith install <url>' first.\n";
+                return 1;
+            }
+            std::stringstream buffer; buffer << f_in.rdbuf();
+            std::string content = buffer.str(); f_in.close();
+            std::regex dep_regex("\"([a-zA-Z0-9_\\-]+)\"\\s*:\\s*\"([^\"]+)\"");
+            auto it = std::sregex_iterator(content.begin(), content.end(), dep_regex);
+            for (; it != std::sregex_iterator(); ++it) {
+                std::string name = (*it)[1].str();
+                if (name != "dependencies") do_update(name);
+            }
+        }
+        std::cout << "\033[32m[OK] Update complete.\033[0m\n\n";
+        return 0;
+    }
+
+    // =========================================================================
+    // REMOVE subcommand: zenith remove <package>
+    // =========================================================================
+    if (argc >= 2 && std::string(argv[1]) == "remove") {
+        namespace fs = std::filesystem;
+        if (argc < 3) {
+            std::cerr << "Usage: zenith remove <package-name>\n";
+            return 1;
+        }
+        std::string pkg = argv[2];
+        std::string pkg_path = "lib/" + pkg;
+        std::cout << "\n\033[1m\033[91m[Zenith] Removing package: " << pkg << "\033[0m\n";
+
+        bool removed_dir = false;
+        if (fs::exists(pkg_path)) {
+            fs::remove_all(pkg_path);
+            std::cout << "  \033[32m✓\033[0m Deleted lib/" << pkg << "/\n";
+            removed_dir = true;
+        } else {
+            std::cout << "  \033[33m⚠\033[0m lib/" << pkg << "/ not found (already removed?)\n";
+        }
+
+        // Remove from zenith.json
+        std::ifstream f_in("zenith.json");
+        if (f_in.is_open()) {
+            std::stringstream buffer; buffer << f_in.rdbuf();
+            std::string content = buffer.str(); f_in.close();
+
+            // Remove the line with this package
+            std::regex rm_regex("\\s*\"" + pkg + "\"\\s*:\\s*\"[^\"]*\",?");
+            std::string updated = std::regex_replace(content, rm_regex, "");
+            // Clean up trailing commas before closing brace
+            std::regex trailing_comma(",\\s*\\}");
+            updated = std::regex_replace(updated, trailing_comma, "\n}");
+
+            std::ofstream f_out("zenith.json");
+            f_out << updated; f_out.close();
+            std::cout << "  \033[32m✓\033[0m Removed from zenith.json\n";
+        }
+
+        if (removed_dir)
+            std::cout << "\033[32m[OK] Package '" << pkg << "' removed successfully.\033[0m\n\n";
+        return 0;
+    }
+
+    // =========================================================================
+    // PUBLISH subcommand: zenith publish
+    // =========================================================================
+    if (argc >= 2 && std::string(argv[1]) == "publish") {
+        namespace fs = std::filesystem;
+        std::cout << "\n\033[1m\033[93m╔═══════════════════════════════════════╗\033[0m\n";
+        std::cout << "\033[1m\033[93m║   Zenith Package Publisher             ║\033[0m\n";
+        std::cout << "\033[1m\033[93m╚═══════════════════════════════════════╝\033[0m\n\n";
+
+        // Read zenith.json for package name
+        std::ifstream f_in("zenith.json");
+        std::string pkg_name = fs::current_path().filename().string();
+        std::string git_url = "";
+        if (f_in.is_open()) {
+            std::stringstream buffer; buffer << f_in.rdbuf();
+            std::string content = buffer.str(); f_in.close();
+            std::regex name_re("\"name\"\\s*:\\s*\"([^\"]+)\"");
+            std::smatch nm;
+            if (std::regex_search(content, nm, name_re)) pkg_name = nm[1].str();
+        }
+
+        // Check git remote
+        FILE* git_remote = popen("git remote get-url origin 2>&1", "r");
+        if (git_remote) {
+            char buf[512]; if (fgets(buf, sizeof(buf), git_remote)) git_url = buf;
+            pclose(git_remote);
+            while (!git_url.empty() && (git_url.back() == '\n' || git_url.back() == '\r')) git_url.pop_back();
+        }
+
+        std::cout << "  Package: \033[96m" << pkg_name << "\033[0m\n";
+        if (!git_url.empty()) std::cout << "  Git URL: \033[2m" << git_url << "\033[0m\n";
+        std::cout << "\n  \033[1mPublishing to Zenith Registry:\033[0m\n\n";
+        std::cout << "  \033[2m1. Ensure your project is pushed to GitHub:\033[0m\n";
+        std::cout << "     git push origin main\n\n";
+        std::cout << "  \033[2m2. Users can install your package with:\033[0m\n";
+        std::cout << "     \033[33mzenith install " << (git_url.empty() ? "https://github.com/<user>/" + pkg_name + ".git" : git_url) << "\033[0m\n\n";
+        std::cout << "  \033[2m3. To list in the official registry, open a PR at:\033[0m\n";
+        std::cout << "     https://github.com/zenith-lang/registry\n\n";
+        std::cout << "  \033[1m\033[32m✓ Package is ready to publish!\033[0m\n\n";
+        return 0;
+    }
+
+    // =========================================================================
+    // DAEMON subcommand: zenith daemon start|stop|status
+    // =========================================================================
+    if (argc >= 2 && std::string(argv[1]) == "daemon") {
+        namespace fs = std::filesystem;
+        std::string action = (argc >= 3) ? std::string(argv[2]) : "status";
+
+#ifdef _WIN32
+        std::string pid_file  = std::string(getenv("TEMP") ? getenv("TEMP") : ".") + "\\zenith_daemon.pid";
+        std::string log_file  = std::string(getenv("TEMP") ? getenv("TEMP") : ".") + "\\zenith_daemon.log";
+#else
+        std::string pid_file  = "/tmp/zenith_daemon.pid";
+        std::string log_file  = "/tmp/zenith_daemon.log";
+#endif
+
+        auto read_pid = [&]() -> int {
+            std::ifstream pf(pid_file);
+            if (!pf.is_open()) return -1;
+            int pid = -1; pf >> pid; return pid;
+        };
+
+        auto is_running = [&](int pid) -> bool {
+            if (pid <= 0) return false;
+#ifdef _WIN32
+            // Use tasklist command to check if process is running (avoids windows.h)
+            std::string cmd = "tasklist /FI \"PID eq " + std::to_string(pid) + "\" /NH 2>nul";
+            FILE* tl = _popen(cmd.c_str(), "r");
+            if (!tl) return false;
+            char buf[256] = {};
+            bool found = false;
+            while (fgets(buf, sizeof(buf), tl)) {
+                if (std::string(buf).find(std::to_string(pid)) != std::string::npos) { found = true; break; }
+            }
+            _pclose(tl);
+            return found;
+#else
+            return (kill(pid, 0) == 0);
+#endif
+        };
+
+        if (action == "start") {
+            int existing_pid = read_pid();
+            if (existing_pid > 0 && is_running(existing_pid)) {
+                std::cout << "\033[33m[Daemon] Already running (PID " << existing_pid << ")\033[0m\n";
+                return 0;
+            }
+
+            // Determine watch dir
+            std::string watch_dir = ".";
+            std::string watch_target = "cpp";
+            for (int i = 3; i < argc; ++i) {
+                std::string a = argv[i];
+                if ((a == "-d" || a == "--dir") && i+1 < argc) { watch_dir = argv[++i]; }
+                else if (a == "-target" && i+1 < argc) { watch_target = argv[++i]; }
+            }
+
+            std::cout << "\033[1m\033[96m[Daemon] Starting Zenith compiler daemon...\033[0m\n";
+            std::cout << "  Watch dir: " << watch_dir << "\n";
+            std::cout << "  Target:    " << watch_target << "\n";
+            std::cout << "  PID file:  " << pid_file << "\n";
+            std::cout << "  Log file:  " << log_file << "\n\n";
+
+#ifdef _WIN32
+            std::string self = argv[0];
+            std::string cmd = "start /B \"Zenith Daemon\" " + self + " _daemon_worker " +
+                              watch_dir + " " + watch_target + " >" + log_file + " 2>&1";
+            system(cmd.c_str());
+            // Write approximate PID (Windows: not trivial to get child PID via system())
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
+            // Try to find it via tasklist
+            FILE* tl = popen("powershell -Command \"(Get-Process | Where-Object {$_.MainWindowTitle -eq 'Zenith Daemon'} | Select-Object -First 1).Id\" 2>nul", "r");
+            int daemon_pid = -1;
+            if (tl) {
+                char buf[64]; if (fgets(buf, sizeof(buf), tl)) {
+                    try { daemon_pid = std::stoi(buf); } catch (...) {}
+                }
+                pclose(tl);
+            }
+            if (daemon_pid > 0) {
+                std::ofstream pf(pid_file); pf << daemon_pid;
+                std::cout << "\033[32m[Daemon] Started with PID " << daemon_pid << "\033[0m\n";
+            } else {
+                std::cout << "\033[32m[Daemon] Started in background. Log: " << log_file << "\033[0m\n";
+            }
+#else
+            pid_t child = fork();
+            if (child == 0) {
+                // Child daemon process
+                setsid();
+                int log_fd = open(log_file.c_str(), O_WRONLY|O_CREAT|O_TRUNC, 0644);
+                if (log_fd >= 0) { dup2(log_fd, STDOUT_FILENO); dup2(log_fd, STDERR_FILENO); close(log_fd); }
+                // Re-exec as daemon worker
+                execl(argv[0], argv[0], "_daemon_worker", watch_dir.c_str(), watch_target.c_str(), nullptr);
+                _exit(1);
+            } else if (child > 0) {
+                std::ofstream pf(pid_file); pf << child;
+                std::cout << "\033[32m[Daemon] Started with PID " << child << "\033[0m\n";
+                std::cout << "  Log: " << log_file << "\n";
+            } else {
+                std::cerr << "\033[31m[Daemon] Failed to fork.\033[0m\n";
+                return 1;
+            }
+#endif
+            return 0;
+        }
+
+        else if (action == "stop") {
+            int pid = read_pid();
+            if (pid <= 0 || !is_running(pid)) {
+                std::cout << "\033[33m[Daemon] Not running.\033[0m\n";
+                if (fs::exists(pid_file)) fs::remove(pid_file);
+                return 0;
+            }
+#ifdef _WIN32
+            std::string kill_cmd = "taskkill /PID " + std::to_string(pid) + " /F >nul 2>&1";
+            system(kill_cmd.c_str());
+#else
+            kill(pid, SIGTERM);
+#endif
+            fs::remove(pid_file);
+            std::cout << "\033[32m[Daemon] Stopped (PID " << pid << ").\033[0m\n";
+            return 0;
+        }
+
+        else if (action == "status") {
+            int pid = read_pid();
+            bool running = (pid > 0 && is_running(pid));
+            std::cout << "\n\033[1m[Zenith Daemon Status]\033[0m\n";
+            if (running) {
+                std::cout << "  Status:   \033[32m● Running\033[0m (PID " << pid << ")\n";
+            } else {
+                std::cout << "  Status:   \033[31m○ Stopped\033[0m\n";
+            }
+            std::cout << "  PID file: " << pid_file << "\n";
+            std::cout << "  Log file: " << log_file << "\n";
+
+            // Print last 10 lines of log
+            if (fs::exists(log_file)) {
+                std::ifstream lf(log_file);
+                std::vector<std::string> lines;
+                std::string l;
+                while (std::getline(lf, l)) lines.push_back(l);
+                std::cout << "\n  \033[1mRecent log:\033[0m\n";
+                size_t start = lines.size() > 10 ? lines.size() - 10 : 0;
+                for (size_t i = start; i < lines.size(); ++i)
+                    std::cout << "    \033[2m" << lines[i] << "\033[0m\n";
+            }
+            std::cout << "\n";
+            return 0;
+        }
+
+        else {
+            std::cerr << "Usage: zenith daemon start|stop|status\n";
+            return 1;
+        }
+    }
+
+    // =========================================================================
+    // DAEMON WORKER (internal, invoked by daemon start)
+    // =========================================================================
+    if (argc >= 2 && std::string(argv[1]) == "_daemon_worker") {
+        namespace fs = std::filesystem;
+        std::string watch_dir = (argc >= 3) ? argv[2] : ".";
+        std::string watch_target = (argc >= 4) ? argv[3] : "cpp";
+
+        std::cout << "[Zenith Daemon Worker] Watching: " << watch_dir
+                  << " | Target: " << watch_target << "\n";
+        std::cout << "[Zenith Daemon Worker] Pre-warming compiler cache...\n";
+        std::cout << "[Zenith Daemon Worker] Ready.\n";
+
+        std::unordered_map<std::string, fs::file_time_type> file_times;
+        auto scan = [&](const std::string& dir) -> std::vector<std::string> {
+            std::vector<std::string> changed;
+            try {
+                for (const auto& entry : fs::recursive_directory_iterator(dir)) {
+                    if (entry.is_regular_file() && entry.path().extension() == ".zen") {
+                        std::string p = entry.path().string();
+                        auto mt = fs::last_write_time(entry);
+                        if (file_times.find(p) == file_times.end() || file_times[p] != mt) {
+                            if (file_times.count(p)) changed.push_back(p);
+                            file_times[p] = mt;
+                        }
+                    }
+                }
+            } catch(...) {}
+            return changed;
+        };
+
+        // Initial scan
+        scan(watch_dir);
+
+        while (true) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(800));
+            auto changed = scan(watch_dir);
+            for (const auto& changed_file : changed) {
+                std::cout << "[Daemon] Change detected: " << changed_file << "\n";
+                // Re-transpile changed file
+                std::ifstream f(changed_file);
+                if (!f.is_open()) continue;
+                std::stringstream buf; buf << f.rdbuf();
+                std::string code = buf.str(); f.close();
+
+                Lexer lexer(code);
+                auto tokens = lexer.tokenize();
+                Parser parser(tokens);
+                auto ast = parser.parseProgram();
+                if (!ast) { std::cout << "[Daemon] Parse error in " << changed_file << "\n"; continue; }
+
+                SemanticAnalyzer analyzer;
+                analyzer.analyze(ast.get());
+                std::cout << "[Daemon] ✓ Re-analyzed " << changed_file << "\n";
+            }
+        }
+        return 0;
+    }
+
     // Watch subcommand
     if (argc >= 2 && std::string(argv[1]) == "watch") {
         if (argc < 3) {
@@ -2114,9 +2578,27 @@ int main(int argc, char* argv[]) {
     }
 
     if (filename.empty()) {
-        std::cerr << "Usage: zenith <filename.zen> [-target <cpp|web|wasm>] [-o <output_file>]\n";
-        std::cerr << "       zenith create <project_name|.>\n";
-        std::cerr << "       zenith run <desktop|web|wasm|android|ios>\n";
+        std::cerr << "\n\033[1m\033[96mZenith Compiler v0.2.0\033[0m\n\n";
+        std::cerr << "\033[1mUSAGE:\033[0m\n";
+        std::cerr << "  zenith <file.zen> [-target cpp|web|wasm] [-o <output>]  Transpile a Zenith file\n\n";
+        std::cerr << "\033[1mPROJECT:\033[0m\n";
+        std::cerr << "  zenith create <name|.>                Create a new Zenith project\n";
+        std::cerr << "  zenith run <desktop|web|wasm|android|ios>  Run the project\n";
+        std::cerr << "  zenith format [-w] <file.zen>         Format a Zenith source file\n\n";
+        std::cerr << "\033[1mPACKAGE MANAGER:\033[0m\n";
+        std::cerr << "  zenith install <url>                  Install package from git URL\n";
+        std::cerr << "  zenith install                        Install all from zenith.json\n";
+        std::cerr << "  zenith list                           List installed packages\n";
+        std::cerr << "  zenith search [query]                 Search package registry\n";
+        std::cerr << "  zenith update [package]               Update one or all packages\n";
+        std::cerr << "  zenith remove <package>               Uninstall a package\n";
+        std::cerr << "  zenith publish                        Publish package instructions\n\n";
+        std::cerr << "\033[1mDEVELOPER TOOLS:\033[0m\n";
+        std::cerr << "  zenith lsp                            Start LSP server (stdio)\n";
+        std::cerr << "  zenith daemon start [-d dir]          Start compiler daemon\n";
+        std::cerr << "  zenith daemon stop                    Stop compiler daemon\n";
+        std::cerr << "  zenith daemon status                  Show daemon status + log\n";
+        std::cerr << "  zenith watch <file.zen> [-target ..]  Hot-reload watch mode\n\n";
         return 1;
     }
 

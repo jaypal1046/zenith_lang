@@ -36,7 +36,7 @@ build.bat
 ```
 
 ### Hello World
-```dart
+```Zenith
 import std.io;
 
 class HelloApp() {
@@ -75,7 +75,7 @@ zenith hello.zen -target wasm
 ## 📐 Language Syntax
 
 ### Classes & Types
-```dart
+```Zenith
 class User(String name, Int age) {
     String greet() {
         return "Hello, " + name;
@@ -89,7 +89,7 @@ let nums = [1,2,3];  // → List<Int>
 ```
 
 ### Agentic AI Primitives
-```dart
+```Zenith
 import std.io;
 
 class AIAssistant() {
@@ -105,7 +105,7 @@ class AIAssistant() {
 ```
 
 ### Async / Concurrency
-```dart
+```Zenith
 class DataService() {
     async String fetchUser(String id) {
         String result = await httpGet("https://api.example.com/users/" + id);
@@ -115,7 +115,7 @@ class DataService() {
 ```
 
 ### Option & Result Types
-```dart
+```Zenith
 Option<Int> safeDivide(Int a, Int b) {
     if (b == 0) { return None; }
     return Some(a / b);
@@ -127,7 +127,7 @@ Result<String, String> loadFile(String path) {
 ```
 
 ### UI Components
-```dart
+```Zenith
 UI build() {
     return Column(
         Text("Dashboard", fontWeight: "bold", color: "cyan"),
@@ -154,7 +154,7 @@ UI build() {
 ```
 
 ### Agent Orchestration
-```dart
+```Zenith
 orchestration MyPipeline {
     mode: "sequential"
     agents: [SummaryAgent, TranslateAgent, FormatAgent]

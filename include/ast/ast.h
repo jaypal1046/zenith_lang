@@ -256,6 +256,11 @@ public:
     std::vector<std::unique_ptr<VarDeclNode>> parameters;
     std::vector<std::unique_ptr<ASTNode>> body;
     bool is_async = false;
+    
+    // Interop fields
+    bool is_foreign = false;
+    std::string foreign_abi; // "C", "js", "python"
+    bool is_exported = false;
 
     FunctionNode(std::unique_ptr<TypeNode> ret_type, std::string name)
         : return_type(std::move(ret_type)), function_name(std::move(name)) {}

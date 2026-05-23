@@ -800,6 +800,7 @@ std::unique_ptr<ProgramNode> Parser::parseProgram() {
         bool has_managed   = false;
         bool has_weak      = false;
         bool has_gc_root   = false;
+        bool has_export    = false;
         while (current().type == TokenType::KEYWORD &&
                !current().value.empty() && current().value[0] == '@') {
             std::string ann(current().value);  // e.g. "@managed"
@@ -807,6 +808,7 @@ std::unique_ptr<ProgramNode> Parser::parseProgram() {
             if (ann == "@managed")        has_managed = true;
             else if (ann == "@weak")      has_weak    = true;
             else if (ann == "@gc_root")   has_gc_root = true;
+            else if (ann == "@export")    has_export  = true;
         }
 
         if (current().type == TokenType::KEYWORD && current().value == "class") {
@@ -817,6 +819,53 @@ std::unique_ptr<ProgramNode> Parser::parseProgram() {
         }
         else if (current().type == TokenType::KEYWORD && current().value == "orchestration") {
             program->statements.push_back(parseOrchestration());
+        }
+        else if (current().type == TokenType::KEYWORD && current().value == "foreign") {
+            const Token& start_tok = current();
+            advance(); // consume "foreign"
+            
+            std::string abi;
+            if (current().type == TokenType::STRING) {
+                abi = std::string(current().value);
+                advance();
+            } else {
+                std::cerr << "Parser Error: Expected ABI string after 'foreign' keyword at line " << current().line << "\n";
+                exit(1);
+            }
+            
+            expect(TokenType::PUNCT, "Expected '{' to start foreign block");
+            while (current().type != TokenType::PUNCT || current().value != "}") {
+                bool is_async = false;
+                if (current().type == TokenType::KEYWORD && current().value == "async") {
+                    is_async = true;
+                    advance();
+                }
+                
+                auto ret_type = parseType();
+                
+                std::string fn_name(current().value);
+                expect(TokenType::ID, "Expected function name");
+                
+                expect(TokenType::PUNCT, "Expected '(' for parameters");
+                std::vector<std::unique_ptr<VarDeclNode>> parameters;
+                if (current().type != TokenType::PUNCT || current().value != ")") {
+                    parameters.push_back(parseParameter());
+                    while (match(TokenType::PUNCT, ",")) {
+                        parameters.push_back(parseParameter());
+                    }
+                }
+                expect(TokenType::PUNCT, "Expected ')' after parameters");
+                expect(TokenType::PUNCT, "Expected ';' after foreign function declaration");
+                
+                auto fn = locate(std::make_unique<FunctionNode>(std::move(ret_type), fn_name), start_tok);
+                fn->parameters = std::move(parameters);
+                fn->is_async = is_async;
+                fn->is_foreign = true;
+                fn->foreign_abi = abi;
+                
+                program->statements.push_back(std::move(fn));
+            }
+            expect(TokenType::PUNCT, "Expected '}' to close foreign block");
         }
         else if ((current().type == TokenType::KEYWORD && (current().value == "agentic" || current().value == "async")) ||
                  current().type == TokenType::TYPE ||
@@ -832,7 +881,9 @@ std::unique_ptr<ProgramNode> Parser::parseProgram() {
                 advance();
             }
             auto ret_type = parseType();
-            program->statements.push_back(parseFunction(is_agentic, is_async, std::move(ret_type)));
+            auto fn = parseFunction(is_agentic, is_async, std::move(ret_type));
+            fn->is_exported = has_export;
+            program->statements.push_back(std::move(fn));
         } 
         else if (current().type == TokenType::KEYWORD && current().value == "import") {
             const Token& imp_tok = current();

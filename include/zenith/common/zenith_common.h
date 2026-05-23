@@ -12,6 +12,8 @@
 #include <fstream>
 #include <iterator>
 
+#include <cstdio>
+
 #ifdef YOGA_AVAILABLE
 #include "zenith/ui/yoga_layout.h"
 #include <memory>
@@ -19,6 +21,26 @@
 #endif
 
 namespace zenith {
+
+inline std::string run_cmd(const std::string& cmd) {
+    std::string result;
+    char buffer[128];
+#ifdef _WIN32
+    FILE* pipe = _popen(cmd.c_str(), "r");
+#else
+    FILE* pipe = popen(cmd.c_str(), "r");
+#endif
+    if (!pipe) return "";
+    while (fgets(buffer, sizeof(buffer), pipe) != NULL) {
+        result += buffer;
+    }
+#ifdef _WIN32
+    _pclose(pipe);
+#else
+    pclose(pipe);
+#endif
+    return result;
+}
 
 template<typename T>
 std::string toString(const T& val) {

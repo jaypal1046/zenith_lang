@@ -720,6 +720,23 @@ std::string WASMCodeGenerator::generate(ProgramNode* program) {
     indent(); output << "(import \"env\" \"set_attribute\" (func $set_attribute (param i32 i32 i32)))\n";
     indent(); output << "(import \"env\" \"set_attribute_int\" (func $set_attribute_int (param i32 i32 i32)))\n";
     
+    // Visit AST to emit custom foreign function imports
+    for (const auto& stmt : program->statements) {
+        if (auto* fn_decl = dynamic_cast<FunctionNode*>(stmt.get())) {
+            if (fn_decl->is_foreign && fn_decl->foreign_abi == "js") {
+                indent();
+                output << "(import \"env\" \"" << fn_decl->function_name << "\" (func $" << fn_decl->function_name;
+                for (const auto& param : fn_decl->parameters) {
+                    output << " (param " << mapTypeToWASM(param->type.get()) << ")";
+                }
+                if (fn_decl->return_type && fn_decl->return_type->type_name != "Void") {
+                    output << " (result " << mapTypeToWASM(fn_decl->return_type.get()) << ")";
+                }
+                output << "))\n";
+            }
+        }
+    }
+    
     // Linear Memory Declaration (1 page = 64KB)
     indent();
     output << "(memory (export \"memory\") 1)\n";
@@ -730,7 +747,9 @@ std::string WASMCodeGenerator::generate(ProgramNode* program) {
     // Visit AST
     for (const auto& stmt : program->statements) {
         if (auto* fn_decl = dynamic_cast<FunctionNode*>(stmt.get())) {
-            generateFunction(fn_decl);
+            if (!fn_decl->is_foreign) {
+                generateFunction(fn_decl);
+            }
         } else if (auto* class_decl = dynamic_cast<ClassDeclNode*>(stmt.get())) {
             generateClass(class_decl);
         }
@@ -1299,7 +1318,27 @@ std::string WASMCodeGenerator::generateHTMLWrapper() {
     html << "                    }\n";
     html << "                }\n";
     html << "            }\n";
-    html << "        };\n\n";
+    html << "        };\n";
+    html << "        importObject.env = new Proxy(importObject.env, {\n";
+    html << "            get: (target, prop) => {\n";
+    html << "                if (prop in target) return target[prop];\n";
+    html << "                if (typeof window[prop] === 'function') {\n";
+    html << "                    return (...args) => {\n";
+    html << "                        const resolvedArgs = args.map(arg => {\n";
+    html << "                            if (typeof arg === 'number' && arg >= 1024 && arg < 65536) {\n";
+    html << "                                try { return readString(arg); } catch(e) { return arg; }\n";
+    html << "                            }\n";
+    html << "                            return arg;\n";
+    html << "                        });\n";
+    html << "                        return window[prop](...resolvedArgs);\n";
+    html << "                    };\n";
+    html << "                }\n";
+    html << "                return (...args) => {\n";
+    html << "                    logToConsole(`<span style=\"color:#f87171\">[WASM Link Error] Foreign function \"${prop}\" called but not defined in JS</span>`, 'system');\n";
+    html << "                    return 0;\n";
+    html << "                };\n";
+    html << "            }\n";
+    html << "        });\n\n";
     html << "        async function loadWasm() {\n";
     html << "            try {\n";
     html << "                // Fetch the generated .wat file dynamically based on page name\n";

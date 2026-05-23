@@ -339,7 +339,7 @@ Objects marked @managed
 | **AI/Agentic** | 🟢 Complete | Streaming, multi-modal, orchestration |
 | **Memory Management** | 🟢 Complete | Hybrid RC + GC, background cycle collector |
 | **Error Handling** | 🟢 Complete | `Option<T>`, `Result<T,E>`, match expressions |
-| **Interop** (C/C++ FFI, JS bridge) | 🔴 Planned | Next milestone |
+| **Interop** (C/C++ FFI, JS/Python bridges) | 🟢 Complete | Native FFI, popen Python bridge, WASM JS Proxy imports |
 
 ---
 

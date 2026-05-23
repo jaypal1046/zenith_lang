@@ -435,6 +435,9 @@ void JSCodeGenerator::generateInterface(InterfaceDeclNode* node) {
 }
 
 void JSCodeGenerator::generateFunction(FunctionNode* node) {
+    if (node->is_foreign) {
+        return;
+    }
     indent();
     bool is_async = async_functions.count(node->function_name) > 0;
     if (node->function_name == "main") {

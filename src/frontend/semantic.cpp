@@ -218,6 +218,9 @@ static void populateTypeNode(TypeNode* type_node, const std::string& type_str) {
 }
 
 void SemanticAnalyzer::analyzeFunction(FunctionNode* node) {
+    if (node->is_foreign) {
+        return;
+    }
     SymbolTable* function_scope = new SymbolTable(current_scope);
     SymbolTable* previous_scope = current_scope;
     current_scope = function_scope;

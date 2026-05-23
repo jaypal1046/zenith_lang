@@ -1,0 +1,72 @@
+// Zenith Interop Verification Test
+import std.io;
+
+foreign "C" {
+    Int abs(Int x);
+}
+
+foreign "js" {
+    Void alert(String msg);
+}
+
+foreign "python" {
+    Int compute_square(Int n);
+}
+
+@export
+Int zenith_add(Int a, Int b) {
+    return a + b;
+}
+
+class InteropApp() {
+    UI build() {
+        return Column(
+            Text("ZENITH NATIVE INTEROP VERIFICATION", fontWeight: "bold", color: "cyan"),
+            
+            Card(
+                Text("1. C standard FFI: abs(0 - 42)", color: "yellow"),
+                Button("Execute Call", onClick: handleCallC),
+                padding: 1
+            ),
+            
+            Card(
+                Text("2. Python bridge: compute_square(5)", color: "green"),
+                Button("Execute Call", onClick: handleCallPython),
+                padding: 1
+            ),
+            
+            Card(
+                Text("3. JavaScript bridge: alert('Hello')", color: "magenta"),
+                Button("Execute Call", onClick: handleCallJS),
+                padding: 1
+            )
+        );
+    }
+
+    Void handleCallC() {
+        Int res = abs(0 - 42);
+        println("[Interop] C abs(0 - 42) returned: " + res);
+    }
+
+    Void handleCallPython() {
+        Int res = compute_square(5);
+        println("[Interop] Python compute_square(5) returned: " + res);
+    }
+
+    Void handleCallJS() {
+        alert("Hello from Zenith Web/WASM Interop!");
+        println("[Interop] JS alert function called!");
+    }
+}
+
+Void main() {
+    println("--- Direct Interop Testing ---");
+    InteropApp app = InteropApp();
+    app.handleCallC();
+    app.handleCallPython();
+    app.handleCallJS();
+    
+    println("--- Testing exported function zenith_add(10, 20) ---");
+    Int sum = zenith_add(10, 20);
+    println("[Export] zenith_add(10, 20) returned: " + sum);
+}

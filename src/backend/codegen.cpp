@@ -472,7 +472,95 @@ void CodeGenerator::generateOrchestration(AgentOrchestrationNode* node) {
 }
 
 void CodeGenerator::generateFunction(FunctionNode* node) {
+    if (node->is_foreign) {
+        if (node->foreign_abi == "C") {
+            indent();
+            output << "extern \"C\" " << mapType(node->return_type.get()) << " " << node->function_name << "(";
+            for (size_t i = 0; i < node->parameters.size(); ++i) {
+                output << mapType(node->parameters[i]->type.get()) << " " << node->parameters[i]->var_name;
+                if (i < node->parameters.size() - 1) output << ", ";
+            }
+            output << ");\n\n";
+            return;
+        }
+        else if (node->foreign_abi == "python") {
+            indent();
+            output << mapType(node->return_type.get()) << " " << node->function_name << "(";
+            for (size_t i = 0; i < node->parameters.size(); ++i) {
+                output << mapType(node->parameters[i]->type.get()) << " " << node->parameters[i]->var_name;
+                if (i < node->parameters.size() - 1) output << ", ";
+            }
+            output << ") {\n";
+            indent_level++;
+            
+            indent(); output << "std::string cmd = \"python -c \\\"import sys; sys.path.append('.'); import bridge; print(bridge." << node->function_name << "(";
+            for (size_t i = 0; i < node->parameters.size(); ++i) {
+                std::string type_name = node->parameters[i]->type->type_name;
+                if (type_name == "String") {
+                    output << "\\\\\\'\" + " << node->parameters[i]->var_name << " + \"\\\\\\'\"";
+                } else {
+                    output << "\" + std::to_string(" << node->parameters[i]->var_name << ") + \"";
+                }
+                if (i < node->parameters.size() - 1) output << ", ";
+            }
+            output << "))\\\"\";\n";
+            
+            indent(); output << "std::string res = zenith::run_cmd(cmd);\n";
+            indent(); output << "while (!res.empty() && (res.back() == '\\n' || res.back() == '\\r')) res.pop_back();\n";
+            
+            std::string ret_type = mapType(node->return_type.get());
+            if (ret_type == "int" || ret_type == "Int") {
+                indent(); output << "try { return std::stoi(res); } catch (...) { return 0; }\n";
+            } else if (ret_type == "double" || ret_type == "float" || ret_type == "Float") {
+                indent(); output << "try { return std::stod(res); } catch (...) { return 0.0; }\n";
+            } else if (ret_type == "bool" || ret_type == "Bool") {
+                indent(); output << "return (res == \"true\" || res == \"1\");\n";
+            } else if (ret_type == "std::string" || ret_type == "String") {
+                indent(); output << "return res;\n";
+            } else {
+                indent(); output << "return;\n";
+            }
+            
+            indent_level--;
+            indent(); output << "}\n\n";
+            return;
+        }
+        else { // "js"
+            indent();
+            output << mapType(node->return_type.get()) << " " << node->function_name << "(";
+            for (size_t i = 0; i < node->parameters.size(); ++i) {
+                output << mapType(node->parameters[i]->type.get()) << " " << node->parameters[i]->var_name;
+                if (i < node->parameters.size() - 1) output << ", ";
+            }
+            output << ") {\n";
+            indent_level++;
+            indent(); output << "std::cerr << \"[Warning] JS interop function '" << node->function_name << "' is not supported on desktop platform.\" << std::endl;\n";
+            std::string ret_type = mapType(node->return_type.get());
+            if (ret_type == "int" || ret_type == "Int") {
+                indent(); output << "return 0;\n";
+            } else if (ret_type == "double" || ret_type == "float" || ret_type == "Float") {
+                indent(); output << "return 0.0;\n";
+            } else if (ret_type == "bool" || ret_type == "Bool") {
+                indent(); output << "return false;\n";
+            } else if (ret_type == "std::string" || ret_type == "String") {
+                indent(); output << "return \"\";\n";
+            } else {
+                indent(); output << "return;\n";
+            }
+            indent_level--;
+            indent(); output << "}\n\n";
+            return;
+        }
+    }
+
     indent();
+    if (node->is_exported) {
+        output << "#ifdef _WIN32\n";
+        output << "extern \"C\" __declspec(dllexport)\n";
+        output << "#else\n";
+        output << "extern \"C\"\n";
+        output << "#endif\n";
+    }
     if (node->function_name == "main") {
         output << "int main(";
     } else {

@@ -41,7 +41,7 @@ void Lexer::skipWhitespaceAndComments() {
 
 bool Lexer::isKeyword(std::string_view text) const {
     static const std::vector<std::string_view> keywords = {
-        "agentic", "async", "if", "else", "return", "class", "while", "for", "struct", "import", "await", "setState", "interface", "implements", "let", "orchestration"
+        "agentic", "async", "if", "else", "return", "class", "while", "for", "struct", "import", "await", "setState", "interface", "implements", "let", "orchestration", "foreign"
     };
     for (auto k : keywords) if (text == k) return true;
     return false;

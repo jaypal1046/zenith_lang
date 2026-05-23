@@ -1,4 +1,0 @@
-Void main() {
-    let count = 42;
-    print("count: " + String(count));
-}

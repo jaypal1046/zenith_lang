@@ -1,5 +1,0 @@
-Void main() {
-    let x = 5;
-    let y = 3.14;
-    let name = "Zenith";
-}

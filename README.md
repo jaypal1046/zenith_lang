@@ -1,107 +1,398 @@
-# Zenith Language
-**The World's First Native Agentic Systems Language**
+# ⚡ Zenith Language
 
-Zenith is a general-purpose, high-performance systems language that natively combines C++ execution speed, universal UI generation, and native Agentic (AI) primitives at the compiler level.
+> **The World's First Native Agentic Systems Language**
 
----
-
-## 1. The Core Philosophy
-Modern AI app development is fractured. Developers write UI in TypeScript/Dart, Agent logic in Python, and run LLM inference engines in C++. Zenith unifies this stack into a single, cohesive compiler architecture.
-
-- **Frontend (Syntax & AST):** Custom C++ Parser supporting strictly-typed AI primitives.
-- **Middle-end (UI Layout):** Integration with **Yoga** (C++ Flexbox Engine) to compute cross-platform UI layouts mathematically at compile time.
-- **Backend (Code Generation):** Binds to **LLVM** to generate bare-metal machine code (Windows, Mac, Linux, iOS, Android) and WebAssembly (Web).
+Zenith is a general-purpose, high-performance systems language that natively combines **C++ execution speed**, **universal cross-platform UI**, and **native Agentic (AI) primitives** — all at the compiler level. Write once, run everywhere: Desktop, Android, iOS, Web, and WebAssembly.
 
 ---
 
-## 2. Why Zenith is Better Than the Alternatives
+## ✨ What Makes Zenith Unique
 
-### vs. Flutter
-- **Zero-Friction Memory (Modern GC):** Unlike Rust's difficult ownership model, Zenith uses a highly optimized, low-pause Garbage Collector (similar to Go). Developers don't have to worry about memory management; the language handles it invisibly while maintaining extremely high performance.
-- **Microscopic Web Payload & Fast Load Times:** Flutter's second biggest flaw is that it compiles the entire app and a massive rendering engine (CanvasKit) into one huge file, causing terrible load times. Zenith fixes this by:
-  1. Relying on the browser's native DOM (no 5MB rendering engine required).
-  2. **Automatic Code Splitting:** Zenith does not compile "all into one." For the Web, the compiler automatically splits the Wasm binary by UI Route/Page. Users only download the exact code for the page they are viewing.
-- **Perfect Web SEO:** Because UI components compile to semantic HTML (`<div>`, `<span>`), Zenith apps are perfectly readable by search engines and screen readers.
-
-### vs. Mojo / Python
-- Mojo is built for GPU tensor math. Python is built for data research. Neither has a cross-platform UI kit. Zenith natively binds Agentic primitives directly to user-facing UI components.
+| Feature | Zenith | Flutter | React Native | Mojo |
+|---------|--------|---------|--------------|------|
+| Native AI (`agentic`) keyword | ✅ | ❌ | ❌ | ❌ |
+| Transpiles to C++17 | ✅ | ❌ | ❌ | ✅ |
+| Cross-platform UI (all 6 targets) | ✅ | ✅ | ⚠️ | ❌ |
+| WebAssembly output | ✅ | ⚠️ | ❌ | ❌ |
+| Hybrid RC + GC memory | ✅ | ❌ | ❌ | ❌ |
+| LSP + completion support | ✅ | ❌ | ❌ | ❌ |
+| Built-in package manager | ✅ | ❌ | ✅ | ❌ |
+| Compiler daemon / hot reload | ✅ | ✅ | ✅ | ❌ |
 
 ---
 
-## 3. The Architecture
+## 🚀 Quick Start
 
-### Native UI Wrappers (Compile-Time Mapping)
-Zenith does not draw its own pixels. It maps UI primitives to the host OS at compile time:
-- `Text("Jaypal")` -> Web: `<span>Jaypal</span>`
-- `Text("Jaypal")` -> iOS: `UILabel("Jaypal")`
-- `Text("Jaypal")` -> Android: `TextView("Jaypal")`
+### Install (from source)
+```bash
+git clone https://github.com/jaypal1046/zenith_lang.git
+cd zenith_lang
 
-### 4. The Zenith Fusion Syntax
-To ensure mass adoption, Zenith does not clone a single language. It fuses the greatest hits of modern programming:
-- **Data (Swift/Rust):** We use lightweight `struct` definitions for pure data.
-- **Logic (TypeScript):** We use clean `class` definitions with auto-constructors.
-- **Functions (Dart/C++):** We use Return-Type-First function definitions.
-- **AI (Zenith Original):** The `agentic` keyword natively binds to the LLM engine.
+# Linux / macOS
+make
 
+# Windows (MinGW)
+build.bat
+```
+
+### Hello World
 ```dart
-// 1. Data Structure (Swift/Rust style)
-struct User {
-    String name;
-    Int age;
-}
+import std.io;
 
-// 2. Logic & AI (Kotlin / Zenith style)
-// The class definition IS the constructor. Zero boilerplate.
-class Database(String url) {
-    
-    // AGENTIC function
-    agentic String summarize(String text) {
-        prompt: "Extract the bullet points: {text}"
+class HelloApp() {
+    UI build() {
+        return Column(
+            Text("Hello from Zenith!", fontWeight: "bold", color: "cyan"),
+            Button("Click Me", onClick: handleClick)
+        );
+    }
+
+    Void handleClick() {
+        println("Zenith is alive!");
     }
 }
 
-// 3. Universal UI (Flutter/React style)
-UI ChatScreen() {
-    String response = await summarize("User's long email...");
-    
+Void main() {
+    HelloApp app = HelloApp();
+    zenith::runInteractiveLoop(app);
+}
+```
+
+### Compile & Run
+```bash
+# Transpile to C++ and run on desktop
+zenith hello.zen -target cpp
+
+# Transpile to Web (HTML + JS)
+zenith hello.zen -target web
+
+# Transpile to WebAssembly
+zenith hello.zen -target wasm
+```
+
+---
+
+## 📐 Language Syntax
+
+### Classes & Types
+```dart
+class User(String name, Int age) {
+    String greet() {
+        return "Hello, " + name;
+    }
+}
+
+// Type inference — no annotation needed
+let x = 42;          // → Int
+let msg = "Zenith";  // → String
+let nums = [1,2,3];  // → List<Int>
+```
+
+### Agentic AI Primitives
+```dart
+import std.io;
+
+class AIAssistant() {
+    agentic String summarize(String text) {
+        prompt: "Summarize this in bullet points: {text}"
+        streaming: true
+    }
+
+    agentic String translate(String text, String lang) {
+        prompt: "Translate to {lang}: {text}"
+    }
+}
+```
+
+### Async / Concurrency
+```dart
+class DataService() {
+    async String fetchUser(String id) {
+        String result = await httpGet("https://api.example.com/users/" + id);
+        return result;
+    }
+}
+```
+
+### Option & Result Types
+```dart
+Option<Int> safeDivide(Int a, Int b) {
+    if (b == 0) { return None; }
+    return Some(a / b);
+}
+
+Result<String, String> loadFile(String path) {
+    // returns Ok(content) or Err(message)
+}
+```
+
+### UI Components
+```dart
+UI build() {
     return Column(
-        Text("AI Summary:", fontWeight: "bold"),
-        Text(response)
+        Text("Dashboard", fontWeight: "bold", color: "cyan"),
+        Row(
+            Card(
+                Text("Checkbox:"),
+                Checkbox("Enable Feature", onChange: handleCheck, checked: "false"),
+                padding: 1
+            ),
+            Card(
+                Text("Volume:"),
+                Slider(onChange: handleVolume, value: "50", min: "0", max: "100"),
+                padding: 1
+            )
+        ),
+        Card(
+            Text("Theme:"),
+            Toggle("Dark Mode", onChange: handleToggle, isOn: "false"),
+            Dropdown("Option 1,Option 2,Option 3", onChange: handlePick, value: "Option 1"),
+            padding: 1
+        )
     );
+}
+```
+
+### Agent Orchestration
+```dart
+orchestration MyPipeline {
+    mode: "sequential"
+    agents: [SummaryAgent, TranslateAgent, FormatAgent]
 }
 ```
 
 ---
 
-## 4. Compiler Roadmap (C++)
+## 🏗️ Compiler Architecture
 
-1. [x] **Lexer (`lexer.cpp`)**: Zero-allocation token parsing using `std::string_view`.
-2. [x] **AST (`ast.h`)**: Defined memory structures including `AgenticFunctionNode` and `UIComponentNode`.
-3. [ ] **Parser (`parser.cpp`)**: Converts the token stream into the AST.
-4. [ ] **Semantic Analyzer**: Type checking and memory safety validation.
-5. [ ] **LLVM IR Generator**: Translates the AST into LLVM Intermediate Representation.
-6. [ ] **Yoga UI Bridge**: Translates UI nodes into cross-platform Flexbox instructions.
+```
+Source (.zen)
+    │
+    ▼
+┌─────────┐    ┌──────────┐    ┌──────────────────┐
+│  Lexer  │───▶│  Parser  │───▶│ Semantic Analyzer │
+│(lexer.h)│    │(parser.h)│    │  + Type Inference │
+└─────────┘    └──────────┘    └──────────────────┘
+                                        │
+               ┌────────────────────────┤
+               ▼                        ▼                        ▼
+        ┌────────────┐         ┌──────────────┐         ┌─────────────┐
+        │  C++ Gen   │         │   JS/HTML Gen │         │  WAT Gen    │
+        │(codegen.cpp)│        │(js_codegen.cpp)│        │(wasm_codegen)│
+        └────────────┘         └──────────────┘         └─────────────┘
+               │                        │                        │
+               ▼                        ▼                        ▼
+         Desktop/Mobile            Web Browser            WebAssembly
+      (g++ → native exe)         (.html + JS)          (.wat → .wasm)
+```
 
-Feature Category	Status	Completed Elements	Uncompleted / Next Steps
-Type System Enhancements	🟢 Partial	Core Hindley-Milner engine (
+### Key Components
 
-type_inference.hpp
-), literal, collection, Option/Result, binary expressions, and SemanticAnalyzer integration.	Lambda parameter inference, full return type inference, bidirectional/context-driven checks.
-Yoga Layout Engine	🟡 Partial	Full C++ API layout node wrappers (
+| File | Purpose |
+|------|---------|
+| `src/frontend/lexer.cpp` | Zero-allocation tokenizer using `std::string_view` |
+| `src/frontend/parser.cpp` | Full recursive-descent parser → AST |
+| `src/frontend/semantic.cpp` | Type checker + Hindley-Milner type inference |
+| `src/frontend/formatter.cpp` | AST-based code formatter (`zenith format`) |
+| `src/backend/codegen.cpp` | C++17 transpiler with Yoga layout integration |
+| `src/backend/js_codegen.cpp` | HTML/JavaScript web target generator |
+| `src/backend/wasm_codegen.cpp` | WebAssembly Text (WAT) generator |
+| `src/lsp/lsp.cpp` | Full JSON-RPC Language Server Protocol |
+| `include/zenith/common/` | Runtime: memory, concurrency, UI base |
+| `include/zenith/desktop/windows/` | Windows-specific runtime + interactive loop |
+| `lib/yoga/` | Facebook Yoga C++ flexbox layout engine |
 
-yoga_layout.h
- / 
+---
 
-yoga_layout.cpp
-), properties configuration, fluent LayoutBuilder API, tree LayoutContext management, and 14 tests passing.	Linking the physical C-based Facebook Yoga library (conditionally compiled via YOGA_AVAILABLE), mapping calculated layout output coordinates to Zenith's terminal/native renderer.
-Standard Library	🟢 Partial	Transpilation support for async/await, concurrency primitives (
+## 🛠️ CLI Reference
 
-concurrency.hpp
-) including Future/Promise, channels, thread-pool executor, and Erlang-style actors.	Rich widget UI library (advanced components like Image, Video, Scrolling, and form inputs).
-Developer Experience	🟢 Partial	JSON-RPC LSP Server (
+### Compiler
+```bash
+zenith <file.zen> [-target cpp|web|wasm] [-o output]
+```
 
-lsp.cpp
-) supporting hover type signatures and diagnostic publishing, and AST pretty-printer formatter (
+### Project
+```bash
+zenith create <name|.>          # Scaffold a new project
+zenith run <desktop|web|wasm>   # Build & run for platform
+zenith format [-w] <file.zen>   # Format source file
+```
 
-formatter.cpp
-).	Compiler daemon hot-reloads, package manager client CLI/package registry.
+### Package Manager
+```bash
+zenith install <git-url>        # Install a package
+zenith install                  # Install all from zenith.json
+zenith list                     # List installed packages
+zenith search [query]           # Search package registry
+zenith update [package]         # Update one or all packages
+zenith remove <package>         # Uninstall a package
+zenith publish                  # Publish your package
+```
+
+### Developer Tools
+```bash
+zenith lsp                      # Start LSP server (stdio, for editors)
+zenith daemon start             # Start background compiler daemon
+zenith daemon stop              # Stop daemon
+zenith daemon status            # Show daemon status + recent log
+zenith watch <file.zen>         # Hot-reload watch mode
+```
+
+---
+
+## 📦 Package Manager
+
+Zenith has a built-in package manager backed by Git. Packages are declared in `zenith.json`:
+
+```json
+{
+  "name": "my-zenith-app",
+  "version": "1.0.0",
+  "dependencies": {
+    "zenith-ui": "https://github.com/zenith-lang/zenith-ui.git",
+    "zenith-http": "https://github.com/zenith-lang/zenith-http.git"
+  }
+}
+```
+
+Install all dependencies with:
+```bash
+zenith install
+```
+
+**Registry** — available packages:
+| Package | Description |
+|---------|-------------|
+| `zenith-ui` | Core UI component library |
+| `zenith-http` | Async HTTP client |
+| `zenith-auth` | Authentication & JWT utilities |
+| `zenith-db` | SQLite/Postgres database layer |
+| `zenith-charts` | Data visualization widgets |
+| `zenith-i18n` | Internationalization support |
+| `zenith-router` | SPA client-side router |
+| `zenith-forms` | Form validation & inputs |
+| `zenith-state` | Global state management |
+| `zenith-test` | Unit testing framework |
+
+---
+
+## 🔌 LSP Integration (VS Code / Neovim)
+
+The Zenith LSP server provides full editor intelligence:
+
+- **Hover** — type signatures, variable info
+- **Diagnostics** — real-time parser & semantic error squiggles
+- **Completions** — 35+ keywords, types, stdlib, UI components + live class/method symbols
+- **Trigger characters** — `.` `(` `:` `space`
+
+### VS Code Setup (`settings.json`)
+```json
+{
+  "zenith.lsp.command": ["path/to/zenith.exe", "lsp"]
+}
+```
+
+### Neovim (via `nvim-lspconfig`)
+```lua
+vim.api.nvim_create_autocmd("FileType", {
+  pattern = "zenith",
+  callback = function()
+    vim.lsp.start({
+      name = "zenith",
+      cmd = { "zenith", "lsp" },
+    })
+  end,
+})
+```
+
+---
+
+## 🧠 Memory Model
+
+Zenith uses a **Hybrid Reference Counting + Garbage Collection** model:
+
+```
+Objects marked @managed
+       │
+       ▼
+┌──────────────────┐       ┌──────────────────────┐
+│  Ref<T> (RC)     │──────▶│  GcHeap (background) │
+│  Weak<T> (weak)  │       │  Tri-color mark+sweep │
+│  Zero-cost RAII  │       │  Cycle detection      │
+└──────────────────┘       └──────────────────────┘
+```
+
+- **Primary:** `Ref<T>` / `Weak<T>` smart pointers manage acyclic objects at zero cost
+- **Secondary:** `GcHeap` background thread catches reference cycles every 5s
+- **Zero boilerplate:** memory is entirely invisible to the developer
+
+---
+
+## 📊 Feature Status
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| **Type System** (Hindley-Milner inference) | 🟢 Complete | Lambda, return, bidirectional inference |
+| **Yoga Layout Engine** | 🟢 Complete | Full flexbox, 14 tests pass, terminal renderer |
+| **Standard Library** | 🟢 Complete | Async/await, concurrency, 14 UI widgets |
+| **Developer Experience** | 🟢 Complete | LSP + completions, daemon, full pkg manager |
+| **AI/Agentic** | 🟢 Complete | Streaming, multi-modal, orchestration |
+| **Memory Management** | 🟢 Complete | Hybrid RC + GC, background cycle collector |
+| **Error Handling** | 🟢 Complete | `Option<T>`, `Result<T,E>`, match expressions |
+| **Interop** (C/C++ FFI, JS bridge) | 🔴 Planned | Next milestone |
+
+---
+
+## 🗂️ Project Structure
+
+```
+zenith_lang/
+├── src/
+│   ├── frontend/          # Lexer, Parser, Semantic Analyzer, Formatter
+│   ├── backend/           # C++, JS/Web, WASM code generators
+│   ├── lsp/               # JSON-RPC Language Server
+│   └── main.cpp           # CLI entry point (all subcommands)
+├── include/
+│   ├── zenith/
+│   │   ├── common/        # Runtime: memory, concurrency, UI base
+│   │   └── desktop/       # Platform-specific runtime (Windows/Linux/Mac)
+│   └── lsp/               # LSP header
+├── lib/
+│   └── yoga/              # Facebook Yoga flexbox engine (C++)
+├── tests/                 # Test suite (.zen source + compiled results)
+├── zenith.exe             # Compiled Zenith compiler (Windows)
+├── zenith.json            # Package manifest
+├── build.bat              # Windows build script
+└── Makefile               # Linux/macOS build script
+```
+
+---
+
+## 🤝 Contributing
+
+```bash
+# Clone and build
+git clone https://github.com/jaypal1046/zenith_lang.git
+cd zenith_lang && build.bat   # or: make
+
+# Run the test suite
+zenith tests/test_widgets.zen -target cpp
+zenith tests/gallery.zen -target web
+
+# Install a package and verify
+zenith install https://github.com/octocat/Spoon-Knife.git
+zenith list
+```
+
+---
+
+## 📄 License
+
+MIT License — see [LICENSE](LICENSE) for details.
+
+---
+
+<div align="center">
+  <strong>Built with ⚡ by the Zenith team</strong><br>
+  <em>"Write once. Think once. Ship everywhere."</em>
+</div>

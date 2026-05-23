@@ -92,34 +92,30 @@ public:
     }
 };
 
-class Node : public zenith::mem::Managed {
+class ShowcaseSite {
 private:
 public:
-    std::string value;
+    std::string title = "ZENITH NATIVE WASM ENGINE";
+    std::string subtitle = "Running purely inside the browser sandbox";
+    std::string description = "No Javascript VMs. No Garbage Collector Pauses. Pure Systems Performance.";
+    int clicks = 0;
 
-    Node()  {}
-    Node(const std::string& v) : value(v) {}
+    ShowcaseSite()  {}
 
-    void __gc_enumerate(std::vector<zenith::mem::RcBlock*>& out) override {
+    zenith::UIElement build() {
+        return zenith::UI::Column(zenith::make_children(zenith::UI::Text(title, {}), zenith::UI::Text(description, {}), zenith::UI::Row(zenith::make_children(zenith::UI::Text("Status: ", {}), zenith::UI::Text(subtitle, {})), {}), zenith::UI::Row(zenith::make_children(zenith::UI::Text(zenith::concat("Total Clicks: ", clicks), {}), zenith::UI::Button("Increment Clicks", {{"onClick", zenith::toString("increment")}})), {})), {});
+    }
+
+    void increment() {
+        {
+            clicks = clicks + 1;
+            std::cout << "\n[Runtime] setState: Re-rendering UI Layout...\n";
+            this->build().render();
+        }
     }
 
     void triggerCallback(std::string name, std::string val = "") {
-    }
-
-};
-
-class Counter : public zenith::mem::Managed {
-private:
-public:
-    int count;
-
-    Counter()  {}
-    Counter(int c) : count(c) {}
-
-    void __gc_enumerate(std::vector<zenith::mem::RcBlock*>& out) override {
-    }
-
-    void triggerCallback(std::string name, std::string val = "") {
+        if (name == "increment") { this->increment(); return; }
     }
 
 };
@@ -128,27 +124,10 @@ int main() {
     // --- Zenith RC+GC Memory Manager: Start background cycle collector ---
     zenith::mem::GcHeap::instance().start_background_gc(5000);
 
-    println("=== Zenith Hybrid RC + GC Memory Test ===");
-    println("\n[Test 1] Basic Ref<T> — Strong Reference Counting:");
-    zenith::mem::Ref<Node> nodeA = zenith::mem::make_ref<Node>("hello-rc");
-    println("Created Ref<Node> with value: hello-rc");
-    println("Ref<T> strong ownership established.");
-    println("\n[Test 2] Weak<T> — Weak Reference (no RC increment):");
-    zenith::mem::Weak<Node> weakRef = zenith::mem::Weak<Node>(nodeA);
-    println("Weak<Node> created. Does not prevent collection.");
-    println("Weak ref is non-owning — breaks potential cycles.");
-    println("\n[Test 3] @managed class — inherits zenith::mem::Managed:");
-    zenith::mem::Ref<Counter> counter = zenith::mem::make_ref<Counter>(42);
-    println("Counter object created with count: 42");
-    println("Counter is heap-tracked by GcHeap.");
-    println("\n[Test 4] GC Statistics:");
-    std::string stats = gcStats();
-    println(zenith::concat("GC Stats: ", stats));
-    println("\n[Test 5] Scope Exit — RC Deallocation:");
-    println("All Ref<T> objects will be freed when they go out of scope.");
-    println("GcHeap background thread running every 5000ms for cycle detection.");
-    println("\n=== Memory Test Complete ===");
-    println("RC frees acyclic objects. GC collects cycles. Both run transparently.");
+    println("--- Booting WASM Zenith App ---");
+    ShowcaseSite site = ShowcaseSite();
+    zenith::runInteractiveLoop(site);
+    println("--- UI DOM Rendered Successfully from WASM! ---");
 
 // --- Zenith RC+GC Memory Manager: Shutdown ---
 zenith::mem::GcHeap::instance().stop_background_gc();

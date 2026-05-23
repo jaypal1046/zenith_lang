@@ -92,63 +92,31 @@ public:
     }
 };
 
-class Node : public zenith::mem::Managed {
-private:
-public:
-    std::string value;
-
-    Node()  {}
-    Node(const std::string& v) : value(v) {}
-
-    void __gc_enumerate(std::vector<zenith::mem::RcBlock*>& out) override {
+int multiBranchReturn(bool cond) {
+    if (cond) {
+        return 42;
+    } else {
+        return 0;
     }
-
-    void triggerCallback(std::string name, std::string val = "") {
-    }
-
-};
-
-class Counter : public zenith::mem::Managed {
-private:
-public:
-    int count;
-
-    Counter()  {}
-    Counter(int c) : count(c) {}
-
-    void __gc_enumerate(std::vector<zenith::mem::RcBlock*>& out) override {
-    }
-
-    void triggerCallback(std::string name, std::string val = "") {
-    }
-
-};
+}
 
 int main() {
     // --- Zenith RC+GC Memory Manager: Start background cycle collector ---
     zenith::mem::GcHeap::instance().start_background_gc(5000);
 
-    println("=== Zenith Hybrid RC + GC Memory Test ===");
-    println("\n[Test 1] Basic Ref<T> — Strong Reference Counting:");
-    zenith::mem::Ref<Node> nodeA = zenith::mem::make_ref<Node>("hello-rc");
-    println("Created Ref<Node> with value: hello-rc");
-    println("Ref<T> strong ownership established.");
-    println("\n[Test 2] Weak<T> — Weak Reference (no RC increment):");
-    zenith::mem::Weak<Node> weakRef = zenith::mem::Weak<Node>(nodeA);
-    println("Weak<Node> created. Does not prevent collection.");
-    println("Weak ref is non-owning — breaks potential cycles.");
-    println("\n[Test 3] @managed class — inherits zenith::mem::Managed:");
-    zenith::mem::Ref<Counter> counter = zenith::mem::make_ref<Counter>(42);
-    println("Counter object created with count: 42");
-    println("Counter is heap-tracked by GcHeap.");
-    println("\n[Test 4] GC Statistics:");
-    std::string stats = gcStats();
-    println(zenith::concat("GC Stats: ", stats));
-    println("\n[Test 5] Scope Exit — RC Deallocation:");
-    println("All Ref<T> objects will be freed when they go out of scope.");
-    println("GcHeap background thread running every 5000ms for cycle detection.");
-    println("\n=== Memory Test Complete ===");
-    println("RC frees acyclic objects. GC collects cycles. Both run transparently.");
+    println("=== Zenith Advanced Type Inference Test ===");
+    std::function<int(int)> doubler = [=](int x) {
+        return x * 2;
+    };
+    auto d_res = doubler(10);
+    println(zenith::concat("Lambda parameter inference (expected 20): ", d_res));
+    auto multi_result = multiBranchReturn(true);
+    println(zenith::concat("Function return type inference (expected 42): ", multi_result));
+    std::vector<int> numbers = {};
+    numbers.push_back(10);
+    numbers.push_back(20);
+    println(zenith::concat("List size (expected 2): ", numbers.size()));
+    println("=== Test Complete ===");
 
 // --- Zenith RC+GC Memory Manager: Shutdown ---
 zenith::mem::GcHeap::instance().stop_background_gc();

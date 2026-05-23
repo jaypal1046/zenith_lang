@@ -92,63 +92,118 @@ public:
     }
 };
 
-class Node : public zenith::mem::Managed {
+std::string getVerificationStatus() {
+    return " [Status: Verified (Custom import)]";
+}
+
+class CounterApp {
 private:
 public:
-    std::string value;
+    int count = 0;
+    std::string label = "Counter Value: ";
 
-    Node()  {}
-    Node(const std::string& v) : value(v) {}
+    CounterApp()  {}
 
-    void __gc_enumerate(std::vector<zenith::mem::RcBlock*>& out) override {
+    zenith::UIElement build() {
+        return zenith::UI::Column(zenith::make_children(zenith::UI::Text(zenith::concat(label, count), {})), {});
+    }
+
+    void increment() {
+        {
+            count = count + 1;
+            std::cout << "\n[Runtime] setState: Re-rendering UI Layout...\n";
+            this->build().render();
+        }
     }
 
     void triggerCallback(std::string name, std::string val = "") {
+        if (name == "increment") { this->increment(); return; }
     }
 
 };
 
-class Counter : public zenith::mem::Managed {
-private:
+class Shape {
 public:
-    int count;
+    virtual ~Shape() = default;
+    virtual float getArea() = 0;
+};
 
-    Counter()  {}
-    Counter(int c) : count(c) {}
+class Circle : public Shape {
+private:
+    float radius;
+public:
 
-    void __gc_enumerate(std::vector<zenith::mem::RcBlock*>& out) override {
+    Circle(float radius) : radius(radius) {}
+
+    float getArea() {
+        return 3.14159 * radius * radius;
     }
 
     void triggerCallback(std::string name, std::string val = "") {
+        if (name == "getArea") { this->getArea(); return; }
     }
 
 };
+
+class Database {
+private:
+    std::string url;
+public:
+
+    Database(std::string url) : url(url) {}
+
+    std::string summarizeDocument(std::string text) {
+        // --- AUTO-GENERATED AGENTIC BINDING ---
+        std::string prompt = R"(Extract the three most important bullet points from this text: {text} using {url})";
+        prompt = std::regex_replace(prompt, std::regex("\\{url\\}"), url);
+        prompt = std::regex_replace(prompt, std::regex("\\{text\\}"), text);
+        zenith::LLMClient client("http://localhost:11434/api/generate");
+        std::string response = client.prompt(prompt);
+        return response;
+    }
+
+    void triggerCallback(std::string name, std::string val = "") {
+        if (name == "summarizeDocument") { this->summarizeDocument(val); return; }
+    }
+
+};
+
+zenith::UIElement ChatScreen() {
+    std::vector<std::string> active_users = {"Jay", "Alex"};
+    std::unordered_map<std::string, int> scores = {{"Jay", 100}, {"Alex", 95}};
+    auto active = true;
+    auto retry = 0;
+    auto inf_local_str = " (Type inferred locally)";
+    auto ver_status = getVerificationStatus();
+    auto full_status = zenith::concat(ver_status, inf_local_str);
+    active_users.push_back("Sam");
+    if (active == true) {
+        while (retry < 3) {
+            retry = retry + 1;
+        }
+    }
+    Database db = Database("http://localhost:11434");
+    std::string response = db.summarizeDocument("This is a document payload.");
+    return zenith::UI::Column(zenith::make_children(zenith::UI::Text("AI Summary:", {{"fontWeight", zenith::toString("bold")}}), zenith::UI::Row(zenith::make_children(zenith::UI::Text(response, {}), zenith::UI::Text(full_status, {})), {})), {});
+}
 
 int main() {
     // --- Zenith RC+GC Memory Manager: Start background cycle collector ---
     zenith::mem::GcHeap::instance().start_background_gc(5000);
 
-    println("=== Zenith Hybrid RC + GC Memory Test ===");
-    println("\n[Test 1] Basic Ref<T> — Strong Reference Counting:");
-    zenith::mem::Ref<Node> nodeA = zenith::mem::make_ref<Node>("hello-rc");
-    println("Created Ref<Node> with value: hello-rc");
-    println("Ref<T> strong ownership established.");
-    println("\n[Test 2] Weak<T> — Weak Reference (no RC increment):");
-    zenith::mem::Weak<Node> weakRef = zenith::mem::Weak<Node>(nodeA);
-    println("Weak<Node> created. Does not prevent collection.");
-    println("Weak ref is non-owning — breaks potential cycles.");
-    println("\n[Test 3] @managed class — inherits zenith::mem::Managed:");
-    zenith::mem::Ref<Counter> counter = zenith::mem::make_ref<Counter>(42);
-    println("Counter object created with count: 42");
-    println("Counter is heap-tracked by GcHeap.");
-    println("\n[Test 4] GC Statistics:");
-    std::string stats = gcStats();
-    println(zenith::concat("GC Stats: ", stats));
-    println("\n[Test 5] Scope Exit — RC Deallocation:");
-    println("All Ref<T> objects will be freed when they go out of scope.");
-    println("GcHeap background thread running every 5000ms for cycle detection.");
-    println("\n=== Memory Test Complete ===");
-    println("RC frees acyclic objects. GC collects cycles. Both run transparently.");
+    println("--- Booting Zenith App ---");
+    zenith::UIElement app = ChatScreen();
+    app.render();
+    println("\n--- Testing Counter App setState ---");
+    CounterApp counter = CounterApp();
+    zenith::runInteractiveLoop(counter);
+    counter.increment();
+    counter.increment();
+    println("\n--- Testing Interface Polymorphism ---");
+    auto temp_my_shape = Circle(10.0);
+    Shape& my_shape = temp_my_shape;
+    println(zenith::concat("Circle Area: ", my_shape.getArea()));
+    println("--- Zenith App Shutdown ---");
 
 // --- Zenith RC+GC Memory Manager: Shutdown ---
 zenith::mem::GcHeap::instance().stop_background_gc();

@@ -1,4 +1,5 @@
 // Test simple type inference features
+import std.io;
 
 Void main() {
     let count = 42;

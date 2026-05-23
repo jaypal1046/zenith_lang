@@ -145,6 +145,11 @@ std::string CodeGenerator::generateExpression(ExprNode* expr) {
             return res;
         }
         // Generic FunctionCallNode — emit as regular C++ function call
+        // Special handling for String() conversion helper
+        if (fname == "String") {
+            std::string arg = fcall->arguments.empty() ? "" : generateExpression(fcall->arguments[0].get());
+            return "zenith::String(" + arg + ")";
+        }
         std::string res = fname + "(";
         for (size_t i = 0; i < fcall->arguments.size(); ++i) {
             res += generateExpression(fcall->arguments[i].get());
@@ -195,8 +200,9 @@ std::string CodeGenerator::generateExpression(ExprNode* expr) {
         }
         
         // Children / Positional arguments
+        bool is_string_param = false;
         if (!is_custom) {
-            bool is_string_param = (
+            is_string_param = (
                 ui->component_type == "Text" ||
                 ui->component_type == "Button" ||
                 ui->component_type == "TextField" ||
@@ -238,6 +244,9 @@ std::string CodeGenerator::generateExpression(ExprNode* expr) {
         // Named arguments (attributes) - only for built-in UI components
         if (!is_custom) {
             // is_no_first_param widgets have no leading positional arg, so no leading comma
+            // For string-param widgets with children, we already output the string, so need comma
+            // For make_children widgets, we already output make_children(), so need comma
+            // Only is_no_first_param widgets skip the comma
             res += (is_no_first_param ? "{" : ", {");
             for (size_t i = 0; i < ui->named_args.size(); ++i) {
                 std::string key = ui->named_args[i].first;
@@ -848,8 +857,13 @@ std::string CodeGenerator::generate(ProgramNode* program) {
     output << "#include <future>\n";
     output << "#include <iostream>\n";
     output << "#include <functional>\n";
+    output << "#include <sstream>\n";
+    output << "#include <curl/curl.h>\n";
+    output << "#include <nlohmann/json.hpp>\n";
     output << "#include \"zenith_runtime.h\"\n";
     output << "#include \"zenith/std/concurrency.hpp\"\n\n";
+    
+    output << "using json = nlohmann::json;\n\n";
 
     bool has_std_io = false;
     for (const auto& stmt : program->statements) {
@@ -869,6 +883,73 @@ std::string CodeGenerator::generate(ProgramNode* program) {
         // Register gcStats as a known function so it's not treated as a UI component
         function_names.insert("gcStats");
     }
+    
+    // Add universal print helper for all types
+    output << "template<typename T>\n";
+    output << "void print_t(const T& value) {\n";
+    output << "    std::cout << value << std::endl;\n";
+    output << "}\n\n";
+    
+    // Add string conversion helper
+    output << "template<typename T>\n";
+    output << "std::string to_string_generic(const T& value) {\n";
+    output << "    std::ostringstream oss;\n";
+    output << "    oss << value;\n";
+    output << "    return oss.str();\n";
+    output << "}\n\n";
+    
+    // Add configurable LLM client
+    output << "class LLMClient {\n";
+    output << "public:\n";
+    output << "    static std::string getEndpoint() {\n";
+    output << "        const char* env_endpoint = std::getenv(\"ZENITH_LLM_ENDPOINT\");\n";
+    output << "        if (env_endpoint) {\n";
+    output << "            return std::string(env_endpoint);\n";
+    output << "        }\n";
+    output << "        return \"http://localhost:11434\"; // Default to Ollama\n";
+    output << "    }\n\n";
+    output << "    static std::string getModel() {\n";
+    output << "        const char* env_model = std::getenv(\"ZENITH_LLM_MODEL\");\n";
+    output << "        if (env_model) {\n";
+    output << "            return std::string(env_model);\n";
+    output << "        }\n";
+    output << "        return \"llama3\"; // Default model\n";
+    output << "    }\n\n";
+    output << "    static std::string generate(const std::string& prompt, const std::string& model = \"\", float temperature = 0.7f, int max_tokens = 512) {\n";
+    output << "        CURL* curl = curl_easy_init();\n";
+    output << "        if (!curl) throw std::runtime_error(\"Failed to initialize CURL\");\n\n";
+    output << "        json payload = {\n";
+    output << "            {\"model\", model.empty() ? getModel() : model},\n";
+    output << "            {\"prompt\", prompt},\n";
+    output << "            {\"stream\", false},\n";
+    output << "            {\"options\", {{\"temperature\", temperature}, {\"num_predict\", max_tokens}}}\n";
+    output << "        };\n\n";
+    output << "        std::string response_data;\n";
+    output << "        std::string url = getEndpoint() + \"/api/generate\";\n\n";
+    output << "        struct curl_slist* headers = nullptr;\n";
+    output << "        headers = curl_slist_append(headers, \"Content-Type: application/json\");\n\n";
+    output << "        curl_easy_setopt(curl, CURLOPT_URL, url.c_str());\n";
+    output << "        curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);\n";
+    output << "        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, payload.dump().c_str());\n";
+    output << "        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, [](void* contents, size_t size, size_t nmemb, void* userp) -> size_t {\n";
+    output << "            ((std::string*)userp)->append((char*)contents, size * nmemb);\n";
+    output << "            return size * nmemb;\n";
+    output << "        });\n";
+    output << "        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response_data);\n\n";
+    output << "        CURLcode res = curl_easy_perform(curl);\n";
+    output << "        curl_slist_free_all(headers);\n";
+    output << "        curl_easy_cleanup(curl);\n\n";
+    output << "        if (res != CURLE_OK) {\n";
+    output << "            throw std::runtime_error(std::string(\"CURL request failed: \") + curl_easy_strerror(res));\n";
+    output << "        }\n\n";
+    output << "        try {\n";
+    output << "            json result = json::parse(response_data);\n";
+    output << "            return result.value(\"response\", \"\");\n";
+    output << "        } catch (...) {\n";
+    output << "            return response_data;\n";
+    output << "        }\n";
+    output << "    }\n";
+    output << "};\n\n";
 
     for (const auto& stmt : program->statements) {
         if (auto* class_decl = dynamic_cast<ClassDeclNode*>(stmt.get())) {

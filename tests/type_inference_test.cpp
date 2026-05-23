@@ -13,12 +13,6 @@
 
 using json = nlohmann::json;
 
-inline void print(std::string msg) { std::cout << msg; }
-inline void println(std::string msg) { std::cout << msg << std::endl; }
-inline std::string httpGet(std::string url) { return zenith::httpGet(url); }
-inline std::string httpPost(std::string url, std::string json_body) { return zenith::httpPost(url, json_body); }
-inline std::string gcStats() { return zenith::mem::gcStatsString(); }
-
 template<typename T>
 void print_t(const T& value) {
     std::cout << value << std::endl;
@@ -92,63 +86,26 @@ public:
     }
 };
 
-class Node : public zenith::mem::Managed {
-private:
-public:
-    std::string value;
-
-    Node()  {}
-    Node(const std::string& v) : value(v) {}
-
-    void __gc_enumerate(std::vector<zenith::mem::RcBlock*>& out) override {
-    }
-
-    void triggerCallback(std::string name, std::string val = "") {
-    }
-
-};
-
-class Counter : public zenith::mem::Managed {
-private:
-public:
-    int count;
-
-    Counter()  {}
-    Counter(int c) : count(c) {}
-
-    void __gc_enumerate(std::vector<zenith::mem::RcBlock*>& out) override {
-    }
-
-    void triggerCallback(std::string name, std::string val = "") {
-    }
-
-};
-
 int main() {
     // --- Zenith RC+GC Memory Manager: Start background cycle collector ---
     zenith::mem::GcHeap::instance().start_background_gc(5000);
 
-    println("=== Zenith Hybrid RC + GC Memory Test ===");
-    println("\n[Test 1] Basic Ref<T> — Strong Reference Counting:");
-    zenith::mem::Ref<Node> nodeA = zenith::mem::make_ref<Node>("hello-rc");
-    println("Created Ref<Node> with value: hello-rc");
-    println("Ref<T> strong ownership established.");
-    println("\n[Test 2] Weak<T> — Weak Reference (no RC increment):");
-    zenith::mem::Weak<Node> weakRef = zenith::mem::Weak<Node>(nodeA);
-    println("Weak<Node> created. Does not prevent collection.");
-    println("Weak ref is non-owning — breaks potential cycles.");
-    println("\n[Test 3] @managed class — inherits zenith::mem::Managed:");
-    zenith::mem::Ref<Counter> counter = zenith::mem::make_ref<Counter>(42);
-    println("Counter object created with count: 42");
-    println("Counter is heap-tracked by GcHeap.");
-    println("\n[Test 4] GC Statistics:");
-    std::string stats = gcStats();
-    println(zenith::concat("GC Stats: ", stats));
-    println("\n[Test 5] Scope Exit — RC Deallocation:");
-    println("All Ref<T> objects will be freed when they go out of scope.");
-    println("GcHeap background thread running every 5000ms for cycle detection.");
-    println("\n=== Memory Test Complete ===");
-    println("RC frees acyclic objects. GC collects cycles. Both run transparently.");
+    auto count = 42;
+    auto name = "Zenith";
+    auto pi = 3.14159;
+    auto is_active = true;
+    zenith::println("=== Type Inference Tests ===");
+    zenith::println(zenith::concat("count (inferred Int): ", count));
+    zenith::println(zenith::concat("name (inferred String): ", name));
+    zenith::println(zenith::concat("pi (inferred Float): ", pi));
+    zenith::println(zenith::concat("is_active (inferred Bool): ", is_active));
+    int explicit_int = 100;
+    std::string explicit_str = "Explicit";
+    zenith::println(zenith::concat("explicit_int: ", explicit_int));
+    zenith::println(zenith::concat("explicit_str: ", explicit_str));
+    // void greet;  // Removed invalid declaration
+    name = "World";
+    zenith::println(zenith::concat("Hello, ", zenith::concat(name, "!")));
 
 // --- Zenith RC+GC Memory Manager: Shutdown ---
 zenith::mem::GcHeap::instance().stop_background_gc();

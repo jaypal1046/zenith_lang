@@ -1,0 +1,31 @@
+import std.io;
+
+async Int delayedValue(val: Int) {
+    let i = 0;
+    while (i < 1000) {
+        i = i + 1;
+    }
+    return val * 2;
+}
+
+async Int runAsyncTest() {
+    let f1 = delayedValue(10);
+    let f2 = delayedValue(20);
+    
+    let v1 = await f1;
+    let v2 = await f2;
+    
+    return v1 + v2;
+}
+
+Void main() {
+    println("--- E2E Async/Await Test ---");
+    let test_fut = runAsyncTest();
+    let result = await test_fut;
+    println("Async result is: " + result);
+    if (result == 60) {
+        println("SUCCESS");
+    } else {
+        println("FAILED");
+    }
+}

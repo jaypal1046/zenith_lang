@@ -307,8 +307,23 @@ void JSCodeGenerator::generateClass(ClassDeclNode* node) {
             }
             js_prompt += "`";
             
+            std::string image_path_var = "null";
+            if (agentic->is_multimodal) {
+                for (const auto& param : agentic->parameters) {
+                    std::string name = param->var_name;
+                    if (name.find("image") != std::string::npos || name.find("img") != std::string::npos || name.find("file") != std::string::npos) {
+                        image_path_var = name;
+                        break;
+                    }
+                }
+                if (image_path_var == "null" && !agentic->parameters.empty()) {
+                    image_path_var = agentic->parameters.back()->var_name;
+                }
+            }
+            
             indent();
-            output << "return await zenith.llmPrompt(this.url, " << js_prompt << ");\n";
+            output << "return await zenith.llmPrompt(this.url || \"http://localhost:11434\", " << js_prompt << ", " 
+                   << (agentic->is_streaming ? "true" : "false") << ", " << image_path_var << ");\n";
             
             indent_level--;
             indent(); output << "}\n";
@@ -414,7 +429,7 @@ void JSCodeGenerator::generateFunction(FunctionNode* node) {
 
 void JSCodeGenerator::generateAgenticFunction(AgenticFunctionNode* node) {
     indent();
-    output << "async " << node->function_name << "(";
+    output << "async function " << node->function_name << "(";
     for (size_t i = 0; i < node->parameters.size(); ++i) {
         output << node->parameters[i]->var_name;
         if (i < node->parameters.size() - 1) output << ", ";
@@ -451,8 +466,52 @@ void JSCodeGenerator::generateAgenticFunction(AgenticFunctionNode* node) {
     }
     js_prompt += "`";
     
+    std::string image_path_var = "null";
+    if (node->is_multimodal) {
+        for (const auto& param : node->parameters) {
+            std::string name = param->var_name;
+            if (name.find("image") != std::string::npos || name.find("img") != std::string::npos || name.find("file") != std::string::npos) {
+                image_path_var = name;
+                break;
+            }
+        }
+        if (image_path_var == "null" && !node->parameters.empty()) {
+            image_path_var = node->parameters.back()->var_name;
+        }
+    }
+    
     indent();
-    output << "return await zenith.llmPrompt(this.url, " << js_prompt << ");\n";
+    output << "return await zenith.llmPrompt(typeof this !== 'undefined' && this && this.url ? this.url : \"http://localhost:11434\", " 
+           << js_prompt << ", " 
+           << (node->is_streaming ? "true" : "false") << ", " 
+           << image_path_var << ");\n";
+    
+    indent_level--;
+    indent(); output << "}\n";
+}
+
+void JSCodeGenerator::generateOrchestration(AgentOrchestrationNode* node) {
+    indent();
+    output << "async function " << node->orchestration_name << "(input) {\n";
+    indent_level++;
+    
+    if (node->strategy == "sequential") {
+        indent(); output << "let current_val = input;\n";
+        for (const auto& agent : node->agents) {
+            indent(); output << "current_val = await " << agent << "(current_val);\n";
+        }
+        indent(); output << "return current_val;\n";
+    } else {
+        indent(); output << "return await Promise.all([\n";
+        indent_level++;
+        for (size_t i = 0; i < node->agents.size(); ++i) {
+            indent(); output << node->agents[i] << "(input)";
+            if (i < node->agents.size() - 1) output << ",";
+            output << "\n";
+        }
+        indent_level--;
+        indent(); output << "]);\n";
+    }
     
     indent_level--;
     indent(); output << "}\n";
@@ -478,6 +537,9 @@ std::string JSCodeGenerator::generate(ProgramNode* program) {
             if (dynamic_cast<AgenticFunctionNode*>(fn_decl)) {
                 agentic_functions.insert(fn_decl->function_name);
             }
+        } else if (auto* orch_decl = dynamic_cast<AgentOrchestrationNode*>(stmt.get())) {
+            function_names.insert(orch_decl->orchestration_name);
+            async_functions.insert(orch_decl->orchestration_name);
         }
     }
 
@@ -698,8 +760,34 @@ std::string JSCodeGenerator::generate(ProgramNode* program) {
     output << "            println: function(msg) {\n";
     output << "                this.print(msg + '\\n');\n";
     output << "            },\n";
-    output << "            llmPrompt: async function(url, promptStr) {\n";
+    output << "            encodeImageToBase64: async function(pathOrUrl) {\n";
+    output << "                if (!pathOrUrl) return \"\";\n";
+    output << "                if (pathOrUrl.startsWith(\"data:\")) return pathOrUrl.split(\",\")[1];\n";
+    output << "                try {\n";
+    output << "                    const response = await fetch(pathOrUrl);\n";
+    output << "                    const blob = await response.blob();\n";
+    output << "                    return new Promise((resolve) => {\n";
+    output << "                        const reader = new FileReader();\n";
+    output << "                        reader.onloadend = () => {\n";
+    output << "                            const base64String = reader.result.split(',')[1];\n";
+    output << "                            resolve(base64String);\n";
+    output << "                        };\n";
+    output << "                        reader.readAsDataURL(blob);\n";
+    output << "                    });\n";
+    output << "                } catch (e) {\n";
+    output << "                    return \"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==\";\n";
+    output << "                }\n";
+    output << "            },\n";
+    output << "            llmPrompt: async function(url, promptStr, isStreaming, imagePath) {\n";
+    output << "                let imageBase64 = \"\";\n";
+    output << "                if (imagePath) {\n";
+    output << "                    this.println('[Runtime] Loading and encoding image: ' + imagePath);\n";
+    output << "                    imageBase64 = await this.encodeImageToBase64(imagePath);\n";
+    output << "                }\n";
     output << "                this.println('\\n[Runtime] LLMClient sending prompt to local backend (' + url + '): \"' + promptStr + '\"');\n";
+    output << "                if (imageBase64) {\n";
+    output << "                    this.println('[Runtime] Image attached (Base64 length: ' + imageBase64.length + ' chars)');\n";
+    output << "                }\n";
     output << "                try {\n";
     output << "                    const response = await fetch(url + '/api/generate', {\n";
     output << "                        method: 'POST',\n";
@@ -707,21 +795,70 @@ std::string JSCodeGenerator::generate(ProgramNode* program) {
     output << "                        body: JSON.stringify({\n";
     output << "                            model: 'llama3',\n";
     output << "                            prompt: promptStr,\n";
-    output << "                            stream: false\n";
+    output << "                            stream: !!isStreaming,\n";
+    output << "                            images: imageBase64 ? [imageBase64] : undefined\n";
     output << "                        })\n";
     output << "                    });\n";
     output << "                    if (response.ok) {\n";
-    output << "                        const json = await response.json();\n";
-    output << "                        return json.response;\n";
+    output << "                        if (isStreaming) {\n";
+    output << "                            const reader = response.body.getReader();\n";
+    output << "                            const decoder = new TextDecoder(\"utf-8\");\n";
+    output << "                            let buffer = \"\";\n";
+    output << "                            let fullResponse = \"\";\n";
+    output << "                            while (true) {\n";
+    output << "                                const { value, done } = await reader.read();\n";
+    output << "                                if (done) break;\n";
+    output << "                                buffer += decoder.decode(value, { stream: true });\n";
+    output << "                                const lines = buffer.split(\"\\n\");\n";
+    output << "                                buffer = lines.pop();\n";
+    output << "                                for (const line of lines) {\n";
+    output << "                                    if (line.trim() === \"\") continue;\n";
+    output << "                                    try {\n";
+    output << "                                        const json = JSON.parse(line);\n";
+    output << "                                        if (json.response) {\n";
+    output << "                                            fullResponse += json.response;\n";
+    output << "                                            this.print(json.response);\n";
+    output << "                                        }\n";
+    output << "                                    } catch (err) {}\n";
+    output << "                                }\n";
+    output << "                            }\n";
+    output << "                            if (buffer.trim() !== \"\") {\n";
+    output << "                                try {\n";
+    output << "                                    const json = JSON.parse(buffer);\n";
+    output << "                                    if (json.response) {\n";
+    output << "                                        fullResponse += json.response;\n";
+    output << "                                        this.print(json.response);\n";
+    output << "                                    }\n";
+    output << "                                } catch (err) {}\n";
+    output << "                            }\n";
+    output << "                            this.println(\"\");\n";
+    output << "                            return fullResponse;\n";
+    output << "                        } else {\n";
+    output << "                            const json = await response.json();\n";
+    output << "                            return json.response;\n";
+    output << "                        }\n";
     output << "                    }\n";
     output << "                } catch(e) {}\n";
     output << "                this.println('[Runtime Warning] Ollama backend not reachable. Falling back to simulated completion.');\n";
-    output << "                return \"- Zenith compiles UI declarations straight to native bindings.\\n\" +\n";
-    output << "                       \"- LLM prompts are statically validated at compile-time.\\n\" +\n";
-    output << "                       \"- Zero runtime latency wrapper on top of pure C++ loops.\";\n";
+    output << "                let simulated = \"Simulated response for prompt: '\" + promptStr + \"'\";\n";
+    output << "                if (imageBase64) {\n";
+    output << "                    simulated += \" with image '\" + imagePath + \"'\";\n";
+    output << "                }\n";
+    output << "                if (isStreaming) {\n";
+    output << "                    const tokens = simulated.split(\" \");\n";
+    output << "                    let fullText = \"\";\n";
+    output << "                    for (const tok of tokens) {\n";
+    output << "                        this.print(tok + \" \");\n";
+    output << "                        await new Promise(r => setTimeout(r, 50));\n";
+    output << "                        fullText += tok + \" \";\n";
+    output << "                    }\n";
+    output << "                    this.println(\"\");\n";
+    output << "                    return fullText;\n";
+    output << "                } else {\n";
+    output << "                    return simulated;\n";
+    output << "                }\n";
     output << "            }\n";
     output << "        };\n\n";
-
     output << "        async function httpGet(url) {\n";
     output << "            zenith.println('[Network] httpGet: Fetching ' + url + '...');\n";
     output << "            try {\n";
@@ -951,6 +1088,8 @@ std::string JSCodeGenerator::generate(ProgramNode* program) {
             } else {
                 generateFunction(fn_decl);
             }
+        } else if (auto* orch_decl = dynamic_cast<AgentOrchestrationNode*>(stmt.get())) {
+            generateOrchestration(orch_decl);
         } else {
             generateStatement(stmt.get());
         }

@@ -6,6 +6,8 @@ SRC = src/main.cpp \
       src/frontend/lexer.cpp \
       src/frontend/parser.cpp \
       src/frontend/semantic.cpp \
+      src/frontend/formatter.cpp \
+      src/lsp/lsp.cpp \
       src/backend/codegen.cpp \
       src/backend/js_codegen.cpp \
       src/backend/wasm_codegen.cpp

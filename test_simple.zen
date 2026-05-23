@@ -1,6 +1,7 @@
+import std.io;
 Void main() {
     let x = 5;
     let y = 3.14;
     let name = "Zenith";
-    print("Success");
+    println("Success Reloaded");
 }

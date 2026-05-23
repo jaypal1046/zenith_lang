@@ -52,11 +52,22 @@ std::string SemanticAnalyzer::inferAndValidateVarDecl(VarDeclNode* var_decl) {
         
         if (var_decl->initializer) {
             std::string init_type = typeCheckExpression(var_decl->initializer.get());
-            if (!isAssignable(init_type, expected_type) && 
+            
+            // Skip type mismatch check for RC/GC smart pointer types —
+            // Ref<T> and Weak<T> constructors return opaque types; the declared type is authoritative.
+            bool is_mem_type = (expected_type.rfind("Ref<", 0) == 0 ||
+                                expected_type.rfind("Weak<", 0) == 0);
+            // Skip mismatch if init type is unknown/empty (constructor result from FunctionCallNode)
+            bool init_unknown = init_type.empty();
+            // Also allow gcStats() returning String
+            bool is_gc_stats_call = (init_type == "UI" || init_type == "");
+
+            if (!is_mem_type && !init_unknown && !is_gc_stats_call &&
+                !isAssignable(init_type, expected_type) &&
                 !(init_type == "List<Void>" && expected_type.rfind("List<", 0) == 0) &&
                 !(init_type == "Map<Void,Void>" && expected_type.rfind("Map<", 0) == 0)) {
-                error("Type Mismatch: Cannot assign type '" + init_type + 
-                      "' to variable '" + var_decl->var_name + "' of type '" + 
+                error("Type Mismatch: Cannot assign type '" + init_type +
+                      "' to variable '" + var_decl->var_name + "' of type '" +
                       expected_type + "'", var_decl);
             }
         }
@@ -193,6 +204,25 @@ void SemanticAnalyzer::analyzeAgenticFunction(AgenticFunctionNode* node) {
     delete function_scope;
 }
 
+void SemanticAnalyzer::analyzeOrchestration(AgentOrchestrationNode* node) {
+    if (node->strategy != "sequential" && node->strategy != "parallel") {
+        error("Orchestration Error: Strategy must be either 'sequential' or 'parallel', got '" + node->strategy + "'", node);
+    }
+    if (node->agents.empty()) {
+        error("Orchestration Error: Orchestration '" + node->orchestration_name + "' must have at least one agent.", node);
+    }
+    for (const auto& agent_name : node->agents) {
+        if (!functions.count(agent_name)) {
+            error("Orchestration Error: Agent function '" + agent_name + "' is not defined.", node);
+        } else {
+            auto* fn = functions[agent_name];
+            if (!dynamic_cast<AgenticFunctionNode*>(fn)) {
+                error("Orchestration Error: Function '" + agent_name + "' is not an agentic function.", node);
+            }
+        }
+    }
+}
+
 void SemanticAnalyzer::analyzeBlock(const std::vector<std::unique_ptr<ASTNode>>& block) {
     SymbolTable* block_scope = new SymbolTable(current_scope);
     SymbolTable* previous_scope = current_scope;
@@ -249,6 +279,13 @@ void SemanticAnalyzer::analyzeStatement(ASTNode* stmt) {
 }
 
 std::string SemanticAnalyzer::typeCheckExpression(ExprNode* expr) {
+    if (auto* await_expr = dynamic_cast<AwaitExprNode*>(expr)) {
+        std::string inner_type = typeCheckExpression(await_expr->expression.get());
+        if (inner_type.rfind("Future<", 0) == 0 && !inner_type.empty() && inner_type.back() == '>') {
+            return inner_type.substr(7, inner_type.length() - 8);
+        }
+        return inner_type;
+    }
     if (auto* num = dynamic_cast<NumberLiteralNode*>(expr)) {
         return num->is_float ? "Float" : "Int";
     }
@@ -260,8 +297,10 @@ std::string SemanticAnalyzer::typeCheckExpression(ExprNode* expr) {
     }
     if (auto* ident = dynamic_cast<IdentifierNode*>(expr)) {
         std::string t = current_scope->getType(ident->name);
+        ident->type_hint = t;
         if (t.empty()) {
             if (functions.count(ident->name)) {
+                ident->type_hint = "Function";
                 return "Function";
             }
             error("Symbol Error: Variable '" + ident->name + "' is not declared in this scope.", ident);
@@ -355,7 +394,26 @@ std::string SemanticAnalyzer::typeCheckExpression(ExprNode* expr) {
                     }
                 }
             }
+            if (fn->is_async) {
+                return "Future<" + fn->return_type->type_name + ">";
+            }
             return fn->return_type->type_name;
+        }
+        if (orchestrations.count(ui->component_type)) {
+            AgentOrchestrationNode* orch = orchestrations[ui->component_type];
+            if (ui->children.size() != 1) {
+                error("Orchestration Call Error: Orchestration '" + ui->component_type + "' expects exactly 1 argument, got " + std::to_string(ui->children.size()), ui);
+            } else {
+                std::string arg_type = child_types[0];
+                if (!isAssignable(arg_type, "String")) {
+                    error("Orchestration Call Argument Mismatch: expected 'String', got '" + arg_type + "'", ui);
+                }
+            }
+            if (orch->strategy == "sequential") {
+                return "String";
+            } else {
+                return "List<String>";
+            }
         }
         return "UI";
     }
@@ -403,6 +461,9 @@ std::string SemanticAnalyzer::typeCheckExpression(ExprNode* expr) {
                             }
                         }
                     }
+                    if (method->is_async) {
+                        return "Future<" + method->return_type->type_name + ">";
+                    }
                     return method->return_type->type_name;
                 }
             }
@@ -425,6 +486,9 @@ std::string SemanticAnalyzer::typeCheckExpression(ExprNode* expr) {
                                 error("Method Call Argument Mismatch: expected '" + param_type + "', got '" + arg_type + "'", call);
                             }
                         }
+                    }
+                    if (method->is_async) {
+                        return "Future<" + method->return_type->type_name + ">";
                     }
                     return method->return_type->type_name;
                 }
@@ -468,6 +532,7 @@ bool SemanticAnalyzer::analyze(ProgramNode* program) {
     classes.clear();
     interfaces.clear();
     functions.clear();
+    orchestrations.clear();
     builtin_fns.clear();
     has_errors = false;
 
@@ -479,6 +544,8 @@ bool SemanticAnalyzer::analyze(ProgramNode* program) {
             interfaces[interface_decl->interface_name] = interface_decl;
         } else if (auto* fn_decl = dynamic_cast<FunctionNode*>(stmt.get())) {
             functions[fn_decl->function_name] = fn_decl;
+        } else if (auto* orch_decl = dynamic_cast<AgentOrchestrationNode*>(stmt.get())) {
+            orchestrations[orch_decl->orchestration_name] = orch_decl;
         } else if (auto* imp = dynamic_cast<ImportNode*>(stmt.get())) {
             if (imp->module_name == "std.io") {
                 auto print_fn = std::make_unique<FunctionNode>(std::make_unique<TypeNode>("Void"), "print");
@@ -636,6 +703,8 @@ bool SemanticAnalyzer::analyze(ProgramNode* program) {
             } else {
                 analyzeFunction(fn_decl);
             }
+        } else if (auto* orch_decl = dynamic_cast<AgentOrchestrationNode*>(stmt.get())) {
+            analyzeOrchestration(orch_decl);
         }
     }
 

@@ -8,9 +8,15 @@
 #include <cstdlib>
 #include <memory>
 #include <array>
+#include <thread>
+#include <chrono>
+#include <regex>
+#include <algorithm>
 #include "../include/frontend/lexer.h"
 #include "../include/frontend/parser.h"
 #include "../include/frontend/semantic.h"
+#include "../include/frontend/formatter.h"
+#include "../include/lsp/lsp.h"
 #include "../include/backend/codegen.h"
 #include "../include/backend/js_codegen.h"
 #include "../include/backend/wasm_codegen.h"
@@ -1784,6 +1790,302 @@ int main(int argc, char* argv[]) {
         }
         std::string platform = argv[2];
         return runPlatformProject(platform, argv[0]);
+    }
+
+    // LSP subcommand
+    if (argc >= 2 && (std::string(argv[1]) == "lsp" || std::string(argv[1]) == "--lsp")) {
+        runLspServer();
+        return 0;
+    }
+
+    // Format subcommand
+    if (argc >= 2 && std::string(argv[1]) == "format") {
+        bool write_in_place = false;
+        std::string target_file = "";
+        for (int i = 2; i < argc; ++i) {
+            std::string arg = argv[i];
+            if (arg == "-w" || arg == "--write") {
+                write_in_place = true;
+            } else {
+                target_file = arg;
+            }
+        }
+        if (target_file.empty()) {
+            std::cerr << "Usage: zenith format [-w] <file.zen>\n";
+            return 1;
+        }
+
+        std::ifstream file(target_file);
+        if (!file.is_open()) {
+            std::cerr << "Error: Could not open file " << target_file << "\n";
+            return 1;
+        }
+        std::stringstream buffer;
+        buffer << file.rdbuf();
+        std::string code = buffer.str();
+        file.close();
+
+        Lexer lexer(code);
+        auto tokens = lexer.tokenize();
+        Parser parser(tokens);
+        auto ast = parser.parseProgram();
+        if (!ast) {
+            std::cerr << "Format Error: Could not parse AST.\n";
+            return 1;
+        }
+
+        Formatter formatter;
+        std::string formatted = formatter.format(ast.get());
+
+        if (write_in_place) {
+            std::ofstream out_file(target_file);
+            if (!out_file.is_open()) {
+                std::cerr << "Error: Could not write to file " << target_file << "\n";
+                return 1;
+            }
+            out_file << formatted;
+            out_file.close();
+            std::cout << "Formatted file: " << target_file << "\n";
+        } else {
+            std::cout << formatted;
+        }
+        return 0;
+    }
+
+    // Helper functions for Package Manager
+    auto getPackageName = [](std::string url) -> std::string {
+        while (!url.empty() && (url.back() == '/' || url.back() == '\\')) {
+            url.pop_back();
+        }
+        if (url.length() > 4 && url.substr(url.length() - 4) == ".git") {
+            url = url.substr(0, url.length() - 4);
+        }
+        size_t last_slash = url.find_last_of("/\\");
+        if (last_slash != std::string::npos) {
+            return url.substr(last_slash + 1);
+        }
+        return url;
+    };
+
+    // Install subcommand
+    if (argc >= 2 && std::string(argv[1]) == "install") {
+        std::string url = "";
+        if (argc >= 3) {
+            url = argv[2];
+        }
+
+        namespace fs = std::filesystem;
+        fs::create_directories("lib");
+
+        if (!url.empty()) {
+            std::string package_name = getPackageName(url);
+            std::string target_dir = "lib/" + package_name;
+            std::string cmd = "git clone " + url + " " + target_dir;
+            std::cout << "Installing package " << package_name << " from " << url << "...\n";
+            int result = system(cmd.c_str());
+            if (result != 0) {
+                std::cerr << "Error: Git clone failed with code " << result << "\n";
+                return 1;
+            }
+            std::cout << "[OK] Package " << package_name << " installed successfully under " << target_dir << ".\n";
+
+            // Update zenith.json
+            std::ifstream f_in("zenith.json");
+            std::string content = "";
+            if (f_in.is_open()) {
+                std::stringstream buffer;
+                buffer << f_in.rdbuf();
+                content = buffer.str();
+                f_in.close();
+            }
+
+            if (content.empty()) {
+                std::ofstream f_out("zenith.json");
+                f_out << "{\n  \"dependencies\": {\n    \"" << package_name << "\": \"" << url << "\"\n  }\n}\n";
+                f_out.close();
+            } else {
+                if (content.find(url) == std::string::npos) {
+                    size_t deps = content.find("\"dependencies\"");
+                    if (deps != std::string::npos) {
+                        size_t closing_brace = content.find("}", deps);
+                        if (closing_brace != std::string::npos) {
+                            size_t last_comma_search = content.rfind("\"", closing_brace);
+                            std::string comma = "";
+                            if (last_comma_search != std::string::npos && last_comma_search > deps) {
+                                comma = ",\n";
+                            }
+                            std::string insertion = comma + "    \"" + package_name + "\": \"" + url + "\"";
+                            content.insert(closing_brace, insertion);
+                            std::ofstream f_out("zenith.json");
+                            f_out << content;
+                            f_out.close();
+                        }
+                    } else {
+                        std::ofstream f_out("zenith.json");
+                        f_out << "{\n  \"dependencies\": {\n    \"" << package_name << "\": \"" << url << "\"\n  }\n}\n";
+                        f_out.close();
+                    }
+                }
+            }
+        } else {
+            // Restore all packages from zenith.json
+            std::ifstream f_in("zenith.json");
+            if (!f_in.is_open()) {
+                std::cerr << "Usage: zenith install <package-url> OR create zenith.json dependencies.\n";
+                return 1;
+            }
+            std::stringstream buffer;
+            buffer << f_in.rdbuf();
+            std::string content = buffer.str();
+            f_in.close();
+
+            std::regex dep_regex("\"([a-zA-Z0-9_\\-]+)\"\\s*:\\s*\"([^\"]+)\"");
+            auto words_begin = std::sregex_iterator(content.begin(), content.end(), dep_regex);
+            auto words_end = std::sregex_iterator();
+            for (std::sregex_iterator i = words_begin; i != words_end; ++i) {
+                std::string dep_name = (*i)[1].str();
+                std::string dep_url = (*i)[2].str();
+                if (dep_name == "dependencies") continue;
+                
+                std::string target_dir = "lib/" + dep_name;
+                if (!fs::exists(target_dir)) {
+                    std::string cmd = "git clone " + dep_url + " " + target_dir;
+                    std::cout << "Installing missing dependency " << dep_name << " from " << dep_url << "...\n";
+                    system(cmd.c_str());
+                } else {
+                    std::cout << "Dependency " << dep_name << " is already installed.\n";
+                }
+            }
+        }
+        return 0;
+    }
+
+    // Watch subcommand
+    if (argc >= 2 && std::string(argv[1]) == "watch") {
+        if (argc < 3) {
+            std::cerr << "Usage: zenith watch <file.zen> [-target <cpp|web|wasm>]\n";
+            return 1;
+        }
+        std::string watch_file = argv[2];
+        std::string watch_target = "cpp";
+        for (int i = 3; i < argc; ++i) {
+            if (std::string(argv[i]) == "-target" && i + 1 < argc) {
+                watch_target = argv[i + 1];
+                i++;
+            }
+        }
+
+        namespace fs = std::filesystem;
+        std::string watch_dir = fs::path(watch_file).parent_path().string();
+        if (watch_dir.empty()) watch_dir = ".";
+
+        std::unordered_map<std::string, fs::file_time_type> file_times;
+        
+        auto scan_files = [&](const std::string& dir, std::unordered_map<std::string, fs::file_time_type>& times) -> bool {
+            bool changed = false;
+            std::vector<std::string> current_files;
+            
+            try {
+                for (const auto& entry : fs::recursive_directory_iterator(dir)) {
+                    if (entry.is_regular_file() && entry.path().extension() == ".zen") {
+                        std::string path_str = entry.path().string();
+                        current_files.push_back(path_str);
+                        
+                        auto mtime = fs::last_write_time(entry);
+                        if (times.find(path_str) == times.end()) {
+                            times[path_str] = mtime;
+                            changed = true;
+                        } else if (times[path_str] != mtime) {
+                            times[path_str] = mtime;
+                            changed = true;
+                        }
+                    }
+                }
+            } catch (...) {}
+            
+            for (auto it = times.begin(); it != times.end(); ) {
+                if (std::find(current_files.begin(), current_files.end(), it->first) == current_files.end()) {
+                    it = times.erase(it);
+                    changed = true;
+                } else {
+                    ++it;
+                }
+            }
+            return changed;
+        };
+
+        std::cout << "[Watcher] Monitoring files in " << watch_dir << " for modifications. Target: " << watch_target << "\n";
+        
+        // Initial scan
+        scan_files(watch_dir, file_times);
+
+        // Run compile once first
+        std::cout << "[Watcher] Initial compilation...\n";
+        if (compileProject(watch_file, watch_target)) {
+            if (watch_target == "cpp") {
+                std::string out_cpp = watch_file.substr(0, watch_file.length() - 4) + ".cpp";
+                std::string out_exe = watch_file.substr(0, watch_file.length() - 4) + (fs::path(watch_file).extension() == "" ? "" : ".exe");
+                
+#ifdef _WIN32
+                std::string compile_cmd = "g++ -O3 -std=c++17 " + out_cpp + " -I include -o " + out_exe + " -lwinhttp";
+#else
+                std::string compile_cmd = "g++ -O3 -std=c++17 " + out_cpp + " -I include -o " + out_exe + " -lpthread";
+#endif
+                std::cout << "[Watcher] Building executable: " << compile_cmd << "\n";
+                int build_res = system(compile_cmd.c_str());
+                if (build_res == 0) {
+                    std::cout << "[Watcher] Starting application...\n";
+#ifdef _WIN32
+                    std::string run_cmd = "start /B " + out_exe;
+#else
+                    std::string run_cmd = "./" + out_exe + " &";
+#endif
+                    system(run_cmd.c_str());
+                }
+            }
+        }
+
+        while (true) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+            if (scan_files(watch_dir, file_times)) {
+#ifdef _WIN32
+                system("cls");
+#else
+                system("clear");
+#endif
+                std::cout << "[Watcher] Changes detected! Recompiling...\n";
+                if (compileProject(watch_file, watch_target)) {
+                    if (watch_target == "cpp") {
+                        std::string out_cpp = watch_file.substr(0, watch_file.length() - 4) + ".cpp";
+                        std::string out_exe = watch_file.substr(0, watch_file.length() - 4) + (fs::path(watch_file).extension() == "" ? "" : ".exe");
+                        
+#ifdef _WIN32
+                        std::string compile_cmd = "g++ -O3 -std=c++17 " + out_cpp + " -I include -o " + out_exe + " -lwinhttp";
+                        std::string kill_cmd = "taskkill /F /IM " + fs::path(out_exe).filename().string() + " >nul 2>&1";
+#else
+                        std::string compile_cmd = "g++ -O3 -std=c++17 " + out_cpp + " -I include -o " + out_exe + " -lpthread";
+                        std::string kill_cmd = "killall " + fs::path(out_exe).filename().string() + " >/dev/null 2>&1";
+#endif
+                        std::cout << "[Watcher] Rebuilding executable: " << compile_cmd << "\n";
+                        int build_res = system(compile_cmd.c_str());
+                        if (build_res == 0) {
+                            std::cout << "[Watcher] Terminating running instance...\n";
+                            system(kill_cmd.c_str());
+                            std::cout << "[Watcher] Restarting application...\n";
+#ifdef _WIN32
+                            std::string run_cmd = "start /B " + out_exe;
+#else
+                            std::string run_cmd = "./" + out_exe + " &";
+#endif
+                            system(run_cmd.c_str());
+                        }
+                    } else {
+                        std::cout << "[Watcher] Target assets updated.\n";
+                    }
+                }
+            }
+        }
+        return 0;
     }
 
     std::string target = "cpp";

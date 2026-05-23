@@ -4,6 +4,9 @@
 // Include common Definitions
 #include "zenith/common/zenith_common.h"
 
+// Include Hybrid RC + GC Memory Management
+#include "zenith/memory/zenith_memory.h"
+
 // Platform-Specific Dispatcher
 #if defined(__ANDROID__)
     #include "zenith/android/zenith_android.h"

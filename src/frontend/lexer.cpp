@@ -41,7 +41,7 @@ void Lexer::skipWhitespaceAndComments() {
 
 bool Lexer::isKeyword(std::string_view text) const {
     static const std::vector<std::string_view> keywords = {
-        "agentic", "if", "else", "return", "class", "while", "for", "struct", "import", "await", "setState", "interface", "implements", "let"
+        "agentic", "async", "if", "else", "return", "class", "while", "for", "struct", "import", "await", "setState", "interface", "implements", "let", "orchestration"
     };
     for (auto k : keywords) if (text == k) return true;
     return false;
@@ -49,7 +49,8 @@ bool Lexer::isKeyword(std::string_view text) const {
 
 bool Lexer::isType(std::string_view text) const {
     static const std::vector<std::string_view> types = {
-        "Int", "Float", "Bool", "String", "Void", "UI", "List", "Map"
+        "Int", "Float", "Bool", "String", "Void", "UI", "List", "Map",
+        "Ref", "Weak"  // Memory management smart pointer types
     };
     for (auto t : types) if (text == t) return true;
     return false;
@@ -76,6 +77,24 @@ std::vector<Token> Lexer::tokenize() {
             else if (isType(text)) type = TokenType::TYPE;
             
             tokens.push_back({type, text, start_line, start_col});
+            continue;
+        }
+
+        // @annotation tokens: @managed, @weak, @gc_root
+        if (c == '@') {
+            advance(); // consume '@'
+            size_t ann_start = pos;
+            while (std::isalnum(peek()) || peek() == '_') advance();
+            std::string_view ann_text = source.substr(ann_start, pos - ann_start);
+            // Store as KEYWORD with the full @name for easy parser matching
+            std::string full_ann = "@" + std::string(ann_text);
+            // We need to store this - use a persistent string storage trick via the source
+            // We emit as a KEYWORD token with value stored in a side table
+            // Simplest: emit as ID type with leading @ preserved in value
+            // We'll use TokenType::KEYWORD for @ annotations
+            tokens.push_back({TokenType::KEYWORD,
+                              source.substr(start_pos, pos - start_pos),
+                              start_line, start_col});
             continue;
         }
 

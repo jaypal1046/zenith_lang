@@ -49,6 +49,7 @@ private:
     std::unordered_map<std::string, ClassDeclNode*> classes;
     std::unordered_map<std::string, InterfaceDeclNode*> interfaces;
     std::unordered_map<std::string, FunctionNode*> functions;
+    std::unordered_map<std::string, AgentOrchestrationNode*> orchestrations;
 
     void error(const std::string& msg, ASTNode* node = nullptr) {
         std::cerr << "[Semantic Error]";
@@ -60,6 +61,7 @@ private:
     }
 
     void analyzeAgenticFunction(AgenticFunctionNode* node);
+    void analyzeOrchestration(AgentOrchestrationNode* node);
     void analyzeFunction(FunctionNode* node);
     void analyzeStatement(ASTNode* stmt);
     void analyzeBlock(const std::vector<std::unique_ptr<ASTNode>>& block);

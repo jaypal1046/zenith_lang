@@ -32,9 +32,10 @@ private:
     std::unique_ptr<IfStmtNode> parseIfStatement();
     std::unique_ptr<WhileStmtNode> parseWhileStatement();
 
-    std::unique_ptr<FunctionNode> parseFunction(bool is_agentic, std::unique_ptr<TypeNode> return_type);
-    std::unique_ptr<ClassDeclNode> parseClass();
+    std::unique_ptr<FunctionNode> parseFunction(bool is_agentic, bool is_async, std::unique_ptr<TypeNode> return_type);
+    std::unique_ptr<ClassDeclNode> parseClass(bool is_managed = false);
     std::unique_ptr<InterfaceDeclNode> parseInterface();
+    std::unique_ptr<AgentOrchestrationNode> parseOrchestration();
 
     template<typename T>
     std::unique_ptr<T> locate(std::unique_ptr<T> node, const Token& tok) {

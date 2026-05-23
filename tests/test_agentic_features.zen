@@ -1,0 +1,51 @@
+// Test Agentic Features: Streaming, Multimodal, and Orchestration
+import std.io;
+
+agentic String streamAgent(String query) {
+    prompt: "You are a streaming assistant. Query: {query}",
+    streaming: true,
+    model: "llama3"
+}
+
+agentic String visionAgent(String query, String imagePath) {
+    prompt: "Look at this image {imagePath} and answer: {query}",
+    multimodal: true,
+    model: "llava"
+}
+
+agentic String summaryAgent(String text) {
+    prompt: "Summarize this: {text}",
+    streaming: false,
+    model: "llama3"
+}
+
+orchestration sequentialPipe {
+    agents: [streamAgent, summaryAgent],
+    strategy: "sequential"
+}
+
+orchestration parallelPipe {
+    agents: [streamAgent, summaryAgent],
+    strategy: "parallel"
+}
+
+Void main() {
+    println("=== Zenith Agentic Features Test ===");
+
+    println("\n[Test 1] Streaming Agent:");
+    String resStream = streamAgent("Hello stream agent");
+    println("Final Stream Output: " + resStream);
+
+    println("\n[Test 2] Multimodal Agent:");
+    String resVision = visionAgent("What is in this image?", "tests/screen.png");
+    println("Vision Agent Output: " + resVision);
+
+    println("\n[Test 3] Sequential Orchestration:");
+    String resSeq = sequentialPipe("Initial pipeline input");
+    println("Sequential Pipeline Result: " + resSeq);
+
+    println("\n[Test 4] Parallel Orchestration:");
+    List<String> resPar = parallelPipe("Initial parallel input");
+    println("Parallel Pipeline executed successfully.");
+    println("=== All Tests Completed ===");
+}

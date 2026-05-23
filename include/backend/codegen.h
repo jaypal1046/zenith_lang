@@ -14,6 +14,8 @@ private:
     std::unordered_set<std::string> interface_names;
     std::unordered_set<std::string> function_names;
     bool is_inside_class_method = false;
+    bool is_generating_async_function = false;
+    std::string current_async_promise_name = "promise";
 
     void indent();
     std::string mapType(TypeNode* type);
@@ -23,6 +25,7 @@ private:
     void generateInterface(InterfaceDeclNode* node);
     void generateFunction(FunctionNode* node);
     void generateAgenticFunction(AgenticFunctionNode* node);
+    void generateOrchestration(AgentOrchestrationNode* node);
     void generateStatement(ASTNode* stmt);
     std::string generateExpression(ExprNode* expr);
 

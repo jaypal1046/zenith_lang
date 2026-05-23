@@ -8,6 +8,9 @@
 #include <unistd.h>
 #include <netdb.h>
 #include <termios.h>
+#include <thread>
+#include <chrono>
+#include <functional>
 
 namespace zenith {
 
@@ -140,6 +143,95 @@ inline bool posix_post(const std::string& host, int port, const std::string& pat
     return false;
 }
 
+inline bool posix_post_stream(const std::string& host, int port, const std::string& path, const std::string& json_body, std::function<void(const std::string&)> callback) {
+    int sock = socket(AF_INET, SOCK_STREAM, 0);
+    if (sock < 0) return false;
+
+    struct hostent* server = gethostbyname(host.c_str());
+    if (!server) {
+        close(sock);
+        return false;
+    }
+
+    struct sockaddr_in serv_addr;
+    std::memset(&serv_addr, 0, sizeof(serv_addr));
+    serv_addr.sin_family = AF_INET;
+    std::memcpy(&serv_addr.sin_addr.s_addr, server->h_addr, server->h_length);
+    serv_addr.sin_port = htons(port);
+
+    struct timeval tv;
+    tv.tv_sec = 5;
+    tv.tv_usec = 0;
+    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof(tv));
+    setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, (const char*)&tv, sizeof(tv));
+
+    if (connect(sock, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) < 0) {
+        close(sock);
+        return false;
+    }
+
+    std::stringstream req;
+    req << "POST " << path << " HTTP/1.1\r\n"
+        << "Host: " << host << ":" << port << "\r\n"
+        << "Content-Type: application/json\r\n"
+        << "Content-Length: " << json_body.length() << "\r\n"
+        << "Connection: close\r\n\r\n"
+        << json_body;
+
+    std::string req_str = req.str();
+    if (send(sock, req_str.c_str(), req_str.length(), 0) < 0) {
+        close(sock);
+        return false;
+    }
+
+    char buffer[4096];
+    std::string response_buffer;
+    int bytes_read;
+    bool in_body = false;
+    std::string line_buffer;
+
+    while ((bytes_read = recv(sock, buffer, sizeof(buffer) - 1, 0)) > 0) {
+        buffer[bytes_read] = '\0';
+        response_buffer.append(buffer, bytes_read);
+
+        if (!in_body) {
+            size_t body_pos_idx = response_buffer.find("\r\n\r\n");
+            if (body_pos_idx != std::string::npos) {
+                in_body = true;
+                std::string body_part = response_buffer.substr(body_pos_idx + 4);
+                response_buffer = body_part;
+            }
+        }
+
+        if (in_body) {
+            for (char c : response_buffer) {
+                if (c == '\n') {
+                    if (!line_buffer.empty()) {
+                        std::string response_chunk = extract_json_field(line_buffer, "response");
+                        if (!response_chunk.empty()) {
+                            callback(response_chunk);
+                        }
+                        line_buffer.clear();
+                    }
+                } else {
+                    line_buffer.push_back(c);
+                }
+            }
+            response_buffer.clear();
+        }
+    }
+
+    if (!line_buffer.empty()) {
+        std::string response_chunk = extract_json_field(line_buffer, "response");
+        if (!response_chunk.empty()) {
+            callback(response_chunk);
+        }
+    }
+
+    close(sock);
+    return true;
+}
+
 inline std::string httpGet(const std::string& url) {
     std::string response;
     bool success = false;
@@ -256,8 +348,12 @@ private:
     std::string endpoint;
 public:
     LLMClient(std::string url) : endpoint(std::move(url)) {}
-    std::string prompt(const std::string& prompt_str) {
+    
+    std::string prompt(const std::string& prompt_str, const std::string& image_path = "") {
         std::cout << "\n[POSIX LLM] Sending prompt to local backend (" << endpoint << "): \"" << prompt_str << "\"\n";
+        if (!image_path.empty()) {
+            std::cout << "[POSIX LLM] Attaching image: " << image_path << "\n";
+        }
         std::string escaped_prompt;
         for (char c : prompt_str) {
             if (c == '"') escaped_prompt += "\\\"";
@@ -266,7 +362,16 @@ public:
             else if (c == '\r') escaped_prompt += "\\r";
             else escaped_prompt += c;
         }
-        std::string json_body = "{\"model\": \"llama3\", \"prompt\": \"" + escaped_prompt + "\", \"stream\": false}";
+        
+        std::string images_json = "";
+        if (!image_path.empty()) {
+            std::string b64 = zenith::base64_encode_file(image_path);
+            if (!b64.empty()) {
+                images_json = ", \"images\": [\"" + b64 + "\"]";
+            }
+        }
+        
+        std::string json_body = "{\"model\": \"llama3\", \"prompt\": \"" + escaped_prompt + "\", \"stream\": false" + images_json + "}";
         std::string raw_response;
         bool success = false;
 #ifdef USE_CURL
@@ -282,7 +387,74 @@ public:
             std::string ai_response = extract_json_field(raw_response, "response");
             if (!ai_response.empty()) return ai_response;
         }
-        return "POSIX LLM Offline Fallback";
+        
+        // High-fidelity simulation mode when offline/failed
+        std::cout << "[POSIX LLM Simulation] (Offline Fallback)\n";
+        std::string simulated_resp = "Simulated response for prompt: '" + prompt_str + "'";
+        if (!image_path.empty()) {
+            simulated_resp += " with image '" + image_path + "'";
+        }
+        return simulated_resp;
+    }
+
+    std::string promptStream(const std::string& prompt_str, std::function<void(const std::string&)> callback, const std::string& image_path = "") {
+        std::cout << "\n[POSIX LLM Stream] Sending prompt to local backend (" << endpoint << "): \"" << prompt_str << "\"\n";
+        if (!image_path.empty()) {
+            std::cout << "[POSIX LLM Stream] Attaching image: " << image_path << "\n";
+        }
+        std::string escaped_prompt;
+        for (char c : prompt_str) {
+            if (c == '"') escaped_prompt += "\\\"";
+            else if (c == '\\') escaped_prompt += "\\\\";
+            else if (c == '\n') escaped_prompt += "\\n";
+            else if (c == '\r') escaped_prompt += "\\r";
+            else escaped_prompt += c;
+        }
+        
+        std::string images_json = "";
+        if (!image_path.empty()) {
+            std::string b64 = zenith::base64_encode_file(image_path);
+            if (!b64.empty()) {
+                images_json = ", \"images\": [\"" + b64 + "\"]";
+            }
+        }
+        
+        std::string json_body = "{\"model\": \"llama3\", \"prompt\": \"" + escaped_prompt + "\", \"stream\": true" + images_json + "}";
+        
+        std::string accumulated;
+        auto stream_callback = [&](const std::string& chunk) {
+            accumulated += chunk;
+            callback(chunk);
+        };
+        
+        bool success = false;
+        std::string host, path;
+        int port = 80;
+        parse_url(endpoint, host, port, path);
+        if (path == "/") path = "/api/generate";
+        
+        success = posix_post_stream(host, port, path, json_body, stream_callback);
+        
+        if (success && !accumulated.empty()) {
+            return accumulated;
+        }
+        
+        // High-fidelity simulation mode when offline/failed
+        std::cout << "[POSIX LLM Stream Simulation] (Offline Fallback)\n";
+        std::string simulated_resp = "Simulated streaming response for prompt: '" + prompt_str + "'";
+        if (!image_path.empty()) {
+            simulated_resp += " with image '" + image_path + "'";
+        }
+        
+        // Output token by token with micro-delays
+        std::string word;
+        std::stringstream ss(simulated_resp);
+        while (ss >> word) {
+            callback(word + " ");
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        }
+        callback("\n");
+        return simulated_resp + "\n";
     }
 };
 

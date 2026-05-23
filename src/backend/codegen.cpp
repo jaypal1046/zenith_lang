@@ -19,6 +19,10 @@ std::string CodeGenerator::mapType(TypeNode* type) {
     else if (base == "UI") base = "zenith::UIElement";
     else if (base == "List") base = "std::vector";
     else if (base == "Map") base = "std::unordered_map";
+    else if (base == "Future") base = "zenith::stdlib::Future";
+    else if (base == "Promise") base = "zenith::stdlib::Promise";
+    else if (base == "Ref") base = "zenith::mem::Ref";
+    else if (base == "Weak") base = "zenith::mem::Weak";
 
     if (!type->generics.empty()) {
         base += "<";
@@ -34,6 +38,9 @@ std::string CodeGenerator::mapType(TypeNode* type) {
 std::string CodeGenerator::generateExpression(ExprNode* expr) {
     if (!expr) return "";
     
+    if (auto* await_expr = dynamic_cast<AwaitExprNode*>(expr)) {
+        return "(" + generateExpression(await_expr->expression.get()) + ").get()";
+    }
     if (auto* id = dynamic_cast<IdentifierNode*>(expr)) {
         return id->name;
     }
@@ -100,6 +107,35 @@ std::string CodeGenerator::generateExpression(ExprNode* expr) {
         for (size_t i = 0; i < call->arguments.size(); ++i) {
             res += generateExpression(call->arguments[i].get());
             if (i < call->arguments.size() - 1) res += ", ";
+        }
+        res += ")";
+        return res;
+    }
+    if (auto* fcall = dynamic_cast<FunctionCallNode*>(expr)) {
+        std::string fname = fcall->function_name;
+        // Map Ref<T>(...) constructor to zenith::mem::make_ref<T>(...)
+        // The actual type was stored as just "Ref" in function_name
+        if (fname == "Ref") {
+            // Handled at VarDecl level via make_ref<T>() — fallback generic call
+            std::string res = fname + "(";
+            for (size_t i = 0; i < fcall->arguments.size(); ++i) {
+                res += generateExpression(fcall->arguments[i].get());
+                if (i < fcall->arguments.size() - 1) res += ", ";
+            }
+            res += ")";
+            return res;
+        }
+        if (fname == "Weak") {
+            std::string res = "zenith::mem::Weak<zenith::mem::Managed>(";
+            if (!fcall->arguments.empty()) res += generateExpression(fcall->arguments[0].get());
+            res += ")";
+            return res;
+        }
+        // Generic FunctionCallNode — emit as regular C++ function call
+        std::string res = fname + "(";
+        for (size_t i = 0; i < fcall->arguments.size(); ++i) {
+            res += generateExpression(fcall->arguments[i].get());
+            if (i < fcall->arguments.size() - 1) res += ", ";
         }
         res += ")";
         return res;
@@ -179,7 +215,17 @@ void CodeGenerator::generateStatement(ASTNode* stmt) {
     
     if (auto* return_stmt = dynamic_cast<ReturnStmtNode*>(stmt)) {
         indent();
-        output << "return " << generateExpression(return_stmt->expression.get()) << ";\n";
+        if (is_generating_async_function) {
+            if (return_stmt->expression) {
+                output << current_async_promise_name << "->set_value(" << generateExpression(return_stmt->expression.get()) << ");\n";
+            } else {
+                output << current_async_promise_name << "->set_value();\n";
+            }
+            indent();
+            output << "return;\n";
+        } else {
+            output << "return " << generateExpression(return_stmt->expression.get()) << ";\n";
+        }
     } else if (auto* var_decl = dynamic_cast<VarDeclNode*>(stmt)) {
         indent();
         std::string type_name = var_decl->type->type_name;
@@ -205,6 +251,35 @@ void CodeGenerator::generateStatement(ASTNode* stmt) {
                 output << "auto " << var_decl->var_name;
                 if (var_decl->initializer) {
                     output << " = " << generateExpression(var_decl->initializer.get());
+                }
+                output << ";\n";
+            } else if (var_decl->type && (var_decl->type->type_name == "Ref" || var_decl->type->type_name == "Weak")
+                       && !var_decl->type->generics.empty()) {
+                // RC/GC smart pointer variable declaration
+                std::string inner_type = mapType(var_decl->type->generics[0].get());
+                std::string cpp_type   = mapType(var_decl->type.get());
+                output << cpp_type << " " << var_decl->var_name;
+                if (var_decl->initializer) {
+                    if (var_decl->type->type_name == "Ref") {
+                        // Ref<T> varname = Ref<T>(args...) → make_ref<T>(args...)
+                        auto* fcall = dynamic_cast<FunctionCallNode*>(var_decl->initializer.get());
+                        if (fcall) {
+                            output << " = zenith::mem::make_ref<" << inner_type << ">(";
+                            for (size_t i = 0; i < fcall->arguments.size(); ++i) {
+                                output << generateExpression(fcall->arguments[i].get());
+                                if (i < fcall->arguments.size() - 1) output << ", ";
+                            }
+                            output << ")";
+                        } else {
+                            // Ref from another Ref (copy)
+                            output << " = " << generateExpression(var_decl->initializer.get());
+                        }
+                    } else {
+                        // Weak<T> varname = someRef → zenith::mem::Weak<T>(someRef)
+                        output << " = zenith::mem::Weak<" << inner_type << ">(";
+                        output << generateExpression(var_decl->initializer.get());
+                        output << ")";
+                    }
                 }
                 output << ";\n";
             } else {
@@ -287,10 +362,62 @@ void CodeGenerator::generateAgenticFunction(AgenticFunctionNode* node) {
         indent(); output << "prompt = std::regex_replace(prompt, std::regex(\"\\\\{" << placeholder << "\\\\}\"), " << placeholder << ");\n";
     }
 
+    std::string image_path_var = "";
+    if (node->is_multimodal) {
+        for (const auto& param : node->parameters) {
+            std::string name = param->var_name;
+            if (name.find("image") != std::string::npos || name.find("img") != std::string::npos || name.find("file") != std::string::npos) {
+                image_path_var = name;
+                break;
+            }
+        }
+        if (image_path_var.empty() && !node->parameters.empty()) {
+            image_path_var = node->parameters.back()->var_name;
+        }
+    }
+
     indent(); output << "zenith::LLMClient client(\"http://localhost:11434/api/generate\");\n";
-    indent(); output << "std::string response = client.prompt(prompt);\n";
+    if (node->is_streaming) {
+        indent(); output << "std::string response = client.promptStream(prompt, [](const std::string& chunk) { std::cout << chunk << std::flush; }";
+        if (!image_path_var.empty()) {
+            output << ", " << image_path_var;
+        }
+        output << ");\n";
+    } else {
+        indent(); output << "std::string response = client.prompt(prompt";
+        if (!image_path_var.empty()) {
+            output << ", " << image_path_var;
+        }
+        output << ");\n";
+    }
     indent(); output << "return response;\n";
     
+    indent_level--;
+    indent(); output << "}\n\n";
+}
+
+void CodeGenerator::generateOrchestration(AgentOrchestrationNode* node) {
+    indent();
+    if (node->strategy == "sequential") {
+        output << "std::string " << node->orchestration_name << "(std::string input) {\n";
+        indent_level++;
+        indent(); output << "std::string current_val = input;\n";
+        for (const auto& agent : node->agents) {
+            indent(); output << "current_val = " << agent << "(current_val);\n";
+        }
+        indent(); output << "return current_val;\n";
+    } else {
+        output << "std::vector<std::string> " << node->orchestration_name << "(std::string input) {\n";
+        indent_level++;
+        for (size_t i = 0; i < node->agents.size(); ++i) {
+            indent(); output << "auto f" << i << " = std::async(std::launch::async, " << node->agents[i] << ", input);\n";
+        }
+        indent(); output << "std::vector<std::string> results;\n";
+        for (size_t i = 0; i < node->agents.size(); ++i) {
+            indent(); output << "results.push_back(f" << i << ".get());\n";
+        }
+        indent(); output << "return results;\n";
+    }
     indent_level--;
     indent(); output << "}\n\n";
 }
@@ -300,7 +427,11 @@ void CodeGenerator::generateFunction(FunctionNode* node) {
     if (node->function_name == "main") {
         output << "int main(";
     } else {
-        output << mapType(node->return_type.get()) << " " << node->function_name << "(";
+        if (node->is_async) {
+            output << "zenith::stdlib::Future<" << mapType(node->return_type.get()) << "> " << node->function_name << "(";
+        } else {
+            output << mapType(node->return_type.get()) << " " << node->function_name << "(";
+        }
     }
     
     for (size_t i = 0; i < node->parameters.size(); ++i) {
@@ -338,22 +469,93 @@ void CodeGenerator::generateFunction(FunctionNode* node) {
     output << ") {\n";
     
     indent_level++;
+
+    // For main(): inject GC lifecycle management at top
+    bool is_main = (node->function_name == "main");
+    if (is_main) {
+        indent(); output << "// --- Zenith RC+GC Memory Manager: Start background cycle collector ---\n";
+        indent(); output << "zenith::mem::GcHeap::instance().start_background_gc(5000);\n\n";
+    }
+    
+    if (node->is_async) {
+        std::string cpp_ret_type = mapType(node->return_type.get());
+        indent();
+        output << "auto _promise = std::make_shared<zenith::stdlib::Promise<" << cpp_ret_type << ">>();\n";
+        indent();
+        output << "std::thread([_promise";
+        if (is_inside_class_method) {
+            output << ", this";
+        }
+        for (const auto& param : node->parameters) {
+            output << ", " << param->var_name;
+        }
+        output << "]() mutable {\n";
+        indent_level++;
+        indent();
+        output << "try {\n";
+        indent_level++;
+        
+        is_generating_async_function = true;
+        current_async_promise_name = "_promise";
+    }
+    
     for (const auto& stmt : node->body) {
         generateStatement(stmt.get());
     }
+    
+    if (node->is_async) {
+        is_generating_async_function = false;
+        
+        if (mapType(node->return_type.get()) == "void") {
+            indent();
+            output << "_promise->set_value();\n";
+        }
+        
+        indent_level--;
+        indent(); output << "} catch (...) {\n";
+        indent_level++;
+        indent(); output << "_promise->set_exception(std::current_exception());\n";
+        indent_level--;
+        indent(); output << "}\n";
+        
+        indent_level--;
+        indent(); output << "}).detach();\n";
+        indent(); output << "return _promise->get_future();\n";
+    }
+    
     indent_level--;
     
+    // For main(): inject GC epilogue — stop background thread, do final sweep, print stats
+    if (is_main) {
+        indent(); output << "\n";
+        indent(); output << "// --- Zenith RC+GC Memory Manager: Shutdown ---\n";
+        indent(); output << "zenith::mem::GcHeap::instance().stop_background_gc();\n";
+        indent(); output << "zenith::mem::GcHeap::instance().collect(); // Final cycle sweep\n";
+        output << "#ifdef ZENITH_GC_STATS\n";
+        indent(); output << "std::cout << zenith::mem::gcStatsString() << std::endl;\n";
+        output << "#endif\n";
+    }
+
     indent(); output << "}\n\n";
 }
 
 void CodeGenerator::generateClass(ClassDeclNode* node) {
     indent();
     output << "class " << node->class_name;
-    if (!node->implemented_interfaces.empty()) {
+
+    // Inheritance: @managed → zenith::mem::Managed; interfaces follow
+    bool has_base = node->is_managed || !node->implemented_interfaces.empty();
+    if (has_base) {
         output << " : ";
+        bool first = true;
+        if (node->is_managed) {
+            output << "public zenith::mem::Managed";
+            first = false;
+        }
         for (size_t i = 0; i < node->implemented_interfaces.size(); ++i) {
+            if (!first) output << ", ";
             output << "public " << node->implemented_interfaces[i];
-            if (i < node->implemented_interfaces.size() - 1) output << ", ";
+            first = false;
         }
     }
     output << " {\n";
@@ -392,7 +594,24 @@ void CodeGenerator::generateClass(ClassDeclNode* node) {
             if (i < node->primary_constructor_args.size() - 1) output << ", ";
         }
     }
-    output << " {}\n\n";
+    output << " {}\n";
+
+    // @managed: generate GC child enumeration override
+    if (node->is_managed) {
+        output << "\n";
+        indent(); output << "void __gc_enumerate(std::vector<zenith::mem::RcBlock*>& out) override {\n";
+        indent_level++;
+        for (const auto& field : node->fields) {
+            std::string ft = field->type ? field->type->type_name : "";
+            if (ft == "Ref" || ft == "Weak") {
+                // Access the block via the smart pointer's internal block
+                indent(); output << "// GC trace field: " << field->var_name << "\n";
+            }
+        }
+        indent_level--;
+        indent(); output << "}\n";
+    }
+    output << "\n";
 
     for (const auto& method : node->methods) {
         is_inside_class_method = true;
@@ -433,7 +652,13 @@ void CodeGenerator::generateInterface(InterfaceDeclNode* node) {
     indent(); output << "virtual ~" << node->interface_name << "() = default;\n";
     for (const auto& method : node->methods) {
         indent();
-        output << "virtual " << mapType(method->return_type.get()) << " " << method->function_name << "(";
+        output << "virtual ";
+        if (method->is_async) {
+            output << "zenith::stdlib::Future<" << mapType(method->return_type.get()) << "> ";
+        } else {
+            output << mapType(method->return_type.get()) << " ";
+        }
+        output << method->function_name << "(";
         for (size_t i = 0; i < method->parameters.size(); ++i) {
             output << mapType(method->parameters[i]->type.get()) << " " << method->parameters[i]->var_name;
             if (i < method->parameters.size() - 1) output << ", ";
@@ -458,6 +683,8 @@ std::string CodeGenerator::generate(ProgramNode* program) {
             interface_names.insert(interface_decl->interface_name);
         } else if (auto* fn_decl = dynamic_cast<FunctionNode*>(stmt.get())) {
             function_names.insert(fn_decl->function_name);
+        } else if (auto* orch_decl = dynamic_cast<AgentOrchestrationNode*>(stmt.get())) {
+            function_names.insert(orch_decl->orchestration_name);
         } else if (auto* imp = dynamic_cast<ImportNode*>(stmt.get())) {
             if (imp->module_name == "std.io") {
                 function_names.insert("print");
@@ -472,7 +699,10 @@ std::string CodeGenerator::generate(ProgramNode* program) {
     output << "#include <vector>\n";
     output << "#include <unordered_map>\n";
     output << "#include <regex>\n";
-    output << "#include \"zenith_runtime.h\"\n\n";
+    output << "#include <future>\n";
+    output << "#include <iostream>\n";
+    output << "#include \"zenith_runtime.h\"\n";
+    output << "#include \"zenith/std/concurrency.hpp\"\n\n";
 
     bool has_std_io = false;
     for (const auto& stmt : program->statements) {
@@ -487,7 +717,10 @@ std::string CodeGenerator::generate(ProgramNode* program) {
         output << "inline void print(std::string msg) { std::cout << msg; }\n";
         output << "inline void println(std::string msg) { std::cout << msg << std::endl; }\n";
         output << "inline std::string httpGet(std::string url) { return zenith::httpGet(url); }\n";
-        output << "inline std::string httpPost(std::string url, std::string json_body) { return zenith::httpPost(url, json_body); }\n\n";
+        output << "inline std::string httpPost(std::string url, std::string json_body) { return zenith::httpPost(url, json_body); }\n";
+        output << "inline std::string gcStats() { return zenith::mem::gcStatsString(); }\n\n";
+        // Register gcStats as a known function so it's not treated as a UI component
+        function_names.insert("gcStats");
     }
 
     for (const auto& stmt : program->statements) {
@@ -499,6 +732,8 @@ std::string CodeGenerator::generate(ProgramNode* program) {
             generateAgenticFunction(agentic_fn);
         } else if (auto* fn_decl = dynamic_cast<FunctionNode*>(stmt.get())) {
             generateFunction(fn_decl);
+        } else if (auto* orch_decl = dynamic_cast<AgentOrchestrationNode*>(stmt.get())) {
+            generateOrchestration(orch_decl);
         }
     }
     

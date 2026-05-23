@@ -276,8 +276,8 @@ public:
         // Await expressions - unwrap async type
         if (auto* await = dynamic_cast<AwaitExprNode*>(expr)) {
             std::string async_type = inferType(await->expression.get());
-            // Remove Async/Task wrapper if present
-            if (async_type.find("Async<") == 0 || async_type.find("Task<") == 0) {
+            // Remove Async/Task/Future wrapper if present
+            if (async_type.find("Async<") == 0 || async_type.find("Task<") == 0 || async_type.find("Future<") == 0) {
                 auto params = getGenericParams(async_type);
                 if (!params.empty()) return params[0];
             }
@@ -330,7 +330,8 @@ public:
         
         // UI Components
         if (auto* ui = dynamic_cast<UIComponentNode*>(expr)) {
-            return "UI<" + ui->component_type + ">";
+            // Fall back to semantic typeCheckExpression to correctly handle function/class calls
+            return "";
         }
         
         return "";

@@ -80,8 +80,35 @@ struct PromiseStateBase {
 
 template<typename T> struct TypedPromiseState : PromiseStateBase { T data{}; };
 
-template<typename T> class Future;
+// Forward declarations
+template<typename T> class Promise;
+template<> class Promise<void>;
 
+// 1. Generic Future
+template<typename T> class Future {
+    std::shared_ptr<TypedPromiseState<T>> state_;
+public:
+    Future() = default;
+    bool is_ready() const { std::lock_guard<std::mutex> lock(state_->mutex); return state_->ready; }
+    void wait() const { std::unique_lock<std::mutex> lock(state_->mutex); state_->cv.wait(lock, [this]{return state_->ready;}); }
+    T get() { wait(); if(state_->exception) std::rethrow_exception(state_->exception); return std::move(state_->data); }
+    friend class Promise<T>;
+    explicit Future(std::shared_ptr<TypedPromiseState<T>> s) : state_(s) {}
+};
+
+// 2. Specialized Future for void
+template<> class Future<void> {
+    std::shared_ptr<PromiseStateBase> state_;
+public:
+    Future() = default;
+    bool is_ready() const { std::lock_guard<std::mutex> lock(state_->mutex); return state_->ready; }
+    void wait() const { std::unique_lock<std::mutex> lock(state_->mutex); state_->cv.wait(lock, [this]{return state_->ready;}); }
+    void get() { wait(); if(state_->exception) std::rethrow_exception(state_->exception); }
+    friend class Promise<void>;
+    explicit Future(std::shared_ptr<PromiseStateBase> s) : state_(s) {}
+};
+
+// 3. Generic Promise
 template<typename T> class Promise {
     std::shared_ptr<TypedPromiseState<T>> state_;
 public:
@@ -105,18 +132,7 @@ public:
     friend class Future<T>;
 };
 
-template<typename T> class Future {
-    std::shared_ptr<TypedPromiseState<T>> state_;
-public:
-    Future() = default;
-    bool is_ready() const { std::lock_guard<std::mutex> lock(state_->mutex); return state_->ready; }
-    void wait() const { std::unique_lock<std::mutex> lock(state_->mutex); state_->cv.wait(lock, [this]{return state_->ready;}); }
-    T get() { wait(); if(state_->exception) std::rethrow_exception(state_->exception); return std::move(state_->data); }
-    friend class Promise<T>;
-    explicit Future(std::shared_ptr<TypedPromiseState<T>> s) : state_(s) {}
-};
-
-// Void specialization - define AFTER the template
+// 4. Specialized Promise for void
 template<> class Promise<void> {
     std::shared_ptr<PromiseStateBase> state_;
 public:
@@ -133,17 +149,6 @@ public:
     }
     Future<void> get_future() { return Future<void>(state_); }
     friend class Future<void>;
-};
-
-template<> class Future<void> {
-    std::shared_ptr<PromiseStateBase> state_;
-public:
-    Future() = default;
-    bool is_ready() const { std::lock_guard<std::mutex> lock(state_->mutex); return state_->ready; }
-    void wait() const { std::unique_lock<std::mutex> lock(state_->mutex); state_->cv.wait(lock, [this]{return state_->ready;}); }
-    void get() { wait(); if(state_->exception) std::rethrow_exception(state_->exception); }
-    friend class Promise<void>;
-    explicit Future(std::shared_ptr<PromiseStateBase> s) : state_(s) {}
 };
 
 // Channel - message passing
@@ -206,8 +211,20 @@ public:
     template<typename F, typename... Args> auto submit(F&& f, Args&&... args) {
         using R = std::invoke_result_t<F, Args...>;
         Promise<R> promise;
-        auto task = std::make_shared<std::packaged_task<R()>>(std::bind(std::forward<F>(f), std::forward<Args>(args)...));
-        { std::lock_guard<std::mutex> lock(queue_mutex_); tasks_.push([task](){(*task)();}); }
+        auto bound_task = std::bind(std::forward<F>(f), std::forward<Args>(args)...);
+        auto task = [promise, bound_task = std::move(bound_task)]() mutable {
+            try {
+                if constexpr (std::is_void_v<R>) {
+                    bound_task();
+                    promise.set_value();
+                } else {
+                    promise.set_value(bound_task());
+                }
+            } catch (...) {
+                promise.set_exception(std::current_exception());
+            }
+        };
+        { std::lock_guard<std::mutex> lock(queue_mutex_); tasks_.push(std::move(task)); }
         condition_.notify_one();
         return promise.get_future();
     }

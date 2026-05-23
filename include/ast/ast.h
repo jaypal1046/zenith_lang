@@ -164,12 +164,21 @@ public:
         : object(std::move(obj)), method_name(std::move(method)) {}
 };
 
+// Memory hint for variable declarations
+enum class MemoryAnnotation {
+    Default,  // plain stack/value type (no RC tracking)
+    Ref,      // strong Ref<T> — increments RC
+    Weak,     // weak Weak<T> — does not increment RC
+    GcRoot,   // explicitly pinned as a GC root
+};
+
 // Variable Declaration (let x: String = "val" or String x = "val")
 class VarDeclNode : public ASTNode {
 public:
     std::string var_name;
     std::unique_ptr<TypeNode> type;
     std::unique_ptr<ExprNode> initializer;
+    MemoryAnnotation memory_hint = MemoryAnnotation::Default;
     
     VarDeclNode(std::unique_ptr<TypeNode> t, std::string name, std::unique_ptr<ExprNode> init = nullptr)
         : type(std::move(t)), var_name(std::move(name)), initializer(std::move(init)) {}
@@ -246,6 +255,7 @@ public:
     std::unique_ptr<TypeNode> return_type;
     std::vector<std::unique_ptr<VarDeclNode>> parameters;
     std::vector<std::unique_ptr<ASTNode>> body;
+    bool is_async = false;
 
     FunctionNode(std::unique_ptr<TypeNode> ret_type, std::string name)
         : return_type(std::move(ret_type)), function_name(std::move(name)) {}
@@ -256,6 +266,7 @@ class AgenticFunctionNode : public FunctionNode {
 public:
     std::string prompt_template;
     bool is_streaming = false;      // For streaming LLM responses
+    bool is_multimodal = false;     // True if function accepts multimodal inputs (images)
     std::string model_name;         // Specific LLM model to use
     f32 temperature = 0.7f;         // Temperature for generation
     Int max_tokens = 1024;          // Max tokens to generate
@@ -284,8 +295,9 @@ public:
     std::vector<std::unique_ptr<VarDeclNode>> primary_constructor_args;
     std::vector<std::unique_ptr<VarDeclNode>> fields;
     std::vector<std::unique_ptr<FunctionNode>> methods;
-    bool is_reactive = false;  // For reactive state management
-    bool is_component = false; // For UI components
+    bool is_reactive = false;   // For reactive state management
+    bool is_component = false;  // For UI components
+    bool is_managed = false;    // For @managed RC+GC heap tracking
     
     ClassDeclNode(std::string name) : class_name(std::move(name)) {}
 };
@@ -329,6 +341,13 @@ class ImportNode : public ASTNode {
 public:
     std::string module_name;
     ImportNode(std::string name) : module_name(std::move(name)) {}
+};
+
+// Memory annotation node — represents @managed, @weak, @gc_root decorators
+class MemoryAnnotationNode : public ASTNode {
+public:
+    std::string annotation;  // "managed", "weak", "gc_root"
+    MemoryAnnotationNode(std::string ann) : annotation(std::move(ann)) {}
 };
 
 // Program Root

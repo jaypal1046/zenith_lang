@@ -3,6 +3,7 @@
 #include <unordered_map>
 #include <regex>
 #include "zenith_runtime.h"
+#include "zenith/std/concurrency.hpp"
 
 inline void print(std::string msg) { std::cout << msg; }
 inline void println(std::string msg) { std::cout << msg << std::endl; }

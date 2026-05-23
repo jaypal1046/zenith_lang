@@ -27,6 +27,7 @@ private:
     void generateInterface(InterfaceDeclNode* node);
     void generateFunction(FunctionNode* node);
     void generateAgenticFunction(AgenticFunctionNode* node);
+    void generateOrchestration(AgentOrchestrationNode* node);
     void generateStatement(ASTNode* stmt);
     std::string generateExpression(ExprNode* expr);
 

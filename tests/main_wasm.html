@@ -245,6 +245,148 @@
                     DOMNodes.push(el);
                     return DOMNodes.length - 1;
                 },
+                create_checkbox: (textPtr, instancePtr, methodPtr) => {
+                    const labelText = readString(textPtr);
+                    const methodName = readString(methodPtr);
+                    const label = document.createElement('label');
+                    label.style.display = 'flex';
+                    label.style.alignItems = 'center';
+                    label.style.gap = '8px';
+                    label.style.cursor = 'pointer';
+                    label.style.color = '#e2e8f0';
+                    label.style.margin = '5px';
+                    const input = document.createElement('input');
+                    input.type = 'checkbox';
+                    input.style.cursor = 'pointer';
+                    input.style.width = '18px';
+                    input.style.height = '18px';
+                    input.style.accentColor = '#38bdf8';
+                    input.onchange = () => {
+                        if (wasmInstance && wasmInstance.exports[methodName]) {
+                            logToConsole(`[Event] Checkbox Changed: calling ${methodName}(instancePtr: ${instancePtr}, checked: ${input.checked})`, 'event');
+                            wasmInstance.exports[methodName](instancePtr, input.checked ? 1 : 0);
+                        }
+                    };
+                    label.appendChild(input);
+                    const textSpan = document.createElement('span');
+                    textSpan.textContent = labelText;
+                    label.appendChild(textSpan);
+                    DOMNodes.push(label);
+                    label.inputElement = input;
+                    return DOMNodes.length - 1;
+                },
+                create_slider: (instancePtr, methodPtr) => {
+                    const methodName = readString(methodPtr);
+                    const el = document.createElement('input');
+                    el.type = 'range';
+                    el.style.margin = '5px';
+                    el.style.accentColor = '#38bdf8';
+                    el.style.background = 'rgba(255,255,255,0.1)';
+                    el.oninput = () => {
+                        if (wasmInstance && wasmInstance.exports[methodName]) {
+                            logToConsole(`[Event] Slider Changed: calling ${methodName}(instancePtr: ${instancePtr}, value: ${el.value})`, 'event');
+                            wasmInstance.exports[methodName](instancePtr, parseInt(el.value, 10));
+                        }
+                    };
+                    DOMNodes.push(el);
+                    el.inputElement = el;
+                    return DOMNodes.length - 1;
+                },
+                create_toggle: (textPtr, instancePtr, methodPtr) => {
+                    const labelText = readString(textPtr);
+                    const methodName = readString(methodPtr);
+                    const label = document.createElement('label');
+                    label.style.display = 'flex';
+                    label.style.alignItems = 'center';
+                    label.style.gap = '10px';
+                    label.style.cursor = 'pointer';
+                    label.style.margin = '5px';
+                    const switchDiv = document.createElement('div');
+                    switchDiv.style.position = 'relative';
+                    switchDiv.style.width = '44px';
+                    switchDiv.style.height = '24px';
+                    switchDiv.style.backgroundColor = '#475569';
+                    switchDiv.style.borderRadius = '12px';
+                    switchDiv.style.transition = 'background-color 0.2s';
+                    const knob = document.createElement('div');
+                    knob.style.position = 'absolute';
+                    knob.style.top = '2px';
+                    knob.style.left = '2px';
+                    knob.style.width = '20px';
+                    knob.style.height = '20px';
+                    knob.style.borderRadius = '50%';
+                    knob.style.backgroundColor = '#ffffff';
+                    knob.style.transition = 'transform 0.2s';
+                    switchDiv.appendChild(knob);
+                    let isOn = false;
+                    const updateToggleUI = (state) => {
+                        isOn = state;
+                        if (isOn) {
+                            switchDiv.style.backgroundColor = '#10b981';
+                            knob.style.transform = 'translateX(20px)';
+                        } else {
+                            switchDiv.style.backgroundColor = '#475569';
+                            knob.style.transform = 'translateX(0)';
+                        }
+                    };
+                    label.onclick = (e) => {
+                        e.preventDefault();
+                        updateToggleUI(!isOn);
+                        if (wasmInstance && wasmInstance.exports[methodName]) {
+                            logToConsole(`[Event] Toggle Changed: calling ${methodName}(instancePtr: ${instancePtr}, isOn: ${isOn})`, 'event');
+                            wasmInstance.exports[methodName](instancePtr, isOn ? 1 : 0);
+                        }
+                    };
+                    label.appendChild(switchDiv);
+                    if (labelText) {
+                        const textSpan = document.createElement('span');
+                        textSpan.textContent = labelText;
+                        textSpan.style.color = '#e2e8f0';
+                        label.appendChild(textSpan);
+                    }
+                    label.setToggleState = updateToggleUI;
+                    label.inputElement = label;
+                    DOMNodes.push(label);
+                    return DOMNodes.length - 1;
+                },
+                create_dropdown: (optionsPtr, instancePtr, methodPtr) => {
+                    const optionsStr = readString(optionsPtr);
+                    const methodName = readString(methodPtr);
+                    const el = document.createElement('select');
+                    el.className = 'zenith-input';
+                    el.style.background = 'rgba(15, 23, 42, 0.8)';
+                    el.style.color = '#f8fafc';
+                    el.style.border = '1px solid rgba(0, 242, 254, 0.3)';
+                    el.style.borderRadius = '8px';
+                    el.style.padding = '8px 12px';
+                    el.style.cursor = 'pointer';
+                    const populateOptions = (str) => {
+                        el.innerHTML = '';
+                        const opts = str.split(',');
+                        for (const opt of opts) {
+                            const trimmed = opt.trim();
+                            if (!trimmed) continue;
+                            const optionEl = document.createElement('option');
+                            optionEl.value = trimmed;
+                            optionEl.textContent = trimmed;
+                            el.appendChild(optionEl);
+                        }
+                    };
+                    if (optionsStr) {
+                        populateOptions(optionsStr);
+                    }
+                    el.onchange = () => {
+                        if (wasmInstance && wasmInstance.exports[methodName]) {
+                            const strPtr = writeStringToMemory(el.value, 36864);
+                            logToConsole(`[Event] Dropdown Changed: calling ${methodName}(instancePtr: ${instancePtr}, value: "${el.value}")`, 'event');
+                            wasmInstance.exports[methodName](instancePtr, strPtr);
+                        }
+                    };
+                    el.inputElement = el;
+                    el.populateOptions = populateOptions;
+                    DOMNodes.push(el);
+                    return DOMNodes.length - 1;
+                },
                 httpGet: (urlPtr) => {
                     const url = readString(urlPtr);
                     logToConsole(`[Network] httpGet: Fetching ${url}...`, 'system');
@@ -339,10 +481,13 @@
                     return DOMNodes.length - 1;
                 },
                 set_attribute: (nodeIdx, keyPtr, valPtr) => {
-                    const el = DOMNodes[nodeIdx];
+                    let el = DOMNodes[nodeIdx];
                     if (!el) return;
                     const key = readString(keyPtr);
                     const val = readString(valPtr);
+                    if (el.inputElement && (key === 'checked' || key === 'disabled' || key === 'value' || key === 'isOn' || key === 'options')) {
+                        el = el.inputElement;
+                    }
                     if (key === 'color') {
                         el.style.color = val;
                     } else if (key === 'backgroundColor') {
@@ -361,14 +506,25 @@
                         el.style.alignItems = val;
                     } else if (key === 'src' || key === 'url') {
                         el.src = val;
+                    } else if (key === 'checked') {
+                        el.checked = (val === 'true' || val === '1');
+                    } else if (key === 'isOn') {
+                        if (el.setToggleState) el.setToggleState(val === 'true' || val === '1');
+                    } else if (key === 'value') {
+                        el.value = val;
+                    } else if (key === 'options') {
+                        if (el.populateOptions) el.populateOptions(val);
                     } else {
                         el.setAttribute(key, val);
                     }
                 },
                 set_attribute_int: (nodeIdx, keyPtr, val) => {
-                    const el = DOMNodes[nodeIdx];
+                    let el = DOMNodes[nodeIdx];
                     if (!el) return;
                     const key = readString(keyPtr);
+                    if (el.inputElement && (key === 'checked' || key === 'disabled' || key === 'value' || key === 'isOn' || key === 'min' || key === 'max')) {
+                        el = el.inputElement;
+                    }
                     if (key === 'padding') {
                         el.style.padding = val + 'px';
                     } else if (key === 'margin') {
@@ -381,6 +537,16 @@
                         el.style.flexGrow = val;
                     } else if (key === 'gap') {
                         el.style.gap = val + 'px';
+                    } else if (key === 'checked') {
+                        el.checked = (val !== 0);
+                    } else if (key === 'isOn') {
+                        if (el.setToggleState) el.setToggleState(val !== 0);
+                    } else if (key === 'value') {
+                        el.value = val;
+                    } else if (key === 'min') {
+                        el.min = val;
+                    } else if (key === 'max') {
+                        el.max = val;
                     } else {
                         el.setAttribute(key, val.toString());
                     }

@@ -1,0 +1,74 @@
+// Zenith Widget Verification Demo
+import std.io;
+
+class WidgetDemoApp() {
+    Bool cb_state = false;
+    Int slider_val = 50;
+    Bool toggle_state = false;
+    String selected_option = "Option 1";
+
+    UI build() {
+        return Column(
+            Text("ZENITH WIDGET VERIFICATION DEMO", fontWeight: "bold", color: "cyan"),
+            
+            // Checkbox demo
+            Card(
+                Text("1. Checkbox State: " + cb_state, color: "yellow"),
+                Checkbox("Accept Terms & Conditions", checked: cb_state, onChange: handleCheckbox),
+                padding: 1
+            ),
+            
+            // Slider demo
+            Card(
+                Text("2. Slider Value: " + slider_val, color: "green"),
+                Slider(min: 0, max: 100, value: slider_val, onChange: handleSlider),
+                padding: 1
+            ),
+            
+            // Toggle demo
+            Card(
+                Text("3. Toggle Switch State: " + toggle_state, color: "magenta"),
+                Toggle("Toggle Feature Alpha", isOn: toggle_state, onChange: handleToggle),
+                padding: 1
+            ),
+            
+            // Dropdown demo
+            Card(
+                Text("4. Dropdown Chosen: " + selected_option, color: "cyan"),
+                Dropdown("Option 1,Option 2,Option 3", value: selected_option, onChange: handleDropdown),
+                padding: 1
+            )
+        );
+    }
+
+    Void handleCheckbox(Bool checked) {
+        setState {
+            cb_state = checked;
+        }
+    }
+
+    Void handleSlider(Int val) {
+        setState {
+            slider_val = val;
+        }
+    }
+
+    Void handleToggle(Bool onState) {
+        setState {
+            toggle_state = onState;
+        }
+    }
+
+    Void handleDropdown(String choice) {
+        setState {
+            selected_option = choice;
+        }
+    }
+}
+
+Void main() {
+    println("--- Booting Zenith Form Widget Demo App ---");
+    WidgetDemoApp app = WidgetDemoApp();
+    app.build().render();
+    println("--- Form widgets loaded. Interactive events ready. ---");
+}

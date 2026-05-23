@@ -12,6 +12,12 @@
 #include <fstream>
 #include <iterator>
 
+#ifdef YOGA_AVAILABLE
+#include "zenith/ui/yoga_layout.h"
+#include <memory>
+#include <cmath>
+#endif
+
 namespace zenith {
 
 template<typename T>
@@ -189,6 +195,33 @@ public:
         return el;
     }
 
+    static UIElement Checkbox(std::string label, std::unordered_map<std::string, std::string> attrs = {}) {
+        UIElement el("Checkbox");
+        el.text_content = std::move(label);
+        el.attributes = std::move(attrs);
+        return el;
+    }
+
+    static UIElement Slider(std::unordered_map<std::string, std::string> attrs = {}) {
+        UIElement el("Slider");
+        el.attributes = std::move(attrs);
+        return el;
+    }
+
+    static UIElement Toggle(std::string label, std::unordered_map<std::string, std::string> attrs = {}) {
+        UIElement el("Toggle");
+        el.text_content = std::move(label);
+        el.attributes = std::move(attrs);
+        return el;
+    }
+
+    static UIElement Dropdown(std::string options, std::unordered_map<std::string, std::string> attrs = {}) {
+        UIElement el("Dropdown");
+        el.text_content = std::move(options);
+        el.attributes = std::move(attrs);
+        return el;
+    }
+
     static UIElement Scrolling(std::vector<UIElement> children, std::unordered_map<std::string, std::string> attrs = {}) {
         return UIElement("Scrolling", std::move(children), std::move(attrs));
     }
@@ -247,6 +280,22 @@ public:
             if (attributes.count("height")) { try { h = std::stoi(attributes.at("height")); } catch(...) {} }
             layout_width = w + padding * 2;
             layout_height = h + padding * 2;
+        } else if (type == "Checkbox") {
+            layout_width = text_content.length() + 4 + padding * 2;
+            layout_height = 1 + padding * 2;
+        } else if (type == "Slider") {
+            int w = 24;
+            if (attributes.count("width")) { try { w = std::stoi(attributes.at("width")); } catch(...) {} }
+            layout_width = w + padding * 2;
+            layout_height = 1 + padding * 2;
+        } else if (type == "Toggle") {
+            layout_width = text_content.length() + 8 + padding * 2;
+            layout_height = 1 + padding * 2;
+        } else if (type == "Dropdown") {
+            int w = 20;
+            if (attributes.count("width")) { try { w = std::stoi(attributes.at("width")); } catch(...) {} }
+            layout_width = w + padding * 2;
+            layout_height = 3 + padding * 2;
         } else if (type == "Scrolling" || type == "Card" || type == "Container" || type == "Column" || type == "Row") {
             std::string flex_dir = (type == "Row") ? "row" : "column";
             if (attributes.count("flexDirection")) {
@@ -622,6 +671,55 @@ public:
             std::string url = text_content;
             if (url.length() > (size_t)draw_w - 4) url = url.substr(0, draw_w - 7) + "...";
             buffer.writeString(abs_x + 2 + padding, abs_y + 2 + padding, url, "\033[37m");
+        } else if (type == "Checkbox") {
+            bool checked = (attributes.count("checked") && (attributes.at("checked") == "true" || attributes.at("checked") == "1"));
+            std::string cb_str = checked ? "[X] " : "[ ] ";
+            buffer.writeString(abs_x + padding, abs_y + padding, cb_str + text_content, "\033[36m" + bg_color);
+        } else if (type == "Slider") {
+            int min_val = 0;
+            if (attributes.count("min")) { try { min_val = std::stoi(attributes.at("min")); } catch(...) {} }
+            int max_val = 100;
+            if (attributes.count("max")) { try { max_val = std::stoi(attributes.at("max")); } catch(...) {} }
+            int cur_val = 0;
+            if (attributes.count("value")) { try { cur_val = std::stoi(attributes.at("value")); } catch(...) {} }
+            std::string track = "[";
+            int inner_w = draw_w - 2;
+            if (inner_w > 0) {
+                int thumb_idx = -1;
+                if (max_val > min_val) {
+                    float pct = (float)(cur_val - min_val) / (max_val - min_val);
+                    if (pct < 0.0f) pct = 0.0f;
+                    if (pct > 1.0f) pct = 1.0f;
+                    thumb_idx = static_cast<int>(std::round(pct * (inner_w - 1)));
+                } else {
+                    thumb_idx = 0;
+                }
+                for (int i = 0; i < inner_w; ++i) {
+                    if (i == thumb_idx) {
+                        track += "█";
+                    } else {
+                        track += "─";
+                    }
+                }
+            }
+            track += "]";
+            buffer.writeString(abs_x + padding, abs_y + padding, track, "\033[33m" + bg_color);
+        } else if (type == "Toggle") {
+            bool is_on = (attributes.count("isOn") && (attributes.at("isOn") == "true" || attributes.at("isOn") == "1"));
+            std::string toggle_style = is_on ? "\033[1;32m" : "\033[90m";
+            std::string toggle_indicator = is_on ? "( •) ON " : "(• ) OFF ";
+            buffer.writeString(abs_x + padding, abs_y + padding, toggle_indicator + text_content, toggle_style + bg_color);
+        } else if (type == "Dropdown") {
+            std::string selected = "Select Option";
+            if (attributes.count("value") && !attributes.at("value").empty()) {
+                selected = attributes.at("value");
+            }
+            std::string dropdown_text = "[ " + selected + " ▼ ]";
+            if (dropdown_text.length() > (size_t)draw_w) {
+                dropdown_text = dropdown_text.substr(0, draw_w - 3) + "...";
+            }
+            buffer.drawBox(abs_x, abs_y, draw_w, draw_h, "single", "\033[36m");
+            buffer.writeString(abs_x + (draw_w - dropdown_text.length()) / 2 + padding, abs_y + 1 + padding, dropdown_text, "\033[1;36m" + bg_color);
         } else {
             for (const auto& child : children) {
                 child.drawToBuffer(buffer, offset_x, offset_y);
@@ -629,10 +727,214 @@ public:
         }
     }
 
+#ifdef YOGA_AVAILABLE
+    static std::shared_ptr<zenith::ui::YogaNode> buildYogaTree(const UIElement& element, std::vector<std::pair<const UIElement*, std::shared_ptr<zenith::ui::YogaNode>>>& node_map) {
+        auto node = std::make_shared<zenith::ui::YogaNode>();
+        node_map.push_back({&element, node});
+        
+        if (element.type == "Row") {
+            node->setFlexDirection(zenith::ui::FlexDirection::Row);
+        } else {
+            node->setFlexDirection(zenith::ui::FlexDirection::Column);
+        }
+        
+        if (element.attributes.count("flexDirection")) {
+            std::string fd = element.attributes.at("flexDirection");
+            if (fd == "row") node->setFlexDirection(zenith::ui::FlexDirection::Row);
+            else if (fd == "column") node->setFlexDirection(zenith::ui::FlexDirection::Column);
+            else if (fd == "row-reverse") node->setFlexDirection(zenith::ui::FlexDirection::RowReverse);
+            else if (fd == "column-reverse") node->setFlexDirection(zenith::ui::FlexDirection::ColumnReverse);
+        }
+        
+        if (element.attributes.count("width")) {
+            try {
+                std::string w_str = element.attributes.at("width");
+                if (!w_str.empty()) {
+                    if (w_str.back() == '%') {
+                        float val = std::stof(w_str.substr(0, w_str.length() - 1));
+                        node->setWidth(zenith::ui::MeasureValue::percent(val));
+                    } else if (w_str == "auto") {
+                        node->setWidth(zenith::ui::MeasureValue::auto_value());
+                    } else {
+                        node->setWidth(zenith::ui::MeasureValue::points(std::stof(w_str)));
+                    }
+                }
+            } catch(...) {}
+        }
+        if (element.attributes.count("height")) {
+            try {
+                std::string h_str = element.attributes.at("height");
+                if (!h_str.empty()) {
+                    if (h_str.back() == '%') {
+                        float val = std::stof(h_str.substr(0, h_str.length() - 1));
+                        node->setHeight(zenith::ui::MeasureValue::percent(val));
+                    } else if (h_str == "auto") {
+                        node->setHeight(zenith::ui::MeasureValue::auto_value());
+                    } else {
+                        node->setHeight(zenith::ui::MeasureValue::points(std::stof(h_str)));
+                    }
+                }
+            } catch(...) {}
+        }
+        
+        if (element.attributes.count("flexGrow")) {
+            try { node->setFlexGrow(std::stof(element.attributes.at("flexGrow"))); } catch(...) {}
+        }
+        if (element.attributes.count("flexShrink")) {
+            try { node->setFlexShrink(std::stof(element.attributes.at("flexShrink"))); } catch(...) {}
+        }
+        
+        if (element.attributes.count("justifyContent")) {
+            std::string jc = element.attributes.at("justifyContent");
+            if (jc == "flex-start") node->setJustifyContent(zenith::ui::JustifyContent::FlexStart);
+            else if (jc == "flex-end") node->setJustifyContent(zenith::ui::JustifyContent::FlexEnd);
+            else if (jc == "center") node->setJustifyContent(zenith::ui::JustifyContent::Center);
+            else if (jc == "space-between") node->setJustifyContent(zenith::ui::JustifyContent::SpaceBetween);
+            else if (jc == "space-around") node->setJustifyContent(zenith::ui::JustifyContent::SpaceAround);
+            else if (jc == "space-evenly") node->setJustifyContent(zenith::ui::JustifyContent::SpaceEvenly);
+        }
+        
+        if (element.attributes.count("alignItems")) {
+            std::string ai = element.attributes.at("alignItems");
+            if (ai == "flex-start") node->setAlignItems(zenith::ui::AlignItems::FlexStart);
+            else if (ai == "flex-end") node->setAlignItems(zenith::ui::AlignItems::FlexEnd);
+            else if (ai == "center") node->setAlignItems(zenith::ui::AlignItems::Center);
+            else if (ai == "baseline") node->setAlignItems(zenith::ui::AlignItems::Baseline);
+            else if (ai == "stretch") node->setAlignItems(zenith::ui::AlignItems::Stretch);
+        }
+        
+        if (element.attributes.count("padding")) {
+            try {
+                float p = std::stof(element.attributes.at("padding"));
+                node->setPadding(zenith::ui::Edge::All, zenith::ui::MeasureValue::points(p));
+            } catch(...) {}
+        }
+        if (element.attributes.count("margin")) {
+            try {
+                float m = std::stof(element.attributes.at("margin"));
+                node->setMargin(zenith::ui::Edge::All, zenith::ui::MeasureValue::points(m));
+            } catch(...) {}
+        }
+        
+        if (element.type == "Column" || element.type == "Row" || element.type == "Card" || element.type == "Container" || element.type == "Scrolling") {
+            node->setBorder(zenith::ui::Edge::All, 1.0f);
+        }
+        
+        if (element.type == "Text" || element.type == "Button" || element.type == "TextField" || element.type == "Image" || element.type == "Video" ||
+            element.type == "Checkbox" || element.type == "Slider" || element.type == "Toggle" || element.type == "Dropdown") {
+            node->setMeasureFunction([type = element.type, text = element.text_content, attrs = element.attributes](float w_constraint, float h_constraint) -> std::pair<float, float> {
+                (void)w_constraint;
+                (void)h_constraint;
+                float w = 0.0f;
+                float h = 0.0f;
+                
+                int padding = 0;
+                if (attrs.count("padding")) {
+                    try { padding = std::stoi(attrs.at("padding")); } catch(...) {}
+                }
+                
+                if (type == "Text") {
+                    int max_w = 0;
+                    int current_w = 0;
+                    int line_h = 1;
+                    for (char c : text) {
+                        if (c == '\n') {
+                            line_h++;
+                            if (current_w > max_w) max_w = current_w;
+                            current_w = 0;
+                        } else {
+                            current_w++;
+                        }
+                    }
+                    if (current_w > max_w) max_w = current_w;
+                    w = max_w + padding * 2;
+                    h = line_h + padding * 2;
+                } else if (type == "Button") {
+                    w = text.length() + 4 + padding * 2;
+                    h = 3 + padding * 2;
+                } else if (type == "TextField") {
+                    w = 24 + padding * 2;
+                    h = 3 + padding * 2;
+                    if (attrs.count("width")) { try { w = std::stof(attrs.at("width")) + padding * 2; } catch(...) {} }
+                    if (attrs.count("height")) { try { h = std::stof(attrs.at("height")) + padding * 2; } catch(...) {} }
+                } else if (type == "Image") {
+                    w = 24 + padding * 2;
+                    h = 4 + padding * 2;
+                    if (attrs.count("width")) { try { w = std::stof(attrs.at("width")) + padding * 2; } catch(...) {} }
+                    if (attrs.count("height")) { try { h = std::stof(attrs.at("height")) + padding * 2; } catch(...) {} }
+                } else if (type == "Video") {
+                    w = 28 + padding * 2;
+                    h = 5 + padding * 2;
+                    if (attrs.count("width")) { try { w = std::stof(attrs.at("width")) + padding * 2; } catch(...) {} }
+                    if (attrs.count("height")) { try { h = std::stof(attrs.at("height")) + padding * 2; } catch(...) {} }
+                } else if (type == "Checkbox") {
+                    w = text.length() + 4 + padding * 2;
+                    h = 1 + padding * 2;
+                } else if (type == "Slider") {
+                    w = 24 + padding * 2;
+                    h = 1 + padding * 2;
+                    if (attrs.count("width")) { try { w = std::stof(attrs.at("width")) + padding * 2; } catch(...) {} }
+                } else if (type == "Toggle") {
+                    w = text.length() + 8 + padding * 2;
+                    h = 1 + padding * 2;
+                } else if (type == "Dropdown") {
+                    w = 20 + padding * 2;
+                    h = 3 + padding * 2;
+                    if (attrs.count("width")) { try { w = std::stof(attrs.at("width")) + padding * 2; } catch(...) {} }
+                }
+                return {w, h};
+            });
+        }
+        
+        for (const auto& child : element.children) {
+            auto child_node = buildYogaTree(child, node_map);
+            node->addChild(child_node);
+        }
+        
+        return node;
+    }
+
+    static void applyYogaLayoutParallel(const UIElement& el, std::shared_ptr<zenith::ui::YogaNode> y_node, int parent_abs_x, int parent_abs_y) {
+        if (!y_node) return;
+        auto layout = y_node->getLayout();
+        
+        el.layout_width = static_cast<int>(std::round(layout.width));
+        el.layout_height = static_cast<int>(std::round(layout.height));
+        el.layout_x = parent_abs_x + static_cast<int>(std::round(layout.x));
+        el.layout_y = parent_abs_y + static_cast<int>(std::round(layout.y));
+        
+        for (size_t i = 0; i < el.children.size(); ++i) {
+            auto child_y_node = y_node->getChildAt(i);
+            applyYogaLayoutParallel(el.children[i], child_y_node, el.layout_x, el.layout_y);
+        }
+    }
+
+    void calculateYogaLayout() const {
+        std::vector<std::pair<const UIElement*, std::shared_ptr<zenith::ui::YogaNode>>> node_map;
+        auto root_node = buildYogaTree(*this, node_map);
+        
+        float w_constraint = NAN;
+        float h_constraint = NAN;
+        if (attributes.count("width")) {
+            try { w_constraint = std::stof(attributes.at("width")); } catch(...) {}
+        }
+        if (attributes.count("height")) {
+            try { h_constraint = std::stof(attributes.at("height")); } catch(...) {}
+        }
+        
+        root_node->calculateLayout(w_constraint, h_constraint);
+        applyYogaLayoutParallel(*this, root_node, 0, 0);
+    }
+#endif
+
     void render(int indent = 0) const {
         if (indent == 0) {
+#ifdef YOGA_AVAILABLE
+            calculateYogaLayout();
+#else
             measure();
             arrange(0, 0);
+#endif
             std::cout << "\n=== Rendered UI Layout Tree ===\n";
             printTree(0);
             
@@ -655,7 +957,11 @@ public:
 
     void collectInteractives(std::vector<const UIElement*>& interactives) const {
         if ((type == "Button" && attributes.count("onClick")) ||
-            (type == "TextField" && attributes.count("onChange"))) {
+            (type == "TextField" && attributes.count("onChange")) ||
+            (type == "Checkbox" && attributes.count("onChange")) ||
+            (type == "Slider" && attributes.count("onChange")) ||
+            (type == "Toggle" && attributes.count("onChange")) ||
+            (type == "Dropdown" && attributes.count("onChange"))) {
             interactives.push_back(this);
         }
         for (const auto& child : children) {
@@ -703,6 +1009,18 @@ namespace UI {
     }
     inline UIElement Video(std::string url, std::unordered_map<std::string, std::string> attrs = {}) {
         return UIElement::Video(std::move(url), std::move(attrs));
+    }
+    inline UIElement Checkbox(std::string label, std::unordered_map<std::string, std::string> attrs = {}) {
+        return UIElement::Checkbox(std::move(label), std::move(attrs));
+    }
+    inline UIElement Slider(std::unordered_map<std::string, std::string> attrs = {}) {
+        return UIElement::Slider(std::move(attrs));
+    }
+    inline UIElement Toggle(std::string label, std::unordered_map<std::string, std::string> attrs = {}) {
+        return UIElement::Toggle(std::move(label), std::move(attrs));
+    }
+    inline UIElement Dropdown(std::string options, std::unordered_map<std::string, std::string> attrs = {}) {
+        return UIElement::Dropdown(std::move(options), std::move(attrs));
     }
     inline UIElement Scrolling(std::vector<UIElement> children, std::unordered_map<std::string, std::string> attrs = {}) {
         return UIElement::Scrolling(std::move(children), std::move(attrs));

@@ -391,6 +391,142 @@
                 };
                 return el;
             },
+            Checkbox: function(label, attrs = {}) {
+                const wrapper = document.createElement('label');
+                wrapper.style.display = 'flex';
+                wrapper.style.alignItems = 'center';
+                wrapper.style.gap = '8px';
+                wrapper.style.cursor = 'pointer';
+                wrapper.style.margin = '5px';
+                wrapper.style.color = '#e2e8f0';
+                const el = document.createElement('input');
+                el.type = 'checkbox';
+                el.style.width = '18px';
+                el.style.height = '18px';
+                el.style.accentColor = '#00f2fe';
+                el.style.cursor = 'pointer';
+                if (attrs.checked) el.checked = !!attrs.checked;
+                wrapper.appendChild(el);
+                const textSpan = document.createElement('span');
+                textSpan.textContent = Array.isArray(label) ? label.join('') : label;
+                wrapper.appendChild(textSpan);
+                UI.applyStyles(wrapper, attrs);
+                if (attrs.onChange && typeof attrs.onChange === 'function') {
+                    el.onchange = function() { attrs.onChange(el.checked); };
+                }
+                wrapper.render = function() {
+                    UI.render(wrapper);
+                    return wrapper;
+                };
+                return wrapper;
+            },
+            Slider: function(attrs = {}) {
+                const el = document.createElement('input');
+                el.type = 'range';
+                el.className = 'zenith-input';
+                el.style.accentColor = '#00f2fe';
+                el.style.cursor = 'pointer';
+                if (attrs.min !== undefined) el.min = attrs.min;
+                if (attrs.max !== undefined) el.max = attrs.max;
+                if (attrs.value !== undefined) el.value = attrs.value;
+                UI.applyStyles(el, attrs);
+                if (attrs.onChange && typeof attrs.onChange === 'function') {
+                    el.oninput = function() { attrs.onChange(parseInt(el.value, 10)); };
+                }
+                el.render = function() {
+                    UI.render(el);
+                    return el;
+                };
+                return el;
+            },
+            Toggle: function(label, attrs = {}) {
+                const wrapper = document.createElement('label');
+                wrapper.style.display = 'flex';
+                wrapper.style.alignItems = 'center';
+                wrapper.style.gap = '10px';
+                wrapper.style.cursor = 'pointer';
+                wrapper.style.margin = '5px';
+                const switchDiv = document.createElement('div');
+                switchDiv.style.position = 'relative';
+                switchDiv.style.width = '44px';
+                switchDiv.style.height = '24px';
+                switchDiv.style.backgroundColor = '#475569';
+                switchDiv.style.borderRadius = '12px';
+                switchDiv.style.transition = 'background-color 0.2s';
+                const knob = document.createElement('div');
+                knob.style.position = 'absolute';
+                knob.style.top = '2px';
+                knob.style.left = '2px';
+                knob.style.width = '20px';
+                knob.style.height = '20px';
+                knob.style.borderRadius = '50%';
+                knob.style.backgroundColor = '#ffffff';
+                knob.style.transition = 'transform 0.2s';
+                switchDiv.appendChild(knob);
+                let isOn = !!attrs.isOn;
+                const updateToggleUI = (state) => {
+                    isOn = state;
+                    if (isOn) {
+                        switchDiv.style.backgroundColor = '#10b981';
+                        knob.style.transform = 'translateX(20px)';
+                    } else {
+                        switchDiv.style.backgroundColor = '#475569';
+                        knob.style.transform = 'translateX(0)';
+                    }
+                };
+                updateToggleUI(isOn);
+                wrapper.onclick = (e) => {
+                    e.preventDefault();
+                    updateToggleUI(!isOn);
+                    if (attrs.onChange && typeof attrs.onChange === 'function') {
+                        attrs.onChange(isOn);
+                    }
+                };
+                wrapper.appendChild(switchDiv);
+                if (label) {
+                    const textSpan = document.createElement('span');
+                    textSpan.textContent = Array.isArray(label) ? label.join('') : label;
+                    textSpan.style.color = '#e2e8f0';
+                    wrapper.appendChild(textSpan);
+                }
+                UI.applyStyles(wrapper, attrs);
+                wrapper.render = function() {
+                    UI.render(wrapper);
+                    return wrapper;
+                };
+                return wrapper;
+            },
+            Dropdown: function(options, attrs = {}) {
+                const el = document.createElement('select');
+                el.className = 'zenith-input';
+                el.style.background = 'rgba(15, 23, 42, 0.8)';
+                el.style.color = '#f8fafc';
+                el.style.cursor = 'pointer';
+                const populateOptions = (str) => {
+                    el.innerHTML = '';
+                    const opts = str.split(',');
+                    for (const opt of opts) {
+                        const trimmed = opt.trim();
+                        if (!trimmed) continue;
+                        const optionEl = document.createElement('option');
+                        optionEl.value = trimmed;
+                        optionEl.textContent = trimmed;
+                        el.appendChild(optionEl);
+                    }
+                };
+                const optsStr = Array.isArray(options) ? options.join(',') : (options || attrs.options || "");
+                populateOptions(optsStr);
+                if (attrs.value) el.value = attrs.value;
+                UI.applyStyles(el, attrs);
+                if (attrs.onChange && typeof attrs.onChange === 'function') {
+                    el.onchange = function() { attrs.onChange(el.value); };
+                }
+                el.render = function() {
+                    UI.render(el);
+                    return el;
+                };
+                return el;
+            },
             Image: function(url, attrs = {}) {
                 const el = document.createElement('img');
                 el.src = Array.isArray(url) ? url.join('') : url;

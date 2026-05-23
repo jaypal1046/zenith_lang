@@ -185,6 +185,8 @@ std::string CodeGenerator::generateExpression(ExprNode* expr) {
         bool is_fn = function_names.count(ui->component_type) > 0;
         bool is_variable_call = !ui->component_type.empty() && std::islower(static_cast<unsigned char>(ui->component_type[0]));
         bool is_custom = is_class || is_fn || is_variable_call;
+        // Widgets with NO first positional argument at all (attrs only — no label, no children)
+        bool is_no_first_param = (!is_custom && ui->component_type == "Slider");
         
         if (is_custom) {
             res = ui->component_type + "(";
@@ -199,9 +201,14 @@ std::string CodeGenerator::generateExpression(ExprNode* expr) {
                 ui->component_type == "Button" ||
                 ui->component_type == "TextField" ||
                 ui->component_type == "Image" ||
-                ui->component_type == "Video"
+                ui->component_type == "Video" ||
+                ui->component_type == "Checkbox" ||
+                ui->component_type == "Toggle" ||
+                ui->component_type == "Dropdown"
             );
-            if (is_string_param) {
+            if (is_no_first_param) {
+                // No leading arg — attrs follow directly with no preceding comma
+            } else if (is_string_param) {
                 if (!ui->children.empty()) {
                     res += generateExpression(ui->children[0].get());
                 } else {
@@ -230,7 +237,8 @@ std::string CodeGenerator::generateExpression(ExprNode* expr) {
         
         // Named arguments (attributes) - only for built-in UI components
         if (!is_custom) {
-            res += ", {";
+            // is_no_first_param widgets have no leading positional arg, so no leading comma
+            res += (is_no_first_param ? "{" : ", {");
             for (size_t i = 0; i < ui->named_args.size(); ++i) {
                 std::string key = ui->named_args[i].first;
                 std::string val = generateExpression(ui->named_args[i].second.get());
@@ -247,6 +255,7 @@ std::string CodeGenerator::generateExpression(ExprNode* expr) {
         res += ")";
         return res;
     }
+
     return "";
 }
 
@@ -671,9 +680,18 @@ void CodeGenerator::generateClass(ClassDeclNode* node) {
             if (method->parameters.empty()) {
                 indent();
                 output << "if (name == \"" << method->function_name << "\") { this->" << method->function_name << "(); return; }\n";
-            } else if (method->parameters.size() == 1 && mapType(method->parameters[0]->type.get()) == "std::string") {
+            } else if (method->parameters.size() == 1) {
+                std::string param_type = mapType(method->parameters[0]->type.get());
                 indent();
-                output << "if (name == \"" << method->function_name << "\") { this->" << method->function_name << "(val); return; }\n";
+                if (param_type == "std::string") {
+                    output << "if (name == \"" << method->function_name << "\") { this->" << method->function_name << "(val); return; }\n";
+                } else if (param_type == "bool") {
+                    output << "if (name == \"" << method->function_name << "\") { this->" << method->function_name << "(val == \"true\"); return; }\n";
+                } else if (param_type == "int") {
+                    output << "if (name == \"" << method->function_name << "\") { try { this->" << method->function_name << "(std::stoi(val)); } catch(...) {} return; }\n";
+                } else if (param_type == "float") {
+                    output << "if (name == \"" << method->function_name << "\") { try { this->" << method->function_name << "(std::stof(val)); } catch(...) {} return; }\n";
+                }
             }
         }
     }

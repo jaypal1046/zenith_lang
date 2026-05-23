@@ -149,7 +149,9 @@ void WASMCodeGenerator::generateExpression(ExprNode* expr) {
                            ui->component_type == "Column" || ui->component_type == "Row" ||
                            ui->component_type == "Image" || ui->component_type == "Video" ||
                            ui->component_type == "Scrolling" || ui->component_type == "Card" ||
-                           ui->component_type == "Container");
+                           ui->component_type == "Container" || ui->component_type == "Checkbox" ||
+                           ui->component_type == "Slider" || ui->component_type == "Toggle" ||
+                           ui->component_type == "Dropdown");
                            
         if (is_builtin) {
             if (ui->component_type == "Text") {
@@ -159,6 +161,105 @@ void WASMCodeGenerator::generateExpression(ExprNode* expr) {
                     indent(); output << "i32.const 0\n";
                 }
                 indent(); output << "call $create_text\n";
+            } else if (ui->component_type == "Checkbox") {
+                if (!ui->children.empty()) {
+                    generateExpression(ui->children[0].get());
+                } else {
+                    indent(); output << "i32.const 0\n";
+                }
+                if (!current_class_name.empty()) {
+                    indent(); output << "local.get $this\n";
+                } else {
+                    indent(); output << "i32.const 0\n";
+                }
+                std::string method_name = "";
+                for (const auto& arg : ui->named_args) {
+                    if (arg.first == "onChange") {
+                        if (auto* id = dynamic_cast<IdentifierNode*>(arg.second.get())) {
+                            method_name = id->name;
+                        }
+                    }
+                }
+                std::string export_name = current_class_name.empty() ? method_name : (current_class_name + "_" + method_name);
+                if (string_literals.find(export_name) == string_literals.end()) {
+                    string_literals[export_name] = next_string_offset;
+                    next_string_offset += export_name.length() + 1;
+                }
+                indent(); output << "i32.const " << string_literals[export_name] << "\n";
+                indent(); output << "call $create_checkbox\n";
+            } else if (ui->component_type == "Slider") {
+                if (!current_class_name.empty()) {
+                    indent(); output << "local.get $this\n";
+                } else {
+                    indent(); output << "i32.const 0\n";
+                }
+                std::string method_name = "";
+                for (const auto& arg : ui->named_args) {
+                    if (arg.first == "onChange") {
+                        if (auto* id = dynamic_cast<IdentifierNode*>(arg.second.get())) {
+                            method_name = id->name;
+                        }
+                    }
+                }
+                std::string export_name = current_class_name.empty() ? method_name : (current_class_name + "_" + method_name);
+                if (string_literals.find(export_name) == string_literals.end()) {
+                    string_literals[export_name] = next_string_offset;
+                    next_string_offset += export_name.length() + 1;
+                }
+                indent(); output << "i32.const " << string_literals[export_name] << "\n";
+                indent(); output << "call $create_slider\n";
+            } else if (ui->component_type == "Toggle") {
+                if (!ui->children.empty()) {
+                    generateExpression(ui->children[0].get());
+                } else {
+                    indent(); output << "i32.const 0\n";
+                }
+                if (!current_class_name.empty()) {
+                    indent(); output << "local.get $this\n";
+                } else {
+                    indent(); output << "i32.const 0\n";
+                }
+                std::string method_name = "";
+                for (const auto& arg : ui->named_args) {
+                    if (arg.first == "onChange") {
+                        if (auto* id = dynamic_cast<IdentifierNode*>(arg.second.get())) {
+                            method_name = id->name;
+                        }
+                    }
+                }
+                std::string export_name = current_class_name.empty() ? method_name : (current_class_name + "_" + method_name);
+                if (string_literals.find(export_name) == string_literals.end()) {
+                    string_literals[export_name] = next_string_offset;
+                    next_string_offset += export_name.length() + 1;
+                }
+                indent(); output << "i32.const " << string_literals[export_name] << "\n";
+                indent(); output << "call $create_toggle\n";
+            } else if (ui->component_type == "Dropdown") {
+                if (!ui->children.empty()) {
+                    generateExpression(ui->children[0].get());
+                } else {
+                    indent(); output << "i32.const 0\n";
+                }
+                if (!current_class_name.empty()) {
+                    indent(); output << "local.get $this\n";
+                } else {
+                    indent(); output << "i32.const 0\n";
+                }
+                std::string method_name = "";
+                for (const auto& arg : ui->named_args) {
+                    if (arg.first == "onChange") {
+                        if (auto* id = dynamic_cast<IdentifierNode*>(arg.second.get())) {
+                            method_name = id->name;
+                        }
+                    }
+                }
+                std::string export_name = current_class_name.empty() ? method_name : (current_class_name + "_" + method_name);
+                if (string_literals.find(export_name) == string_literals.end()) {
+                    string_literals[export_name] = next_string_offset;
+                    next_string_offset += export_name.length() + 1;
+                }
+                indent(); output << "i32.const " << string_literals[export_name] << "\n";
+                indent(); output << "call $create_dropdown\n";
             } else if (ui->component_type == "Button") {
                 if (!ui->children.empty()) {
                     generateExpression(ui->children[0].get());
@@ -223,6 +324,9 @@ void WASMCodeGenerator::generateExpression(ExprNode* expr) {
             for (const auto& arg : ui->named_args) {
                 if (arg.first == "onClick" && ui->component_type == "Button") {
                     continue; // onClick is handled inside create_button
+                }
+                if (arg.first == "onChange" && (ui->component_type == "Checkbox" || ui->component_type == "Slider" || ui->component_type == "Toggle" || ui->component_type == "Dropdown")) {
+                    continue; // onChange is handled during creation
                 }
                 std::string key = arg.first;
                 if (string_literals.find(key) == string_literals.end()) {
@@ -609,6 +713,10 @@ std::string WASMCodeGenerator::generate(ProgramNode* program) {
     indent(); output << "(import \"env\" \"create_scrolling\" (func $create_scrolling (result i32)))\n";
     indent(); output << "(import \"env\" \"create_card\" (func $create_card (result i32)))\n";
     indent(); output << "(import \"env\" \"create_container\" (func $create_container (result i32)))\n";
+    indent(); output << "(import \"env\" \"create_checkbox\" (func $create_checkbox (param i32 i32 i32) (result i32)))\n";
+    indent(); output << "(import \"env\" \"create_slider\" (func $create_slider (param i32 i32) (result i32)))\n";
+    indent(); output << "(import \"env\" \"create_toggle\" (func $create_toggle (param i32 i32 i32) (result i32)))\n";
+    indent(); output << "(import \"env\" \"create_dropdown\" (func $create_dropdown (param i32 i32 i32) (result i32)))\n";
     indent(); output << "(import \"env\" \"set_attribute\" (func $set_attribute (param i32 i32 i32)))\n";
     indent(); output << "(import \"env\" \"set_attribute_int\" (func $set_attribute_int (param i32 i32 i32)))\n";
     
@@ -884,6 +992,148 @@ std::string WASMCodeGenerator::generateHTMLWrapper() {
     html << "                    DOMNodes.push(el);\n";
     html << "                    return DOMNodes.length - 1;\n";
     html << "                },\n";
+    html << "                create_checkbox: (textPtr, instancePtr, methodPtr) => {\n";
+    html << "                    const labelText = readString(textPtr);\n";
+    html << "                    const methodName = readString(methodPtr);\n";
+    html << "                    const label = document.createElement('label');\n";
+    html << "                    label.style.display = 'flex';\n";
+    html << "                    label.style.alignItems = 'center';\n";
+    html << "                    label.style.gap = '8px';\n";
+    html << "                    label.style.cursor = 'pointer';\n";
+    html << "                    label.style.color = '#e2e8f0';\n";
+    html << "                    label.style.margin = '5px';\n";
+    html << "                    const input = document.createElement('input');\n";
+    html << "                    input.type = 'checkbox';\n";
+    html << "                    input.style.cursor = 'pointer';\n";
+    html << "                    input.style.width = '18px';\n";
+    html << "                    input.style.height = '18px';\n";
+    html << "                    input.style.accentColor = '#38bdf8';\n";
+    html << "                    input.onchange = () => {\n";
+    html << "                        if (wasmInstance && wasmInstance.exports[methodName]) {\n";
+    html << "                            logToConsole(`[Event] Checkbox Changed: calling ${methodName}(instancePtr: ${instancePtr}, checked: ${input.checked})`, 'event');\n";
+    html << "                            wasmInstance.exports[methodName](instancePtr, input.checked ? 1 : 0);\n";
+    html << "                        }\n";
+    html << "                    };\n";
+    html << "                    label.appendChild(input);\n";
+    html << "                    const textSpan = document.createElement('span');\n";
+    html << "                    textSpan.textContent = labelText;\n";
+    html << "                    label.appendChild(textSpan);\n";
+    html << "                    DOMNodes.push(label);\n";
+    html << "                    label.inputElement = input;\n";
+    html << "                    return DOMNodes.length - 1;\n";
+    html << "                },\n";
+    html << "                create_slider: (instancePtr, methodPtr) => {\n";
+    html << "                    const methodName = readString(methodPtr);\n";
+    html << "                    const el = document.createElement('input');\n";
+    html << "                    el.type = 'range';\n";
+    html << "                    el.style.margin = '5px';\n";
+    html << "                    el.style.accentColor = '#38bdf8';\n";
+    html << "                    el.style.background = 'rgba(255,255,255,0.1)';\n";
+    html << "                    el.oninput = () => {\n";
+    html << "                        if (wasmInstance && wasmInstance.exports[methodName]) {\n";
+    html << "                            logToConsole(`[Event] Slider Changed: calling ${methodName}(instancePtr: ${instancePtr}, value: ${el.value})`, 'event');\n";
+    html << "                            wasmInstance.exports[methodName](instancePtr, parseInt(el.value, 10));\n";
+    html << "                        }\n";
+    html << "                    };\n";
+    html << "                    DOMNodes.push(el);\n";
+    html << "                    el.inputElement = el;\n";
+    html << "                    return DOMNodes.length - 1;\n";
+    html << "                },\n";
+    html << "                create_toggle: (textPtr, instancePtr, methodPtr) => {\n";
+    html << "                    const labelText = readString(textPtr);\n";
+    html << "                    const methodName = readString(methodPtr);\n";
+    html << "                    const label = document.createElement('label');\n";
+    html << "                    label.style.display = 'flex';\n";
+    html << "                    label.style.alignItems = 'center';\n";
+    html << "                    label.style.gap = '10px';\n";
+    html << "                    label.style.cursor = 'pointer';\n";
+    html << "                    label.style.margin = '5px';\n";
+    html << "                    const switchDiv = document.createElement('div');\n";
+    html << "                    switchDiv.style.position = 'relative';\n";
+    html << "                    switchDiv.style.width = '44px';\n";
+    html << "                    switchDiv.style.height = '24px';\n";
+    html << "                    switchDiv.style.backgroundColor = '#475569';\n";
+    html << "                    switchDiv.style.borderRadius = '12px';\n";
+    html << "                    switchDiv.style.transition = 'background-color 0.2s';\n";
+    html << "                    const knob = document.createElement('div');\n";
+    html << "                    knob.style.position = 'absolute';\n";
+    html << "                    knob.style.top = '2px';\n";
+    html << "                    knob.style.left = '2px';\n";
+    html << "                    knob.style.width = '20px';\n";
+    html << "                    knob.style.height = '20px';\n";
+    html << "                    knob.style.borderRadius = '50%';\n";
+    html << "                    knob.style.backgroundColor = '#ffffff';\n";
+    html << "                    knob.style.transition = 'transform 0.2s';\n";
+    html << "                    switchDiv.appendChild(knob);\n";
+    html << "                    let isOn = false;\n";
+    html << "                    const updateToggleUI = (state) => {\n";
+    html << "                        isOn = state;\n";
+    html << "                        if (isOn) {\n";
+    html << "                            switchDiv.style.backgroundColor = '#10b981';\n";
+    html << "                            knob.style.transform = 'translateX(20px)';\n";
+    html << "                        } else {\n";
+    html << "                            switchDiv.style.backgroundColor = '#475569';\n";
+    html << "                            knob.style.transform = 'translateX(0)';\n";
+    html << "                        }\n";
+    html << "                    };\n";
+    html << "                    label.onclick = (e) => {\n";
+    html << "                        e.preventDefault();\n";
+    html << "                        updateToggleUI(!isOn);\n";
+    html << "                        if (wasmInstance && wasmInstance.exports[methodName]) {\n";
+    html << "                            logToConsole(`[Event] Toggle Changed: calling ${methodName}(instancePtr: ${instancePtr}, isOn: ${isOn})`, 'event');\n";
+    html << "                            wasmInstance.exports[methodName](instancePtr, isOn ? 1 : 0);\n";
+    html << "                        }\n";
+    html << "                    };\n";
+    html << "                    label.appendChild(switchDiv);\n";
+    html << "                    if (labelText) {\n";
+    html << "                        const textSpan = document.createElement('span');\n";
+    html << "                        textSpan.textContent = labelText;\n";
+    html << "                        textSpan.style.color = '#e2e8f0';\n";
+    html << "                        label.appendChild(textSpan);\n";
+    html << "                    }\n";
+    html << "                    label.setToggleState = updateToggleUI;\n";
+    html << "                    label.inputElement = label;\n";
+    html << "                    DOMNodes.push(label);\n";
+    html << "                    return DOMNodes.length - 1;\n";
+    html << "                },\n";
+    html << "                create_dropdown: (optionsPtr, instancePtr, methodPtr) => {\n";
+    html << "                    const optionsStr = readString(optionsPtr);\n";
+    html << "                    const methodName = readString(methodPtr);\n";
+    html << "                    const el = document.createElement('select');\n";
+    html << "                    el.className = 'zenith-input';\n";
+    html << "                    el.style.background = 'rgba(15, 23, 42, 0.8)';\n";
+    html << "                    el.style.color = '#f8fafc';\n";
+    html << "                    el.style.border = '1px solid rgba(0, 242, 254, 0.3)';\n";
+    html << "                    el.style.borderRadius = '8px';\n";
+    html << "                    el.style.padding = '8px 12px';\n";
+    html << "                    el.style.cursor = 'pointer';\n";
+    html << "                    const populateOptions = (str) => {\n";
+    html << "                        el.innerHTML = '';\n";
+    html << "                        const opts = str.split(',');\n";
+    html << "                        for (const opt of opts) {\n";
+    html << "                            const trimmed = opt.trim();\n";
+    html << "                            if (!trimmed) continue;\n";
+    html << "                            const optionEl = document.createElement('option');\n";
+    html << "                            optionEl.value = trimmed;\n";
+    html << "                            optionEl.textContent = trimmed;\n";
+    html << "                            el.appendChild(optionEl);\n";
+    html << "                        }\n";
+    html << "                    };\n";
+    html << "                    if (optionsStr) {\n";
+    html << "                        populateOptions(optionsStr);\n";
+    html << "                    }\n";
+    html << "                    el.onchange = () => {\n";
+    html << "                        if (wasmInstance && wasmInstance.exports[methodName]) {\n";
+    html << "                            const strPtr = writeStringToMemory(el.value, 36864);\n";
+    html << "                            logToConsole(`[Event] Dropdown Changed: calling ${methodName}(instancePtr: ${instancePtr}, value: \"${el.value}\")`, 'event');\n";
+    html << "                            wasmInstance.exports[methodName](instancePtr, strPtr);\n";
+    html << "                        }\n";
+    html << "                    };\n";
+    html << "                    el.inputElement = el;\n";
+    html << "                    el.populateOptions = populateOptions;\n";
+    html << "                    DOMNodes.push(el);\n";
+    html << "                    return DOMNodes.length - 1;\n";
+    html << "                },\n";
     html << "                httpGet: (urlPtr) => {\n";
     html << "                    const url = readString(urlPtr);\n";
     html << "                    logToConsole(`[Network] httpGet: Fetching ${url}...`, 'system');\n";
@@ -978,10 +1228,13 @@ std::string WASMCodeGenerator::generateHTMLWrapper() {
     html << "                    return DOMNodes.length - 1;\n";
     html << "                },\n";
     html << "                set_attribute: (nodeIdx, keyPtr, valPtr) => {\n";
-    html << "                    const el = DOMNodes[nodeIdx];\n";
+    html << "                    let el = DOMNodes[nodeIdx];\n";
     html << "                    if (!el) return;\n";
     html << "                    const key = readString(keyPtr);\n";
     html << "                    const val = readString(valPtr);\n";
+    html << "                    if (el.inputElement && (key === 'checked' || key === 'disabled' || key === 'value' || key === 'isOn' || key === 'options')) {\n";
+    html << "                        el = el.inputElement;\n";
+    html << "                    }\n";
     html << "                    if (key === 'color') {\n";
     html << "                        el.style.color = val;\n";
     html << "                    } else if (key === 'backgroundColor') {\n";
@@ -1000,14 +1253,25 @@ std::string WASMCodeGenerator::generateHTMLWrapper() {
     html << "                        el.style.alignItems = val;\n";
     html << "                    } else if (key === 'src' || key === 'url') {\n";
     html << "                        el.src = val;\n";
+    html << "                    } else if (key === 'checked') {\n";
+    html << "                        el.checked = (val === 'true' || val === '1');\n";
+    html << "                    } else if (key === 'isOn') {\n";
+    html << "                        if (el.setToggleState) el.setToggleState(val === 'true' || val === '1');\n";
+    html << "                    } else if (key === 'value') {\n";
+    html << "                        el.value = val;\n";
+    html << "                    } else if (key === 'options') {\n";
+    html << "                        if (el.populateOptions) el.populateOptions(val);\n";
     html << "                    } else {\n";
     html << "                        el.setAttribute(key, val);\n";
     html << "                    }\n";
     html << "                },\n";
     html << "                set_attribute_int: (nodeIdx, keyPtr, val) => {\n";
-    html << "                    const el = DOMNodes[nodeIdx];\n";
+    html << "                    let el = DOMNodes[nodeIdx];\n";
     html << "                    if (!el) return;\n";
     html << "                    const key = readString(keyPtr);\n";
+    html << "                    if (el.inputElement && (key === 'checked' || key === 'disabled' || key === 'value' || key === 'isOn' || key === 'min' || key === 'max')) {\n";
+    html << "                        el = el.inputElement;\n";
+    html << "                    }\n";
     html << "                    if (key === 'padding') {\n";
     html << "                        el.style.padding = val + 'px';\n";
     html << "                    } else if (key === 'margin') {\n";
@@ -1020,6 +1284,16 @@ std::string WASMCodeGenerator::generateHTMLWrapper() {
     html << "                        el.style.flexGrow = val;\n";
     html << "                    } else if (key === 'gap') {\n";
     html << "                        el.style.gap = val + 'px';\n";
+    html << "                    } else if (key === 'checked') {\n";
+    html << "                        el.checked = (val !== 0);\n";
+    html << "                    } else if (key === 'isOn') {\n";
+    html << "                        if (el.setToggleState) el.setToggleState(val !== 0);\n";
+    html << "                    } else if (key === 'value') {\n";
+    html << "                        el.value = val;\n";
+    html << "                    } else if (key === 'min') {\n";
+    html << "                        el.min = val;\n";
+    html << "                    } else if (key === 'max') {\n";
+    html << "                        el.max = val;\n";
     html << "                    } else {\n";
     html << "                        el.setAttribute(key, val.toString());\n";
     html << "                    }\n";

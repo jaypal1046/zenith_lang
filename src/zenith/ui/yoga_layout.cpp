@@ -9,9 +9,10 @@
 #include <algorithm>
 #include <cstring>
 
-// Include Yoga headers when available
-// #include <yoga/YGNode.h>
-// #include <yoga/Yoga.h>
+#ifdef YOGA_AVAILABLE
+#include <yoga/YGNode.h>
+#include <yoga/Yoga.h>
+#endif
 
 namespace zenith {
 namespace ui {
@@ -30,6 +31,7 @@ YGFlexDirection toYogaFlexDirection(FlexDirection dir) {
         case FlexDirection::Column: return YGFlexDirectionColumn;
         case FlexDirection::ColumnReverse: return YGFlexDirectionColumnReverse;
     }
+    return YGFlexDirectionColumn;
 }
 
 YGJustify toYogaJustifyContent(JustifyContent justify) {
@@ -41,6 +43,7 @@ YGJustify toYogaJustifyContent(JustifyContent justify) {
         case JustifyContent::SpaceAround: return YGJustifySpaceAround;
         case JustifyContent::SpaceEvenly: return YGJustifySpaceEvenly;
     }
+    return YGJustifyFlexStart;
 }
 
 YGAlign toYogaAlignItems(AlignItems align) {
@@ -51,6 +54,7 @@ YGAlign toYogaAlignItems(AlignItems align) {
         case AlignItems::Baseline: return YGAlignBaseline;
         case AlignItems::Stretch: return YGAlignStretch;
     }
+    return YGAlignFlexStart;
 }
 
 YGAlign toYogaAlignSelf(AlignSelf align) {
@@ -62,6 +66,7 @@ YGAlign toYogaAlignSelf(AlignSelf align) {
         case AlignSelf::Baseline: return YGAlignBaseline;
         case AlignSelf::Stretch: return YGAlignStretch;
     }
+    return YGAlignAuto;
 }
 
 YGWrap toYogaFlexWrap(FlexWrap wrap) {
@@ -70,6 +75,7 @@ YGWrap toYogaFlexWrap(FlexWrap wrap) {
         case FlexWrap::Wrap: return YGWrapWrap;
         case FlexWrap::WrapReverse: return YGWrapWrapReverse;
     }
+    return YGWrapNoWrap;
 }
 
 YGPositionType toYogaPositionType(PositionType type) {
@@ -77,6 +83,7 @@ YGPositionType toYogaPositionType(PositionType type) {
         case PositionType::Relative: return YGPositionTypeRelative;
         case PositionType::Absolute: return YGPositionTypeAbsolute;
     }
+    return YGPositionTypeRelative;
 }
 
 YGDisplay toYogaDisplay(DisplayType display) {
@@ -84,6 +91,7 @@ YGDisplay toYogaDisplay(DisplayType display) {
         case DisplayType::Flex: return YGDisplayFlex;
         case DisplayType::None: return YGDisplayNone;
     }
+    return YGDisplayFlex;
 }
 
 YGEdge toYogaEdge(Edge edge) {
@@ -98,6 +106,7 @@ YGEdge toYogaEdge(Edge edge) {
         case Edge::Vertical: return YGEdgeVertical;
         case Edge::All: return YGEdgeAll;
     }
+    return YGEdgeAll;
 }
 
 YGValue toYogaValue(const MeasureValue& measure) {
@@ -119,6 +128,85 @@ YGValue toYogaValue(const MeasureValue& measure) {
     return value;
 }
 
+void setYogaWidth(YGNodeRef node, const MeasureValue& value) {
+    switch (value.unit) {
+        case MeasureUnit::Point: YGNodeStyleSetWidth(node, value.value); break;
+        case MeasureUnit::Percent: YGNodeStyleSetWidthPercent(node, value.value); break;
+        case MeasureUnit::Auto: YGNodeStyleSetWidthAuto(node); break;
+    }
+}
+
+void setYogaHeight(YGNodeRef node, const MeasureValue& value) {
+    switch (value.unit) {
+        case MeasureUnit::Point: YGNodeStyleSetHeight(node, value.value); break;
+        case MeasureUnit::Percent: YGNodeStyleSetHeightPercent(node, value.value); break;
+        case MeasureUnit::Auto: YGNodeStyleSetHeightAuto(node); break;
+    }
+}
+
+void setYogaMinWidth(YGNodeRef node, const MeasureValue& value) {
+    switch (value.unit) {
+        case MeasureUnit::Point: YGNodeStyleSetMinWidth(node, value.value); break;
+        case MeasureUnit::Percent: YGNodeStyleSetMinWidthPercent(node, value.value); break;
+        case MeasureUnit::Auto: break;
+    }
+}
+
+void setYogaMinHeight(YGNodeRef node, const MeasureValue& value) {
+    switch (value.unit) {
+        case MeasureUnit::Point: YGNodeStyleSetMinHeight(node, value.value); break;
+        case MeasureUnit::Percent: YGNodeStyleSetMinHeightPercent(node, value.value); break;
+        case MeasureUnit::Auto: break;
+    }
+}
+
+void setYogaMaxWidth(YGNodeRef node, const MeasureValue& value) {
+    switch (value.unit) {
+        case MeasureUnit::Point: YGNodeStyleSetMaxWidth(node, value.value); break;
+        case MeasureUnit::Percent: YGNodeStyleSetMaxWidthPercent(node, value.value); break;
+        case MeasureUnit::Auto: break;
+    }
+}
+
+void setYogaMaxHeight(YGNodeRef node, const MeasureValue& value) {
+    switch (value.unit) {
+        case MeasureUnit::Point: YGNodeStyleSetMaxHeight(node, value.value); break;
+        case MeasureUnit::Percent: YGNodeStyleSetMaxHeightPercent(node, value.value); break;
+        case MeasureUnit::Auto: break;
+    }
+}
+
+void setYogaPosition(YGNodeRef node, YGEdge edge, const MeasureValue& value) {
+    switch (value.unit) {
+        case MeasureUnit::Point: YGNodeStyleSetPosition(node, edge, value.value); break;
+        case MeasureUnit::Percent: YGNodeStyleSetPositionPercent(node, edge, value.value); break;
+        case MeasureUnit::Auto: break;
+    }
+}
+
+void setYogaMargin(YGNodeRef node, YGEdge edge, const MeasureValue& value) {
+    switch (value.unit) {
+        case MeasureUnit::Point: YGNodeStyleSetMargin(node, edge, value.value); break;
+        case MeasureUnit::Percent: YGNodeStyleSetMarginPercent(node, edge, value.value); break;
+        case MeasureUnit::Auto: YGNodeStyleSetMarginAuto(node, edge); break;
+    }
+}
+
+void setYogaPadding(YGNodeRef node, YGEdge edge, const MeasureValue& value) {
+    switch (value.unit) {
+        case MeasureUnit::Point: YGNodeStyleSetPadding(node, edge, value.value); break;
+        case MeasureUnit::Percent: YGNodeStyleSetPaddingPercent(node, edge, value.value); break;
+        case MeasureUnit::Auto: break;
+    }
+}
+
+void setYogaFlexBasis(YGNodeRef node, const MeasureValue& value) {
+    switch (value.unit) {
+        case MeasureUnit::Point: YGNodeStyleSetFlexBasis(node, value.value); break;
+        case MeasureUnit::Percent: YGNodeStyleSetFlexBasisPercent(node, value.value); break;
+        case MeasureUnit::Auto: YGNodeStyleSetFlexBasisAuto(node); break;
+    }
+}
 #endif // YOGA_AVAILABLE
 
 } // anonymous namespace
@@ -143,6 +231,7 @@ struct YogaNode::Impl {
 #ifdef YOGA_AVAILABLE
         node = YGNodeNew();
         YGNodeSetContext(node, this);
+#else
         initialized = true;
 #endif
     }
@@ -167,34 +256,34 @@ struct YogaNode::Impl {
         YGNodeStyleSetFlexWrap(node, toYogaFlexWrap(config.flexWrap));
         YGNodeStyleSetFlexGrow(node, config.flexGrow);
         YGNodeStyleSetFlexShrink(node, config.flexShrink);
-        YGNodeStyleSetFlexBasis(node, toYogaValue(config.flexBasis));
+        setYogaFlexBasis(node, config.flexBasis);
         
         // Dimensions
-        YGNodeStyleSetWidth(node, toYogaValue(config.width));
-        YGNodeStyleSetHeight(node, toYogaValue(config.height));
-        YGNodeStyleSetMinWidth(node, toYogaValue(config.minWidth));
-        YGNodeStyleSetMinHeight(node, toYogaValue(config.minHeight));
-        YGNodeStyleSetMaxWidth(node, toYogaValue(config.maxWidth));
-        YGNodeStyleSetMaxHeight(node, toYogaValue(config.maxHeight));
+        setYogaWidth(node, config.width);
+        setYogaHeight(node, config.height);
+        setYogaMinWidth(node, config.minWidth);
+        setYogaMinHeight(node, config.minHeight);
+        setYogaMaxWidth(node, config.maxWidth);
+        setYogaMaxHeight(node, config.maxHeight);
         
         // Position
         YGNodeStyleSetPositionType(node, toYogaPositionType(config.positionType));
-        YGNodeStyleSetPosition(node, YGEdgeLeft, toYogaValue(config.left));
-        YGNodeStyleSetPosition(node, YGEdgeTop, toYogaValue(config.top));
-        YGNodeStyleSetPosition(node, YGEdgeRight, toYogaValue(config.right));
-        YGNodeStyleSetPosition(node, YGEdgeBottom, toYogaValue(config.bottom));
+        setYogaPosition(node, YGEdgeLeft, config.left);
+        setYogaPosition(node, YGEdgeTop, config.top);
+        setYogaPosition(node, YGEdgeRight, config.right);
+        setYogaPosition(node, YGEdgeBottom, config.bottom);
         
         // Margins
-        YGNodeStyleSetMargin(node, YGEdgeLeft, toYogaValue(config.marginLeft));
-        YGNodeStyleSetMargin(node, YGEdgeTop, toYogaValue(config.marginTop));
-        YGNodeStyleSetMargin(node, YGEdgeRight, toYogaValue(config.marginRight));
-        YGNodeStyleSetMargin(node, YGEdgeBottom, toYogaValue(config.marginBottom));
+        setYogaMargin(node, YGEdgeLeft, config.marginLeft);
+        setYogaMargin(node, YGEdgeTop, config.marginTop);
+        setYogaMargin(node, YGEdgeRight, config.marginRight);
+        setYogaMargin(node, YGEdgeBottom, config.marginBottom);
         
         // Padding
-        YGNodeStyleSetPadding(node, YGEdgeLeft, toYogaValue(config.paddingLeft));
-        YGNodeStyleSetPadding(node, YGEdgeTop, toYogaValue(config.paddingTop));
-        YGNodeStyleSetPadding(node, YGEdgeRight, toYogaValue(config.paddingRight));
-        YGNodeStyleSetPadding(node, YGEdgeBottom, toYogaValue(config.paddingBottom));
+        setYogaPadding(node, YGEdgeLeft, config.paddingLeft);
+        setYogaPadding(node, YGEdgeTop, config.paddingTop);
+        setYogaPadding(node, YGEdgeRight, config.paddingRight);
+        setYogaPadding(node, YGEdgeBottom, config.paddingBottom);
         
         // Border
         YGNodeStyleSetBorder(node, YGEdgeLeft, config.borderLeft);
@@ -291,7 +380,7 @@ YogaNode& YogaNode::setFlexShrink(float shrink) {
 YogaNode& YogaNode::setFlexBasis(const MeasureValue& basis) {
     pimpl->config.flexBasis = basis;
 #ifdef YOGA_AVAILABLE
-    YGNodeStyleSetFlexBasis(pimpl->node, toYogaValue(basis));
+    setYogaFlexBasis(pimpl->node, basis);
 #endif
     return *this;
 }
@@ -299,7 +388,7 @@ YogaNode& YogaNode::setFlexBasis(const MeasureValue& basis) {
 YogaNode& YogaNode::setWidth(const MeasureValue& width) {
     pimpl->config.width = width;
 #ifdef YOGA_AVAILABLE
-    YGNodeStyleSetWidth(pimpl->node, toYogaValue(width));
+    setYogaWidth(pimpl->node, width);
 #endif
     return *this;
 }
@@ -307,7 +396,7 @@ YogaNode& YogaNode::setWidth(const MeasureValue& width) {
 YogaNode& YogaNode::setHeight(const MeasureValue& height) {
     pimpl->config.height = height;
 #ifdef YOGA_AVAILABLE
-    YGNodeStyleSetHeight(pimpl->node, toYogaValue(height));
+    setYogaHeight(pimpl->node, height);
 #endif
     return *this;
 }
@@ -315,7 +404,7 @@ YogaNode& YogaNode::setHeight(const MeasureValue& height) {
 YogaNode& YogaNode::setMinWidth(const MeasureValue& width) {
     pimpl->config.minWidth = width;
 #ifdef YOGA_AVAILABLE
-    YGNodeStyleSetMinWidth(pimpl->node, toYogaValue(width));
+    setYogaMinWidth(pimpl->node, width);
 #endif
     return *this;
 }
@@ -323,7 +412,7 @@ YogaNode& YogaNode::setMinWidth(const MeasureValue& width) {
 YogaNode& YogaNode::setMinHeight(const MeasureValue& height) {
     pimpl->config.minHeight = height;
 #ifdef YOGA_AVAILABLE
-    YGNodeStyleSetMinHeight(pimpl->node, toYogaValue(height));
+    setYogaMinHeight(pimpl->node, height);
 #endif
     return *this;
 }
@@ -331,7 +420,7 @@ YogaNode& YogaNode::setMinHeight(const MeasureValue& height) {
 YogaNode& YogaNode::setMaxWidth(const MeasureValue& width) {
     pimpl->config.maxWidth = width;
 #ifdef YOGA_AVAILABLE
-    YGNodeStyleSetMaxWidth(pimpl->node, toYogaValue(width));
+    setYogaMaxWidth(pimpl->node, width);
 #endif
     return *this;
 }
@@ -339,7 +428,7 @@ YogaNode& YogaNode::setMaxWidth(const MeasureValue& width) {
 YogaNode& YogaNode::setMaxHeight(const MeasureValue& height) {
     pimpl->config.maxHeight = height;
 #ifdef YOGA_AVAILABLE
-    YGNodeStyleSetMaxHeight(pimpl->node, toYogaValue(height));
+    setYogaMaxHeight(pimpl->node, height);
 #endif
     return *this;
 }
@@ -355,7 +444,7 @@ YogaNode& YogaNode::setPositionType(PositionType type) {
 YogaNode& YogaNode::setLeft(const MeasureValue& left) {
     pimpl->config.left = left;
 #ifdef YOGA_AVAILABLE
-    YGNodeStyleSetPosition(pimpl->node, YGEdgeLeft, toYogaValue(left));
+    setYogaPosition(pimpl->node, YGEdgeLeft, left);
 #endif
     return *this;
 }
@@ -363,7 +452,7 @@ YogaNode& YogaNode::setLeft(const MeasureValue& left) {
 YogaNode& YogaNode::setTop(const MeasureValue& top) {
     pimpl->config.top = top;
 #ifdef YOGA_AVAILABLE
-    YGNodeStyleSetPosition(pimpl->node, YGEdgeTop, toYogaValue(top));
+    setYogaPosition(pimpl->node, YGEdgeTop, top);
 #endif
     return *this;
 }
@@ -371,7 +460,7 @@ YogaNode& YogaNode::setTop(const MeasureValue& top) {
 YogaNode& YogaNode::setRight(const MeasureValue& right) {
     pimpl->config.right = right;
 #ifdef YOGA_AVAILABLE
-    YGNodeStyleSetPosition(pimpl->node, YGEdgeRight, toYogaValue(right));
+    setYogaPosition(pimpl->node, YGEdgeRight, right);
 #endif
     return *this;
 }
@@ -379,7 +468,7 @@ YogaNode& YogaNode::setRight(const MeasureValue& right) {
 YogaNode& YogaNode::setBottom(const MeasureValue& bottom) {
     pimpl->config.bottom = bottom;
 #ifdef YOGA_AVAILABLE
-    YGNodeStyleSetPosition(pimpl->node, YGEdgeBottom, toYogaValue(bottom));
+    setYogaPosition(pimpl->node, YGEdgeBottom, bottom);
 #endif
     return *this;
 }
@@ -387,7 +476,7 @@ YogaNode& YogaNode::setBottom(const MeasureValue& bottom) {
 YogaNode& YogaNode::setMargin(Edge edge, const MeasureValue& margin) {
 #ifdef YOGA_AVAILABLE
     YGEdge yogaEdge = toYogaEdge(edge);
-    YGNodeStyleSetMargin(pimpl->node, yogaEdge, toYogaValue(margin));
+    setYogaMargin(pimpl->node, yogaEdge, margin);
 #endif
     
     // Update config based on edge
@@ -404,7 +493,7 @@ YogaNode& YogaNode::setMargin(Edge edge, const MeasureValue& margin) {
 YogaNode& YogaNode::setPadding(Edge edge, const MeasureValue& padding) {
 #ifdef YOGA_AVAILABLE
     YGEdge yogaEdge = toYogaEdge(edge);
-    YGNodeStyleSetPadding(pimpl->node, yogaEdge, toYogaValue(padding));
+    setYogaPadding(pimpl->node, yogaEdge, padding);
 #endif
     
     switch (edge) {
@@ -536,7 +625,7 @@ void YogaNode::clearMeasureFunction() {
 
 void YogaNode::calculateLayout(float availableWidth, float availableHeight) {
 #ifdef YOGA_AVAILABLE
-    YGNodeCalculateLayout(pimpl->node, availableWidth, availableHeight);
+    YGNodeCalculateLayout(pimpl->node, availableWidth, availableHeight, YGDirectionInherit);
 #else
     // Stub: Set default layout values
     (void)availableWidth;

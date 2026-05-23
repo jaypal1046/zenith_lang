@@ -626,25 +626,35 @@
         };
     </script>
     <script>
-class GalleryApp {
+class WidgetDemoApp {
     constructor() {
-        this.title = "ZENITH PLATFORM GALLERY";
-        this.loaded_data = "No API data fetched yet.";
-        this.clicks = 0;
+        this.cb_state = false;
+        this.slider_val = 50;
+        this.toggle_state = false;
+        this.selected_option = "Option 1";
         counterGlobalInstance = this;
     }
     build() {
-        return UI.Column([UI.Text([this.title], {fontWeight: "bold", color: "cyan"}), UI.Container([UI.Text(["1. Widget Grid & Flow Layouts"], {fontWeight: "bold", color: "yellow"}), UI.Row([UI.Text(["Flow item 1"], {color: "green"}), UI.Text(["Flow item 2"], {color: "magenta"})], {})], {padding: 1}), UI.Card([UI.Text(["2. Reactive Component States"], {fontWeight: "bold", color: "cyan"}), UI.Row([UI.Text(["Interactive clicks: " + this.clicks], {color: "green"}), UI.Button(["Click Me!"], {onClick: this.handlePress.bind(this)})], {})], {padding: 1}), UI.Row([UI.Image(["https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe"], {width: 35, height: 4}), UI.Video(["https://assets.mixkit.co/videos/preview/mixkit-stars-in-space-background-1611-large.mp4"], {width: 35, height: 4})], {}), UI.Scrolling([UI.Text(["Line 1: Infinite Scrolling Row"], {}), UI.Text(["Line 2: GPU Accelerated Layouts"], {}), UI.Text(["Line 3: Reactive State Binding"], {}), UI.Text(["Line 4: Native Platform Primitives"], {}), UI.Text(["Line 5: Dynamic CSS Variables"], {}), UI.Text(["Line 6: Single-Thread WASM Event Loop"], {})], {height: 4}), UI.Card([UI.Text(["3. REST API / Network Client Integration"], {fontWeight: "bold", color: "yellow"}), UI.Row([UI.Text(["Response: " + this.loaded_data], {}), UI.Button(["Fetch JSON"], {onClick: this.fetchData.bind(this)})], {})], {padding: 1}), UI.Card([UI.Text(["4. CSS Flexbox Layout Demonstration"], {fontWeight: "bold", color: "magenta"}), UI.Row([UI.Text(["[Grow 1]"], {color: "red", flexGrow: 1}), UI.Text(["[Grow 2]"], {color: "green", flexGrow: 2}), UI.Text(["[Grow 1]"], {color: "blue", flexGrow: 1})], {justifyContent: "space-around", gap: 1, width: 35})], {padding: 1})], {});
+        return UI.Column([UI.Text(["ZENITH WIDGET VERIFICATION DEMO"], {fontWeight: "bold", color: "cyan"}), UI.Card([UI.Text(["1. Checkbox State: " + this.cb_state], {color: "yellow"}), UI.Checkbox(["Accept Terms & Conditions"], {checked: this.cb_state, onChange: this.handleCheckbox.bind(this)})], {padding: 1}), UI.Card([UI.Text(["2. Slider Value: " + this.slider_val], {color: "green"}), UI.Slider([], {min: 0, max: 100, value: this.slider_val, onChange: this.handleSlider.bind(this)})], {padding: 1}), UI.Card([UI.Text(["3. Toggle Switch State: " + this.toggle_state], {color: "magenta"}), UI.Toggle(["Toggle Feature Alpha"], {isOn: this.toggle_state, onChange: this.handleToggle.bind(this)})], {padding: 1}), UI.Card([UI.Text(["4. Dropdown Chosen: " + this.selected_option], {color: "cyan"}), UI.Dropdown(["Option 1,Option 2,Option 3"], {value: this.selected_option, onChange: this.handleDropdown.bind(this)})], {padding: 1})], {});
     }
-    handlePress() {
+    handleCheckbox(checked) {
         this.setState(() => {
-            this.clicks = this.clicks + 1;
+            this.cb_state = checked;
         });
     }
-    async fetchData() {
-        let res = await httpGet("https://jsonplaceholder.typicode.com/users");
+    handleSlider(val) {
         this.setState(() => {
-            this.loaded_data = res;
+            this.slider_val = val;
+        });
+    }
+    handleToggle(onState) {
+        this.setState(() => {
+            this.toggle_state = onState;
+        });
+    }
+    handleDropdown(choice) {
+        this.setState(() => {
+            this.selected_option = choice;
         });
     }
     render() {
@@ -665,10 +675,10 @@ class GalleryApp {
     }
 }
 async function main() {
-    println("--- Booting Zenith Multi-Platform Gallery App ---");
-    let app = new GalleryApp();
+    println("--- Booting Zenith Form Widget Demo App ---");
+    let app = new WidgetDemoApp();
     app.build().render();
-    println("--- Gallery Loaded Successfully. Interactive loop started! ---");
+    println("--- Form widgets loaded. Interactive events ready. ---");
 }
         let counterGlobalInstance = null;
         function triggerIncrement() {

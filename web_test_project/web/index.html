@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zenith Web Portal</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0b0f19;
+            --card-bg: rgba(255, 255, 255, 0.03);
+            --border-color: rgba(255, 255, 255, 0.08);
+            --text-primary: #ffffff;
+            --text-secondary: #94a3b8;
+            --accent-js: #f7df1e;
+            --accent-wasm: #654ff0;
+            --accent-glow: rgba(99, 102, 241, 0.15);
+        }
+        body {
+            margin: 0;
+            font-family: 'Outfit', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            overflow-x: hidden;
+            background-image: 
+                radial-gradient(circle at 10% 20%, rgba(99, 102, 241, 0.05) 0%, transparent 40%),
+                radial-gradient(circle at 90% 80%, rgba(139, 92, 246, 0.05) 0%, transparent 40%);
+        }
+        .container {
+            max-width: 800px;
+            width: 90%;
+            text-align: center;
+            padding: 40px 20px;
+        }
+        h1 {
+            font-size: 3rem;
+            font-weight: 700;
+            margin-bottom: 10px;
+            background: linear-gradient(135deg, #a5b4fc, #c084fc);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -0.02em;
+        }
+        .subtitle {
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+            margin-bottom: 40px;
+            font-weight: 300;
+        }
+        .cards-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 24px;
+            margin-bottom: 40px;
+        }
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 30px;
+            text-align: left;
+            backdrop-filter: blur(12px);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, rgba(255,255,255,0.05), transparent);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        .card:hover {
+            transform: translateY(-5px);
+            border-color: rgba(99, 102, 241, 0.3);
+            box-shadow: 0 10px 30px -10px var(--accent-glow);
+        }
+        .card:hover::before {
+            opacity: 1;
+        }
+        .card-tag {
+            display: inline-block;
+            padding: 4px 10px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            border-radius: 20px;
+            margin-bottom: 15px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .card-tag.js {
+            background-color: rgba(247, 223, 30, 0.1);
+            color: var(--accent-js);
+            border: 1px solid rgba(247, 223, 30, 0.2);
+        }
+        .card-tag.wasm {
+            background-color: rgba(101, 79, 240, 0.15);
+            color: #a78bfa;
+            border: 1px solid rgba(101, 79, 240, 0.25);
+        }
+        h2 {
+            margin: 0 0 10px 0;
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+        p {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+            line-height: 1.5;
+            margin: 0 0 25px 0;
+            font-weight: 300;
+        }
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 0.95rem;
+            text-decoration: none;
+            transition: all 0.2s ease;
+            cursor: pointer;
+            width: calc(100% - 48px);
+            box-sizing: border-box;
+            border: none;
+        }
+        .btn.js {
+            background-color: var(--accent-js);
+            color: #000000;
+        }
+        .btn.js:hover {
+            background-color: #ffe62b;
+            transform: scale(1.02);
+        }
+        .btn.wasm {
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            color: #ffffff;
+        }
+        .btn.wasm:hover {
+            filter: brightness(1.1);
+            transform: scale(1.02);
+            box-shadow: 0 0 15px rgba(99, 102, 241, 0.4);
+        }
+        .footer {
+            margin-top: 20px;
+            color: rgba(255, 255, 255, 0.2);
+            font-size: 0.85rem;
+            font-weight: 300;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Zenith Web Explorer</h1>
+        <div class="subtitle">Platform-segregated Web Application Deployments</div>
+        
+        <div class="cards-grid">
+            <div class="card">
+                <span class="card-tag js">JavaScript</span>
+                <h2>Standard Web App</h2>
+                <p>Compiles Zenith UI declarative widgets directly into hyper-optimized Javascript client files using a lightweight runtime.</p>
+                <a href="main.html" class="btn js">Launch Web Build</a>
+            </div>
+            
+            <div class="card">
+                <span class="card-tag wasm">WebAssembly</span>
+                <h2>WASM Binary App</h2>
+                <p>Compiles Zenith AST to intermediate WebAssembly Text (WAT) representation, executing layout systems with high-performance low-level pipelines.</p>
+                <a href="main_wasm.html" class="btn wasm">Launch WASM Build</a>
+            </div>
+        </div>
+        
+        <div class="footer">
+            Zenith Engine &bull; Created with Zenith compiler create template
+        </div>
+    </div>
+</body>
+</html>

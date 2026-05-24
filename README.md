@@ -14,6 +14,7 @@ Zenith is a general-purpose, high-performance systems language that natively com
 | Transpiles to C++17 | ✅ | ❌ | ❌ | ✅ |
 | Cross-platform UI (all 6 targets) | ✅ | ✅ | ⚠️ | ❌ |
 | WebAssembly output | ✅ | ⚠️ | ❌ | ❌ |
+| Built-in SEO Static Pre-rendering | ✅ | ❌ (requires SSR host) | ❌ | ❌ |
 | Hybrid RC + GC memory | ✅ | ❌ | ❌ | ❌ |
 | LSP + completion support | ✅ | ❌ | ❌ | ❌ |
 | Built-in package manager | ✅ | ❌ | ✅ | ❌ |
@@ -335,6 +336,7 @@ Objects marked @managed
 | **Type System** (Hindley-Milner inference) | 🟢 Complete | Lambda, return, bidirectional inference |
 | **Yoga Layout Engine** | 🟢 Complete | Full flexbox, 14 tests pass, terminal renderer |
 | **Standard Library** | 🟢 Complete | Async/await, concurrency, 14 UI widgets |
+| **Web & WASM SEO Pre-rendering** | 🟢 Complete | Statically compiles declarative layout trees to static HTML for SEO crawlability |
 | **Developer Experience** | 🟢 Complete | LSP + completions, daemon, full pkg manager |
 | **AI/Agentic** | 🟢 Complete | Streaming, multi-modal, orchestration |
 | **Memory Management** | 🟢 Complete | Hybrid RC + GC, background cycle collector |

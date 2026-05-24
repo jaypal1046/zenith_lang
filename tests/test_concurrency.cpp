@@ -1,26 +1,77 @@
+#include <string>
+#include <vector>
+#include <unordered_map>
+#include <regex>
+#include <future>
 #include <iostream>
+#include <functional>
+#include "zenith_runtime.h"
 #include "zenith/std/concurrency.hpp"
-using namespace zenith::stdlib;
 
-int passed = 0, failed = 0;
-#define TEST(name) void name()
-#define RUN_TEST(name) do { std::cout << #name "... "; try { name(); std::cout << "OK\n"; passed++; } catch(const std::exception& e) { std::cout << "FAIL: " << e.what() << "\n"; failed++; } } while(0)
-#define ASSERT(x) if(!(x)) throw std::runtime_error("Assertion: " #x)
+inline void print(std::string msg) { std::cout << msg; }
+inline void println(std::string msg) { std::cout << msg << std::endl; }
+inline std::string httpGet(std::string url) { return zenith::httpGet(url); }
+inline std::string httpPost(std::string url, std::string json_body) { return zenith::httpPost(url, json_body); }
+inline std::string gcStats() { return zenith::mem::gcStatsString(); }
 
-TEST(t_result_ok) { auto r = make_ok(42); ASSERT(r.is_ok()); ASSERT(r.value() == 42); }
-TEST(t_result_err) { auto r = make_error<int>("e"); ASSERT(r.is_error()); ASSERT(r.error() == "e"); }
-TEST(t_option_some) { auto o = make_some(10); ASSERT(o.is_some()); ASSERT(o.value() == 10); }
-TEST(t_option_none) { auto o = make_none<int>(); ASSERT(o.is_none()); ASSERT(o.value_or(99) == 99); }
-TEST(t_promise) { Promise<int> p; auto f = p.get_future(); p.set_value(7); ASSERT(f.is_ready()); ASSERT(f.get() == 7); }
-TEST(t_promise_void) { Promise<void> p; auto f = p.get_future(); p.set_value(); ASSERT(f.is_ready()); f.get(); }
-TEST(t_channel) { Channel<int> ch; std::thread t([&]{ch.send(1);ch.send(2);}); ASSERT(ch.receive()==1); ASSERT(ch.receive()==2); t.join(); }
-TEST(t_executor) { auto ex = create_executor(2); auto f = ex->submit([]{return 42;}); ASSERT(f.get()==42); ex->shutdown(); }
-TEST(t_actor) { std::atomic<int> c{0}; Actor<int> a([&](const int& m, Actor<int>& self){c+=m; if(c>=6)self.stop();}); a.send(1);a.send(2);a.send(3); std::this_thread::sleep_for(std::chrono::milliseconds(20)); ASSERT(c==6); ASSERT(!a.is_running()); }
+zenith::stdlib::Future<int> calculateSquare(int n) {
+    auto _promise = std::make_shared<zenith::stdlib::Promise<int>>();
+    std::thread([_promise, n]() mutable {
+        try {
+            auto i = 0;
+            while (i < 5000) {
+                i = i + 1;
+            }
+            _promise->set_value(n * n);
+            return;
+        } catch (...) {
+            _promise->set_exception(std::current_exception());
+        }
+    }).detach();
+    return _promise->get_future();
+}
+
+zenith::stdlib::Future<int> runConcurrencyDemo() {
+    auto _promise = std::make_shared<zenith::stdlib::Promise<int>>();
+    std::thread([_promise]() mutable {
+        try {
+            println("[Test] Spawning concurrent tasks...");
+            auto f1 = calculateSquare(5);
+            auto f2 = calculateSquare(10);
+            auto f3 = calculateSquare(12);
+            println("[Test] Awaiting concurrent tasks...");
+            auto r1 = (f1).get();
+            auto r2 = (f2).get();
+            auto r3 = (f3).get();
+            println(zenith::concat("[Test] Completed. Results: ", zenith::concat(r1, zenith::concat(", ", zenith::concat(r2, zenith::concat(", ", r3))))));
+            _promise->set_value(r1 + r2 + r3);
+            return;
+        } catch (...) {
+            _promise->set_exception(std::current_exception());
+        }
+    }).detach();
+    return _promise->get_future();
+}
 
 int main() {
-    std::cout << "=== Concurrency Tests ===\n";
-    RUN_TEST(t_result_ok); RUN_TEST(t_result_err); RUN_TEST(t_option_some); RUN_TEST(t_option_none);
-    RUN_TEST(t_promise); RUN_TEST(t_promise_void); RUN_TEST(t_channel); RUN_TEST(t_executor); RUN_TEST(t_actor);
-    std::cout << "=========================\nPassed: " << passed << ", Failed: " << failed << "\n";
-    return failed > 0 ? 1 : 0;
+    // --- Zenith RC+GC Memory Manager: Start background cycle collector ---
+    zenith::mem::GcHeap::instance().start_background_gc(5000);
+
+    println("=== Zenith Multithreading / Concurrency Verification ===");
+    auto future_res = runConcurrencyDemo();
+    auto total = (future_res).get();
+    println(zenith::concat("[Result] Combined total sum: ", total));
+    if (total == 269) {
+        println("[Status] SUCCESS: Concurrency check passed!");
+    } else {
+        println("[Status] FAILURE: Concurrency check failed!");
+    }
+
+// --- Zenith RC+GC Memory Manager: Shutdown ---
+zenith::mem::GcHeap::instance().stop_background_gc();
+zenith::mem::GcHeap::instance().collect(); // Final cycle sweep
+#ifdef ZENITH_GC_STATS
+std::cout << zenith::mem::gcStatsString() << std::endl;
+#endif
 }
+

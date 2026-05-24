@@ -1,5 +1,161 @@
 #include "../../include/backend/wasm_codegen.h"
 #include <iostream>
+#include <unordered_map>
+
+static std::string preRenderUIComponent(ASTNode* node, const std::unordered_map<std::string, std::string>& fields) {
+    if (!node) return "";
+    
+    if (auto* id = dynamic_cast<IdentifierNode*>(node)) {
+        if (fields.count(id->name)) {
+            return fields.at(id->name);
+        }
+        return "";
+    }
+    
+    if (auto* str = dynamic_cast<StringLiteralNode*>(node)) {
+        return str->value;
+    }
+    
+    if (auto* num = dynamic_cast<NumberLiteralNode*>(node)) {
+        return num->value;
+    }
+    
+    if (auto* b = dynamic_cast<BoolLiteralNode*>(node)) {
+        return b->value ? "true" : "false";
+    }
+    
+    if (auto* binary = dynamic_cast<BinaryExprNode*>(node)) {
+        return preRenderUIComponent(binary->left.get(), fields) + preRenderUIComponent(binary->right.get(), fields);
+    }
+    
+    if (auto* ui = dynamic_cast<UIComponentNode*>(node)) {
+        std::string tag = "div";
+        std::string attrs = "";
+        std::string text_content = "";
+        
+        if (ui->component_type == "Column") {
+            attrs += " style=\"display: flex; flex-direction: column; border: 1px solid rgba(56, 189, 248, 0.3); padding: 15px; margin: 5px; border-radius: 10px; background: rgba(56, 189, 248, 0.05);\"";
+        } else if (ui->component_type == "Row") {
+            attrs += " style=\"display: flex; flex-direction: row; gap: 10px;\"";
+        } else if (ui->component_type == "Text") {
+            tag = "span";
+            if (!ui->children.empty()) {
+                text_content = preRenderUIComponent(ui->children[0].get(), fields);
+            }
+        } else if (ui->component_type == "Button") {
+            tag = "button";
+            attrs += " style=\"padding: 8px 16px; margin: 5px; border: none; border-radius: 6px; background: rgb(56, 189, 248); color: rgb(15, 23, 42); font-weight: bold; cursor: pointer;\"";
+            if (!ui->children.empty()) {
+                text_content = preRenderUIComponent(ui->children[0].get(), fields);
+            }
+        } else if (ui->component_type == "Card") {
+            attrs += " style=\"display: flex; flex-direction: column; background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 12px; padding: 16px; margin: 8px 0; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.3);\"";
+        } else if (ui->component_type == "Container") {
+            attrs += " style=\"display: flex; flex-direction: column; border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 8px;\"";
+        } else if (ui->component_type == "Scrolling") {
+            attrs += " style=\"display: flex; flex-direction: column; overflow-y: auto; max-height: 200px; border: 1px solid rgba(255, 255, 255, 0.1); padding: 8px; border-radius: 8px; background: rgba(0, 0, 0, 0.2);\"";
+        } else if (ui->component_type == "TextField") {
+            tag = "input";
+            std::string placeholder = "";
+            if (!ui->children.empty()) {
+                placeholder = preRenderUIComponent(ui->children[0].get(), fields);
+            }
+            attrs += " type=\"text\" placeholder=\"" + placeholder + "\" style=\"background: rgba(15, 23, 42, 0.8); color: rgb(248, 250, 252); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 8px; padding: 8px 12px;\"";
+        } else if (ui->component_type == "Checkbox") {
+            std::string label = "";
+            if (!ui->children.empty()) {
+                label = preRenderUIComponent(ui->children[0].get(), fields);
+            }
+            return "<label style=\"display: flex; align-items: center; gap: 8px; cursor: pointer; color: rgb(226, 232, 240); margin: 5px;\"><input type=\"checkbox\" style=\"cursor: pointer; width: 18px; height: 18px; accent-color: rgb(56, 189, 248);\" /><span>" + label + "</span></label>";
+        } else if (ui->component_type == "Slider") {
+            tag = "input";
+            attrs += " type=\"range\" style=\"margin: 5px; accent-color: rgb(56, 189, 248); background: rgba(255,255,255,0.1);\"";
+        } else if (ui->component_type == "Toggle") {
+            std::string label = "";
+            if (!ui->children.empty()) {
+                label = preRenderUIComponent(ui->children[0].get(), fields);
+            }
+            return "<label style=\"display: flex; align-items: center; gap: 10px; cursor: pointer; margin: 5px;\"><div style=\"position: relative; width: 44px; height: 24px; background-color: rgb(71, 85, 105); border-radius: 12px; transition: background-color 0.2s;\"><div style=\"position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; border-radius: 50%; background-color: rgb(255, 255, 255); transition: transform 0.2s;\"></div></div><span style=\"color: rgb(226, 232, 240);\">" + label + "</span></label>";
+        } else if (ui->component_type == "Dropdown") {
+            tag = "select";
+            attrs += " style=\"background: rgba(15, 23, 42, 0.8); color: rgb(248, 250, 252); border: 1px solid rgba(0, 242, 254, 0.3); border-radius: 8px; padding: 8px 12px; cursor: pointer;\"";
+            std::string options_str = "";
+            if (!ui->children.empty()) {
+                options_str = preRenderUIComponent(ui->children[0].get(), fields);
+            }
+            std::string opts_html = "";
+            size_t pos = 0;
+            while (pos < options_str.length()) {
+                size_t comma = options_str.find(',', pos);
+                std::string opt = options_str.substr(pos, comma - pos);
+                opt.erase(0, opt.find_first_not_of(" \t\r\n"));
+                opt.erase(opt.find_last_not_of(" \t\r\n") + 1);
+                if (!opt.empty()) {
+                    opts_html += "<option value=\"" + opt + "\">" + opt + "</option>";
+                }
+                if (comma == std::string::npos) break;
+                pos = comma + 1;
+            }
+            text_content = opts_html;
+        } else if (ui->component_type == "Image") {
+            tag = "img";
+            std::string url = "";
+            if (!ui->children.empty()) {
+                url = preRenderUIComponent(ui->children[0].get(), fields);
+            }
+            attrs += " src=\"" + url + "\" style=\"max-width: 100%; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);\"";
+        } else if (ui->component_type == "Video") {
+            tag = "video";
+            std::string url = "";
+            if (!ui->children.empty()) {
+                url = preRenderUIComponent(ui->children[0].get(), fields);
+            }
+            attrs += " src=\"" + url + "\" controls style=\"max-width: 100%; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);\"";
+        }
+        
+        // Render inline styling named arguments if present
+        std::string inline_style = "";
+        for (const auto& arg : ui->named_args) {
+            std::string key = arg.first;
+            std::string val_str = preRenderUIComponent(arg.second.get(), fields);
+            if (val_str.empty()) continue;
+            
+            bool is_digit = (val_str.back() >= '0' && val_str.back() <= '9');
+            if (key == "color") inline_style += "color: " + val_str + "; ";
+            else if (key == "backgroundColor") inline_style += "background-color: " + val_str + "; ";
+            else if (key == "padding") inline_style += "padding: " + val_str + (is_digit ? "px" : "") + "; ";
+            else if (key == "margin") inline_style += "margin: " + val_str + (is_digit ? "px" : "") + "; ";
+            else if (key == "width") inline_style += "width: " + val_str + (is_digit ? "px" : "") + "; ";
+            else if (key == "height") inline_style += "height: " + val_str + (is_digit ? "px" : "") + "; ";
+            else if (key == "fontWeight") inline_style += "font-weight: " + val_str + "; ";
+            else if (key == "gap") inline_style += "gap: " + val_str + (is_digit ? "px" : "") + "; ";
+        }
+        if (!inline_style.empty()) {
+            size_t style_pos = attrs.find("style=\"");
+            if (style_pos != std::string::npos) {
+                attrs.insert(style_pos + 7, inline_style);
+            } else {
+                attrs += " style=\"" + inline_style + "\"";
+            }
+        }
+        
+        std::string children_html = "";
+        if (ui->component_type == "Column" || ui->component_type == "Row" || ui->component_type == "Card" || ui->component_type == "Container" || ui->component_type == "Scrolling") {
+            for (const auto& child : ui->children) {
+                children_html += preRenderUIComponent(child.get(), fields);
+            }
+        }
+        
+        if (tag == "img" || tag == "input" || tag == "video") {
+            return "<" + tag + attrs + " />";
+        }
+        
+        return "<" + tag + attrs + ">" + text_content + children_html + "</" + tag + ">";
+    }
+    
+    return "";
+}
+
 
 void WASMCodeGenerator::indent() {
     for (int i = 0; i < indent_level * 2; ++i) {
@@ -151,7 +307,7 @@ void WASMCodeGenerator::generateExpression(ExprNode* expr) {
                            ui->component_type == "Scrolling" || ui->component_type == "Card" ||
                            ui->component_type == "Container" || ui->component_type == "Checkbox" ||
                            ui->component_type == "Slider" || ui->component_type == "Toggle" ||
-                           ui->component_type == "Dropdown");
+                           ui->component_type == "Dropdown" || ui->component_type == "TextField");
                            
         if (is_builtin) {
             if (ui->component_type == "Text") {
@@ -187,6 +343,32 @@ void WASMCodeGenerator::generateExpression(ExprNode* expr) {
                 }
                 indent(); output << "i32.const " << string_literals[export_name] << "\n";
                 indent(); output << "call $create_checkbox\n";
+            } else if (ui->component_type == "TextField") {
+                if (!ui->children.empty()) {
+                    generateExpression(ui->children[0].get());
+                } else {
+                    indent(); output << "i32.const 0\n";
+                }
+                if (!current_class_name.empty()) {
+                    indent(); output << "local.get $this\n";
+                } else {
+                    indent(); output << "i32.const 0\n";
+                }
+                std::string method_name = "";
+                for (const auto& arg : ui->named_args) {
+                    if (arg.first == "onChange") {
+                        if (auto* id = dynamic_cast<IdentifierNode*>(arg.second.get())) {
+                            method_name = id->name;
+                        }
+                    }
+                }
+                std::string export_name = current_class_name.empty() ? method_name : (current_class_name + "_" + method_name);
+                if (string_literals.find(export_name) == string_literals.end()) {
+                    string_literals[export_name] = next_string_offset;
+                    next_string_offset += export_name.length() + 1;
+                }
+                indent(); output << "i32.const " << string_literals[export_name] << "\n";
+                indent(); output << "call $create_textfield\n";
             } else if (ui->component_type == "Slider") {
                 if (!current_class_name.empty()) {
                     indent(); output << "local.get $this\n";
@@ -325,7 +507,7 @@ void WASMCodeGenerator::generateExpression(ExprNode* expr) {
                 if (arg.first == "onClick" && ui->component_type == "Button") {
                     continue; // onClick is handled inside create_button
                 }
-                if (arg.first == "onChange" && (ui->component_type == "Checkbox" || ui->component_type == "Slider" || ui->component_type == "Toggle" || ui->component_type == "Dropdown")) {
+                if (arg.first == "onChange" && (ui->component_type == "Checkbox" || ui->component_type == "Slider" || ui->component_type == "Toggle" || ui->component_type == "Dropdown" || ui->component_type == "TextField")) {
                     continue; // onChange is handled during creation
                 }
                 std::string key = arg.first;
@@ -678,6 +860,44 @@ std::string WASMCodeGenerator::generate(ProgramNode* program) {
     interface_implementations.clear();
     class_methods.clear();
     
+    pre_rendered_html = "";
+    for (const auto& stmt : program->statements) {
+        if (auto* class_decl = dynamic_cast<ClassDeclNode*>(stmt.get())) {
+            FunctionNode* build_method = nullptr;
+            for (const auto& method : class_decl->methods) {
+                if (method->function_name == "build") {
+                    build_method = method.get();
+                    break;
+                }
+            }
+            if (build_method) {
+                std::unordered_map<std::string, std::string> fields;
+                for (const auto& field : class_decl->fields) {
+                    if (field->initializer) {
+                        if (auto* str = dynamic_cast<StringLiteralNode*>(field->initializer.get())) {
+                            fields[field->var_name] = str->value;
+                        } else if (auto* num = dynamic_cast<NumberLiteralNode*>(field->initializer.get())) {
+                            fields[field->var_name] = num->value;
+                        } else if (auto* b = dynamic_cast<BoolLiteralNode*>(field->initializer.get())) {
+                            fields[field->var_name] = b->value ? "true" : "false";
+                        }
+                    }
+                }
+                ExprNode* return_expr = nullptr;
+                for (const auto& body_stmt : build_method->body) {
+                    if (auto* ret_stmt = dynamic_cast<ReturnStmtNode*>(body_stmt.get())) {
+                        return_expr = ret_stmt->expression.get();
+                        break;
+                    }
+                }
+                if (return_expr) {
+                    pre_rendered_html = preRenderUIComponent(return_expr, fields);
+                }
+                break;
+            }
+        }
+    }
+    
     // Pre-pass: map interfaces and methods
     for (const auto& stmt : program->statements) {
         if (auto* class_decl = dynamic_cast<ClassDeclNode*>(stmt.get())) {
@@ -717,6 +937,7 @@ std::string WASMCodeGenerator::generate(ProgramNode* program) {
     indent(); output << "(import \"env\" \"create_slider\" (func $create_slider (param i32 i32) (result i32)))\n";
     indent(); output << "(import \"env\" \"create_toggle\" (func $create_toggle (param i32 i32 i32) (result i32)))\n";
     indent(); output << "(import \"env\" \"create_dropdown\" (func $create_dropdown (param i32 i32 i32) (result i32)))\n";
+    indent(); output << "(import \"env\" \"create_textfield\" (func $create_textfield (param i32 i32 i32) (result i32)))\n";
     indent(); output << "(import \"env\" \"set_attribute\" (func $set_attribute (param i32 i32 i32)))\n";
     indent(); output << "(import \"env\" \"set_attribute_int\" (func $set_attribute_int (param i32 i32 i32)))\n";
     
@@ -868,7 +1089,7 @@ std::string WASMCodeGenerator::generateHTMLWrapper() {
     html << "    <div class=\"container\">\n";
     html << "        <div class=\"card\">\n";
     html << "            <h3>Live Application</h3>\n";
-    html << "            <div id=\"app-root\"></div>\n";
+    html << "            <div id=\"app-root\">" << pre_rendered_html << "</div>\n";
     html << "        </div>\n";
     html << "        <div id=\"console\"></div>\n";
     html << "    </div>\n";
@@ -1039,6 +1260,28 @@ std::string WASMCodeGenerator::generateHTMLWrapper() {
     html << "                    label.appendChild(textSpan);\n";
     html << "                    DOMNodes.push(label);\n";
     html << "                    label.inputElement = input;\n";
+    html << "                    return DOMNodes.length - 1;\n";
+    html << "                },\n";
+    html << "                create_textfield: (placeholderPtr, instancePtr, methodPtr) => {\n";
+    html << "                    const placeholder = readString(placeholderPtr);\n";
+    html << "                    const methodName = readString(methodPtr);\n";
+    html << "                    const el = document.createElement('input');\n";
+    html << "                    el.type = 'text';\n";
+    html << "                    el.placeholder = placeholder;\n";
+    html << "                    el.className = 'zenith-input';\n";
+    html << "                    el.style.background = 'rgba(15, 23, 42, 0.8)';\n";
+    html << "                    el.style.color = '#f8fafc';\n";
+    html << "                    el.style.border = '1px solid rgba(56, 189, 248, 0.3)';\n";
+    html << "                    el.style.borderRadius = '8px';\n";
+    html << "                    el.style.padding = '8px 12px';\n";
+    html << "                    el.oninput = () => {\n";
+    html << "                        if (wasmInstance && wasmInstance.exports[methodName]) {\n";
+    html << "                            const strPtr = writeStringToMemory(el.value, 36864);\n";
+    html << "                            wasmInstance.exports[methodName](instancePtr, strPtr);\n";
+    html << "                        }\n";
+    html << "                    };\n";
+    html << "                    DOMNodes.push(el);\n";
+    html << "                    el.inputElement = el;\n";
     html << "                    return DOMNodes.length - 1;\n";
     html << "                },\n";
     html << "                create_slider: (instancePtr, methodPtr) => {\n";

@@ -1,0 +1,37 @@
+import std.io;
+
+async Int calculateSquare(n: Int) {
+    let i = 0;
+    while (i < 5000) {
+        i = i + 1;
+    }
+    return n * n;
+}
+
+async Int runConcurrencyDemo() {
+    println("[Test] Spawning concurrent tasks...");
+    let f1 = calculateSquare(5);
+    let f2 = calculateSquare(10);
+    let f3 = calculateSquare(12);
+
+    println("[Test] Awaiting concurrent tasks...");
+    let r1 = await f1;
+    let r2 = await f2;
+    let r3 = await f3;
+
+    println("[Test] Completed. Results: " + r1 + ", " + r2 + ", " + r3);
+    return r1 + r2 + r3;
+}
+
+Void main() {
+    println("=== Zenith Multithreading / Concurrency Verification ===");
+    let future_res = runConcurrencyDemo();
+    let total = await future_res;
+    
+    println("[Result] Combined total sum: " + total);
+    if (total == 269) {
+        println("[Status] SUCCESS: Concurrency check passed!");
+    } else {
+        println("[Status] FAILURE: Concurrency check failed!");
+    }
+}

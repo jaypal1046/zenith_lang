@@ -11,13 +11,13 @@
 #include <cstring>
 #include <fstream>
 #include <iterator>
+#include <cmath>
 
 #include <cstdio>
 
 #ifdef YOGA_AVAILABLE
 #include "zenith/ui/yoga_layout.h"
 #include <memory>
-#include <cmath>
 #endif
 
 namespace zenith {

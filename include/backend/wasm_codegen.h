@@ -32,6 +32,7 @@ private:
     // Interface resolution
     std::unordered_map<std::string, std::vector<std::string>> interface_implementations;
     std::unordered_map<std::string, std::unordered_set<std::string>> class_methods;
+    std::string pre_rendered_html;
 
     void indent();
     std::string mapTypeToWASM(TypeNode* type);

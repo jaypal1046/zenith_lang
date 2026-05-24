@@ -288,6 +288,7 @@ The most complex backend. `CodeGenerator::generate(ProgramNode*)` → `string` o
 `JsCodeGenerator::generate(ProgramNode*)` → HTML file string.
 
 - Emits a complete `.html` file with embedded `<script>` JavaScript
+- **SEO Static Pre-rendering:** Evaluates the UI layout tree of the primary class `build()` method at compile time and pre-renders static semantic HTML elements inside `<div id="zenith-ui-root">` so pages are immediately indexable by search engine bots.
 - Maps Zenith classes → JavaScript classes with `build()` → DOM element creation
 - UI components → `document.createElement()` calls with CSS classes
 - `setState` → DOM update + re-render
@@ -302,6 +303,7 @@ The most complex backend. `CodeGenerator::generate(ProgramNode*)` → `string` o
 `WasmCodeGenerator::generate(ProgramNode*)` → `.wat` (WebAssembly Text Format) file.
 
 - Also emits a companion `_wasm.html` loader file
+- **SEO Static Pre-rendering:** Walks the AST at compile time to pre-render static HTML elements matching the initial UI state inside `<div id="app-root">` in the generated HTML wrapper, allowing SEO search engines to read page contents before WASM binary boots.
 - Maps Zenith types → WASM types: `Int` → `i32`, `Float` → `f64`, `String` → memory address (`i32`)
 - Functions → WASM `func` blocks with param/result types
 - Simple arithmetic and control flow (if/while) → WASM opcodes

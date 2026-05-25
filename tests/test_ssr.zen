@@ -1,0 +1,45 @@
+// Zenith SSR Demo — test with: zenith serve tests/test_ssr.zen --port 8080
+import std.io;
+
+class SSRDemoApp() {
+    String title = "Zenith SSR Live";
+    String message = "This page was compiled from .zen source on-the-fly at request time.";
+
+    UI build() {
+        return Column(
+            Text(title, fontWeight: "bold", color: "cyan"),
+            Text(message, color: "white"),
+            Card(
+                Text("Dynamic Server-Side Rendering", fontWeight: "bold"),
+                Text("Every browser refresh triggers a fresh .zen compile cycle.", color: "gray"),
+                Button("Refresh Page", onClick: handleRefresh),
+                padding: 2
+            ),
+            Row(
+                Card(
+                    Text("Compile Target", fontWeight: "bold"),
+                    Text("Web (HTML + JS)", color: "green"),
+                    padding: 1
+                ),
+                Card(
+                    Text("Serving Mode", fontWeight: "bold"),
+                    Text("SSR — per-request transpile", color: "magenta"),
+                    padding: 1
+                ),
+                Card(
+                    Text("Zero Config", fontWeight: "bold"),
+                    Text("No webpack, no Node.js runtime", color: "yellow"),
+                    padding: 1
+                )
+            )
+        );
+    }
+
+    Void handleRefresh() {
+        println("[SSR] Page refresh triggered.");
+    }
+}
+
+Void main() {
+    println("[SSR] Zenith SSR Server demo starting...");
+}

@@ -3,6 +3,7 @@
 #include <sstream>
 #include <string>
 #include <set>
+#include <unordered_map>
 #include <filesystem>
 #include <vector>
 #include <cstdlib>
@@ -12,11 +13,22 @@
 #include <chrono>
 #include <regex>
 #include <algorithm>
-#ifndef _WIN32
-  #include <unistd.h>   // fork, setsid, execl, dup2
-  #include <signal.h>   // kill, SIGTERM
+#include <atomic>
+#include <iomanip>
+#ifdef _WIN32
+  #ifndef WIN32_LEAN_AND_MEAN
+    #define WIN32_LEAN_AND_MEAN
+  #endif
+  #include <winsock2.h>
+  #pragma comment(lib, "ws2_32.lib")
+#else
+  #include <unistd.h>
+  #include <signal.h>
   #include <sys/types.h>
-  #include <fcntl.h>    // open, O_WRONLY
+  #include <fcntl.h>
+  #include <sys/socket.h>
+  #include <netinet/in.h>
+  #include <arpa/inet.h>
 #endif
 #include "../include/frontend/lexer.h"
 #include "../include/frontend/parser.h"
@@ -41,8 +53,16 @@ void resolveImports(ProgramNode* program, std::set<std::string>& loaded_files, c
     for (auto& stmt : program->statements) {
         if (auto* imp = dynamic_cast<ImportNode*>(stmt.get())) {
             std::string mod = imp->module_name;
+            std::string full_path = "";
+            
             if (mod.length() > 4 && mod.substr(mod.length() - 4) == ".zen") {
-                std::string full_path = current_dir + mod;
+                full_path = current_dir + mod;
+            } else if (imp->kind == ImportNode::ImportKind::Zen) {
+                // If it is a zen package import, look in lib/<package_name>/main.zen
+                full_path = "lib/" + mod + "/main.zen";
+            }
+            
+            if (!full_path.empty()) {
                 if (loaded_files.find(full_path) == loaded_files.end()) {
                     loaded_files.insert(full_path);
                     
@@ -76,31 +96,211 @@ void resolveImports(ProgramNode* program, std::set<std::string>& loaded_files, c
     program->statements = std::move(new_statements);
 }
 
-int runCreateProject(const std::string& project_name, const std::string& argv0) {
+struct BridgeFunction {
+    std::string ret;
+    std::string name;
+    std::vector<std::pair<std::string, std::string>> args; // type, name
+};
+
+std::vector<BridgeFunction> parseBridgeSpecs(const std::string& spec_str) {
+    std::vector<BridgeFunction> funcs;
+    std::regex func_regex("([A-Za-z0-9_<>]+)\\s+([A-Za-z0-9_]+)\\s*\\((.*?)\\)");
+    std::smatch m;
+    
+    std::stringstream ss(spec_str);
+    std::string token;
+    while (std::getline(ss, token, ';')) {
+        // trim whitespace
+        token = std::regex_replace(token, std::regex("^\\s+|\\s+$"), "");
+        if (token.empty()) continue;
+        
+        if (std::regex_search(token, m, func_regex)) {
+            BridgeFunction fn;
+            fn.ret = m[1].str();
+            fn.name = m[2].str();
+            
+            std::string args_str = m[3].str();
+            std::stringstream ass(args_str);
+            std::string arg;
+            std::regex arg_regex("([A-Za-z0-9_<>]+)\\s+([A-Za-z0-9_]+)");
+            std::smatch am;
+            while (std::getline(ass, arg, ',')) {
+                arg = std::regex_replace(arg, std::regex("^\\s+|\\s+$"), "");
+                if (arg.empty()) continue;
+                
+                if (std::regex_search(arg, am, arg_regex)) {
+                    fn.args.push_back({am[1].str(), am[2].str()});
+                }
+            }
+            funcs.push_back(fn);
+        }
+    }
+    return funcs;
+}
+
+std::string genRustLib(const std::vector<BridgeFunction>& funcs, const std::string& package_name) {
+    std::stringstream code;
+    code << "use std::ffi::{CString, CStr};\n";
+    code << "use std::os::raw::c_char;\n\n";
+    
+    for (const auto& f : funcs) {
+        std::vector<std::string> rust_args;
+        std::vector<std::string> conversions;
+        std::vector<std::string> arg_names;
+        
+        for (const auto& arg : f.args) {
+            std::string arg_type = arg.first;
+            std::string arg_name = arg.second;
+            if (arg_type == "String") {
+                rust_args.push_back(arg_name + ": *const c_char");
+                conversions.push_back("    let " + arg_name + " = unsafe { CStr::from_ptr(" + arg_name + ").to_string_lossy().into_owned() };");
+            } else if (arg_type == "Int") {
+                rust_args.push_back(arg_name + ": i32");
+            } else if (arg_type == "Float") {
+                rust_args.push_back(arg_name + ": f64");
+            } else if (arg_type == "Bool") {
+                rust_args.push_back(arg_name + ": bool");
+            }
+            arg_names.push_back(arg_name);
+        }
+        
+        std::string args_decl = "";
+        for (size_t i = 0; i < rust_args.size(); ++i) {
+            args_decl += rust_args[i];
+            if (i < rust_args.size() - 1) args_decl += ", ";
+        }
+        
+        std::string ret_type = "";
+        if (f.ret == "String") ret_type = "-> *mut c_char";
+        else if (f.ret == "Int") ret_type = "-> i32";
+        else if (f.ret == "Float") ret_type = "-> f64";
+        else if (f.ret == "Bool") ret_type = "-> bool";
+        
+        code << "#[no_mangle]\n";
+        code << "pub extern \"C\" fn " << f.name << "(" << args_decl << ") " << ret_type << " {\n";
+        for (const auto& conv : conversions) {
+            code << conv << "\n";
+        }
+        code << "    // Custom implementation using the dependency here\n";
+        if (package_name == "uuid" && f.name == "generate_uuid") {
+            code << "    let res = uuid::Uuid::new_v4().to_string();\n";
+        } else {
+            code << "    let res = format!(\"Rust [" << package_name << "] Result called\");\n";
+        }
+        
+        if (f.ret == "String") {
+            code << "    CString::new(res).unwrap().into_raw()\n";
+        } else if (f.ret == "Int") {
+            code << "    42\n";
+        } else if (f.ret == "Float") {
+            code << "    3.14159\n";
+        } else if (f.ret == "Bool") {
+            code << "    true\n";
+        }
+        code << "}\n\n";
+    }
+    return code.str();
+}
+
+std::string genDartLib(const std::vector<BridgeFunction>& funcs, const std::string& package_name) {
+    std::stringstream code;
+    code << "import 'dart:convert';\n";
+    code << "import 'package:" << package_name << "/" << package_name << ".dart';\n\n";
+    
+    for (const auto& f : funcs) {
+        std::vector<std::string> dart_args;
+        for (const auto& arg : f.args) {
+            std::string arg_type = arg.first;
+            std::string arg_name = arg.second;
+            if (arg_type == "String") dart_args.push_back("String " + arg_name);
+            else if (arg_type == "Int") dart_args.push_back("int " + arg_name);
+            else if (arg_type == "Float") dart_args.push_back("double " + arg_name);
+            else if (arg_type == "Bool") dart_args.push_back("bool " + arg_name);
+        }
+        
+        std::string args_decl = "";
+        for (size_t i = 0; i < dart_args.size(); ++i) {
+            args_decl += dart_args[i];
+            if (i < dart_args.size() - 1) args_decl += ", ";
+        }
+        
+        std::string ret_type = "void";
+        if (f.ret == "String") ret_type = "String";
+        else if (f.ret == "Int") ret_type = "int";
+        else if (f.ret == "Float") ret_type = "double";
+        else if (f.ret == "Bool") ret_type = "bool";
+        
+        code << "@pragma('wasm:export', '" << f.name << "')\n";
+        code << ret_type << " " << f.name << "(" << args_decl << ") {\n";
+        if (package_name == "crypto" && f.name == "sha256") {
+            code << "  var bytes = utf8.encode(input);\n";
+            code << "  return sha256.convert(bytes).toString();\n";
+        } else {
+            code << "  return 'Dart [" << package_name << "] Result called';\n";
+        }
+        code << "}\n\n";
+    }
+    code << "void main() {}\n";
+    return code.str();
+}
+
+std::string genZenithWrapper(const std::vector<BridgeFunction>& funcs, const std::string& package_name, const std::string& kind) {
+    std::stringstream code;
+    code << "// Zenith wrapper bindings for " << package_name << "\n";
+    code << "// Auto-generated by zenith bridge subcommand\n\n";
+    
+    if (kind == "rust") {
+        code << "import native \"lib/" << package_name << "/bridge.dll\" for \"cpp\";\n";
+        code << "import cdn \"lib/" << package_name << "/bridge.wasm\" for \"web\";\n\n";
+    } else {
+        code << "import cdn \"lib/" << package_name << "/bridge.wasm\" for \"web\";\n\n";
+    }
+    
+    std::string abi = (kind == "rust") ? "C" : "js";
+    code << "foreign \"" << abi << "\" {\n";
+    for (const auto& f : funcs) {
+        std::vector<std::string> args_decl;
+        for (const auto& arg : f.args) {
+            args_decl.push_back(arg.first + " " + arg.second);
+        }
+        std::string args_str = "";
+        for (size_t i = 0; i < args_decl.size(); ++i) {
+            args_str += args_decl[i];
+            if (i < args_decl.size() - 1) args_str += ", ";
+        }
+        code << "    " << f.ret << " " << f.name << "(" << args_str << ");\n";
+    }
+    code << "}\n";
+    return code.str();
+}
+
+int runCreateProject(const std::string& project_name, const std::string& template_type, const std::string& argv0) {
     namespace fs = std::filesystem;
     fs::path project_path = (project_name == ".") ? fs::current_path() : fs::absolute(project_name);
     
-    std::cout << "Creating new Zenith project in: " << project_path.string() << "\n";
+    std::cout << "Creating new Zenith project (" << template_type << ") in: " << project_path.string() << "\n";
     
     try {
         fs::create_directories(project_path);
         fs::create_directories(project_path / "include");
         fs::create_directories(project_path / "lib");
-        fs::create_directories(project_path / "lib" / "common");
-        fs::create_directories(project_path / "lib" / "android");
-        fs::create_directories(project_path / "lib" / "ios");
-        fs::create_directories(project_path / "lib" / "web");
-        fs::create_directories(project_path / "lib" / "desktop");
-        fs::create_directories(project_path / "lib" / "linux");
-        fs::create_directories(project_path / "lib" / "windows");
-        fs::create_directories(project_path / "lib" / "mac");
-        fs::create_directories(project_path / "android");
-        fs::create_directories(project_path / "ios");
-        fs::create_directories(project_path / "web");
-        fs::create_directories(project_path / "desktop");
-        fs::create_directories(project_path / "linux");
-        fs::create_directories(project_path / "windows");
-        fs::create_directories(project_path / "mac");
+        if (template_type == "app") {
+            fs::create_directories(project_path / "lib" / "common");
+            fs::create_directories(project_path / "lib" / "android");
+            fs::create_directories(project_path / "lib" / "ios");
+            fs::create_directories(project_path / "lib" / "web");
+            fs::create_directories(project_path / "lib" / "desktop");
+            fs::create_directories(project_path / "lib" / "linux");
+            fs::create_directories(project_path / "lib" / "windows");
+            fs::create_directories(project_path / "lib" / "mac");
+            fs::create_directories(project_path / "android");
+            fs::create_directories(project_path / "ios");
+            fs::create_directories(project_path / "web");
+            fs::create_directories(project_path / "desktop");
+            fs::create_directories(project_path / "linux");
+            fs::create_directories(project_path / "windows");
+            fs::create_directories(project_path / "mac");
+        }
     } catch (const std::exception& e) {
         std::cerr << "Error: Could not create directories: " << e.what() << "\n";
         return 1;
@@ -149,8 +349,9 @@ int runCreateProject(const std::string& project_name, const std::string& argv0) 
         }
     }
     
-    // 2. Write lib platform-specific templates
-    std::ofstream common_file(project_path / "lib" / "common" / "app_common.zen");
+    if (template_type == "app") {
+        // 2. Write lib platform-specific templates
+        std::ofstream common_file(project_path / "lib" / "common" / "app_common.zen");
     if (common_file.is_open()) {
         common_file << R"raw(class AppCommon() {
     String getCommonMessage() {
@@ -1549,25 +1750,91 @@ echo ""
                              (project_path / "mac" / "build.sh").string() + "\" 2>/dev/null";
     system(chmod_cmd.c_str());
 #endif
+    }
+    else if (template_type == "package") {
+        // Write package main.zen
+        std::ofstream main_file(project_path / "lib" / "main.zen");
+        if (main_file.is_open()) {
+            main_file << R"raw(// Zenith Logic Package
+import std.io;
+
+class Calculator() {
+    Int add(Int a, Int b) {
+        return a + b;
+    }
+    Int multiply(Int a, Int b) {
+        return a * b;
+    }
+}
+
+Void main() {
+    println("Running logical package tests...");
+    Calculator calc = Calculator();
+    println("Add test: 10 + 20 = " + calc.add(10, 20));
+}
+)raw";
+            main_file.close();
+            std::cout << "   [OK] Created 'lib/main.zen'\n";
+        }
+
+        // Write package build.bat
+        std::ofstream p_bat(project_path / "build.bat");
+        if (p_bat.is_open()) {
+            p_bat << R"raw(@echo off
+echo.
+echo   +==================================================+
+echo   ^|    Zenith  *  Package Test Runner (Windows)       ^|
+echo   +==================================================+
+echo.
+set COMPILER=zenith
+if exist "zenith.exe" set COMPILER=.\zenith.exe
+if exist "..\zenith.exe" set COMPILER=..\zenith.exe
+%COMPILER% lib/main.zen -target cpp -o main.cpp
+g++ -O3 -std=c++17 main.cpp -o main_app.exe -lws2_32
+if %errorlevel% equ 0 (
+    echo.
+    echo   [OK] Build Succeeded! Running package tests:
+    echo   --------------------------------------------------
+    .\main_app.exe
+    echo   --------------------------------------------------
+)
+)raw";
+            p_bat.close();
+            std::cout << "   [OK] Created 'build.bat' test runner\n";
+        }
+    }
 
     std::cout << "\n===================================================\n";
-    std::cout << "   Zenith Project Bootstrapped Successfully!\n";
-    std::cout << "===================================================\n";
-    std::cout << "Project layout organized by platform directories:\n";
-    std::cout << "  android/   - Native Android NDK configurations\n";
-    std::cout << "  ios/       - Apple Xcode/xcrun configuration\n";
-    std::cout << "  web/       - JavaScript & WASM web portal and targets\n";
-    std::cout << "  desktop/   - Native OS platform compiler driver\n";
-    std::cout << "  linux/     - Linux specific compilation scripts\n";
-    std::cout << "  windows/   - Windows specific compilation scripts\n";
-    std::cout << "  mac/       - macOS specific compilation scripts\n";
-    std::cout << "  include/   - Standard Zenith C++ helper headers\n";
-    std::cout << "  lib/       - Zenith source code directory\n";
-    std::cout << "    main.zen - App source entrypoint (edit this!)\n";
-    std::cout << "===================================================\n";
-    std::cout << "To compile and run your application:\n";
-    std::cout << "  zenith run <desktop|windows|linux|mac|web|wasm|android|ios>\n";
-    std::cout << "===================================================\n";
+    if (template_type == "app") {
+        std::cout << "   Zenith Project Bootstrapped Successfully!\n";
+        std::cout << "===================================================\n";
+        std::cout << "Project layout organized by platform directories:\n";
+        std::cout << "  android/   - Native Android NDK configurations\n";
+        std::cout << "  ios/       - Apple Xcode/xcrun configuration\n";
+        std::cout << "  web/       - JavaScript & WASM web portal and targets\n";
+        std::cout << "  desktop/   - Native OS platform compiler driver\n";
+        std::cout << "  linux/     - Linux specific compilation scripts\n";
+        std::cout << "  windows/   - Windows specific compilation scripts\n";
+        std::cout << "  mac/       - macOS specific compilation scripts\n";
+        std::cout << "  include/   - Standard Zenith C++ helper headers\n";
+        std::cout << "  lib/       - Zenith source code directory\n";
+        std::cout << "    main.zen - App source entrypoint (edit this!)\n";
+        std::cout << "===================================================\n";
+        std::cout << "To compile and run your application:\n";
+        std::cout << "  zenith run <desktop|windows|linux|mac|web|wasm|android|ios>\n";
+        std::cout << "===================================================\n";
+    } else {
+        std::cout << "   Zenith Package Bootstrapped Successfully!\n";
+        std::cout << "===================================================\n";
+        std::cout << "Project layout organized for logical libraries:\n";
+        std::cout << "  include/   - Standard Zenith C++ helper headers\n";
+        std::cout << "  lib/       - Zenith source code directory\n";
+        std::cout << "    main.zen - Package entrypoint & tests (edit this!)\n";
+        std::cout << "===================================================\n";
+        std::cout << "To build and run package tests:\n";
+        std::cout << "  build.bat  (or compile directly with zenith)\n";
+        std::cout << "===================================================\n";
+    }
     
     return 0;
 }
@@ -1782,11 +2049,20 @@ int runPlatformProject(const std::string& platform, const std::string& argv0) {
 int main(int argc, char* argv[]) {
     if (argc >= 2 && std::string(argv[1]) == "create") {
         if (argc < 3) {
-            std::cerr << "Usage: zenith create <project_name|.>\n";
+            std::cerr << "Usage: zenith create <project_name|.> [--template=app|package]\n";
             return 1;
         }
         std::string project_name = argv[2];
-        return runCreateProject(project_name, argv[0]);
+        std::string template_type = "app";
+        for (int i = 3; i < argc; ++i) {
+            std::string arg = argv[i];
+            if (arg == "--template=package" || arg == "package") {
+                template_type = "package";
+            } else if (arg == "--template=app" || arg == "app") {
+                template_type = "app";
+            }
+        }
+        return runCreateProject(project_name, template_type, argv[0]);
     }
 
     if (argc >= 2 && std::string(argv[1]) == "run") {
@@ -2424,6 +2700,769 @@ int main(int argc, char* argv[]) {
         return 0;
     }
 
+    // =========================================================================
+    // ADD subcommand: zenith add <npm-package>
+    // Resolves jsDelivr CDN URL + generates .zen binding stub in lib/<pkg>/
+    // Usage: zenith add chart.js   |   zenith add gsap   |   zenith add axios
+    // =========================================================================
+    if (argc >= 2 && std::string(argv[1]) == "add") {
+        namespace fs = std::filesystem;
+
+        if (argc < 3) {
+            std::cerr << "Usage: zenith add <npm-package-name>\n";
+            std::cerr << "  Example: zenith add chart.js\n";
+            std::cerr << "  Example: zenith add gsap\n";
+            std::cerr << "  Example: zenith add axios\n";
+            return 1;
+        }
+
+        std::string pkg = argv[2];
+        // Strip leading @ scope prefix for dir name if scoped: @scope/pkg -> scope_pkg
+        std::string dir_name = pkg;
+        for (auto& c : dir_name) if (c == '/' || c == '@') c = '_';
+
+        std::string cdn_url  = "https://cdn.jsdelivr.net/npm/" + pkg;
+        std::string pkg_dir  = "lib/" + dir_name;
+        std::string zen_file = pkg_dir + "/main.zen";
+        std::string json_key = dir_name;
+
+        std::cout << "\n";
+        std::cout << "  \033[1m\033[96m╔═══════════════════════════════════════════╗\033[0m\n";
+        std::cout << "  \033[1m\033[96m║   Zenith Add — npm CDN Bridge             ║\033[0m\n";
+        std::cout << "  \033[1m\033[96m╚═══════════════════════════════════════════╝\033[0m\n\n";
+        std::cout << "  \033[2mPackage :\033[0m  " << pkg << "\n";
+        std::cout << "  \033[2mCDN URL :\033[0m  " << cdn_url << "\n";
+        std::cout << "  \033[2mLib dir :\033[0m  " << pkg_dir << "\n\n";
+
+        // 1. Create lib/<pkg>/ directory
+        fs::create_directories(pkg_dir);
+        std::cout << "  \033[32m✓\033[0m  Created " << pkg_dir << "/\n";
+
+        // 2. Generate the .zen binding stub file
+        std::string stub =
+            "// Zenith CDN binding for npm package: " + pkg + "\n"
+            "// Auto-generated by: zenith add " + pkg + "\n"
+            "// CDN: " + cdn_url + "\n"
+            "//\n"
+            "// Usage in your .zen file:\n"
+            "//   import npm \"" + pkg + "\"\n"
+            "//   foreign \"js\" { ... }\n"
+            "//\n"
+            "// Example — using in a page:\n"
+            "//\n"
+            "// import npm \"" + pkg + "\";\n"
+            "//\n"
+            "// foreign \"js\" {\n"
+            "//     // Declare functions from the library here\n"
+            "//     // Example (adjust to the library's actual API):\n"
+            "//     Void " + dir_name + "_init(ctx: String, config: String);\n"
+            "// }\n"
+            "//\n"
+            "// class MyPage() {\n"
+            "//     UI build() {\n"
+            "//         return Column(\n"
+            "//             Text(\"" + pkg + " loaded from jsDelivr CDN\")\n"
+            "//         );\n"
+            "//     }\n"
+            "// }\n\n"
+            "// -- Package Metadata --\n"
+            "// name: " + pkg + "\n"
+            "// cdn: " + cdn_url + "\n"
+            "// source: jsDelivr\n";
+
+        std::ofstream zen_out(zen_file);
+        if (zen_out.is_open()) {
+            zen_out << stub;
+            zen_out.close();
+            std::cout << "  \033[32m✓\033[0m  Generated binding stub: " << zen_file << "\n";
+        } else {
+            std::cerr << "  \033[31m✗\033[0m  Failed to write " << zen_file << "\n";
+        }
+
+        // 3. Update zenith.json
+        std::string json_path = "zenith.json";
+        std::string json_content = "{}";
+        {
+            std::ifstream jf(json_path);
+            if (jf.is_open()) {
+                std::stringstream jbuf; jbuf << jf.rdbuf();
+                json_content = jbuf.str();
+            }
+        }
+        // Inject the new dependency into the JSON (simple string manipulation)
+        std::string dep_entry = "\"" + json_key + "\": \"" + cdn_url + "\"";
+        if (json_content.find(dep_entry) == std::string::npos) {
+            // Find the closing } and insert before it
+            auto close_pos = json_content.rfind('}');
+            if (close_pos != std::string::npos) {
+                // Check if there are existing entries (need comma)
+                bool has_entries = (json_content.find(':') != std::string::npos);
+                std::string insert_str = (has_entries ? ",\n  " : "\n  ") + dep_entry + "\n";
+                json_content.insert(close_pos, insert_str);
+            }
+            std::ofstream jout(json_path);
+            if (jout.is_open()) { jout << json_content; jout.close(); }
+            std::cout << "  \033[32m✓\033[0m  Updated zenith.json\n";
+        } else {
+            std::cout << "  \033[33m⚠\033[0m  Already in zenith.json (no change)\n";
+        }
+
+        std::cout << "\n";
+        std::cout << "  \033[1m\033[32m✓ Package '" << pkg << "' added!\033[0m\n\n";
+        std::cout << "  \033[2mUse it in your .zen file:\033[0m\n\n";
+        std::cout << "  \033[96mimport npm \"" << pkg << "\";\033[0m\n";
+        std::cout << "  \033[96mforeign \"js\" {\033[0m\n";
+        std::cout << "  \033[96m    Void myFunc(arg: String);\033[0m\n";
+        std::cout << "  \033[96m}\033[0m\n\n";
+        std::cout << "  \033[2mThen run:\033[0m  zenith serve pages/index.zen\n\n";
+        return 0;
+    }
+
+    // =========================================================================
+    // BRIDGE subcommand: zenith bridge <dart|rust> <package_name> "<function_specs>"
+    // Scaffolds binary package bridges and auto-generates Zenith bindings
+    // =========================================================================
+    if (argc >= 2 && std::string(argv[1]) == "bridge") {
+        namespace fs = std::filesystem;
+        
+        if (argc < 5) {
+            std::cerr << "Usage: zenith bridge <dart|rust> <package_name> \"<exported_functions_declaration>\"\n";
+            std::cerr << "  Example: zenith bridge rust uuid \"String generate_uuid();\"\n";
+            std::cerr << "  Example: zenith bridge dart crypto \"String sha256(String input);\"\n";
+            return 1;
+        }
+        
+        std::string kind = argv[2];
+        for (auto& c : kind) c = std::tolower(c);
+        std::string package_name = argv[3];
+        std::string spec_str = argv[4];
+        
+        if (kind != "dart" && kind != "rust") {
+            std::cerr << "Error: Bridge kind must be 'dart' or 'rust'\n";
+            return 1;
+        }
+        
+        auto funcs = parseBridgeSpecs(spec_str);
+        if (funcs.empty()) {
+            std::cerr << "Error: Could not parse any function signatures from: " << spec_str << "\n";
+            return 1;
+        }
+        
+        std::cout << "\n";
+        std::cout << "  \033[1m\033[96m╔═══════════════════════════════════════════╗\033[0m\n";
+        std::cout << "  \033[1m\033[96m║   Zenith Bridge — Binary Package Linker   ║\033[0m\n";
+        std::cout << "  \033[1m\033[96m╚═══════════════════════════════════════════╝\033[0m\n\n";
+        std::cout << "  \033[2mKind    :\033[0m  " << kind << "\n";
+        std::cout << "  \033[2mPackage :\033[0m  " << package_name << "\n";
+        std::cout << "  \033[2mExports :\033[0m\n";
+        for (const auto& f : funcs) {
+            std::cout << "    • " << f.ret << " " << f.name << "(";
+            for (size_t i = 0; i < f.args.size(); ++i) {
+                std::cout << f.args[i].first << " " << f.args[i].second;
+                if (i < f.args.size() - 1) std::cout << ", ";
+            }
+            std::cout << ")\n";
+        }
+        std::cout << "\n";
+        
+        std::string bridge_dir = "lib/" + package_name;
+        fs::create_directories(bridge_dir);
+        
+        if (kind == "rust") {
+            fs::create_directories(bridge_dir + "/src");
+            
+            // 1. Cargo.toml
+            std::ofstream cargo_file(bridge_dir + "/Cargo.toml");
+            if (cargo_file.is_open()) {
+                cargo_file << "[package]\n"
+                           << "name = \"rust_" << package_name << "_bridge\"\n"
+                           << "version = \"0.1.0\"\n"
+                           << "edition = \"2021\"\n\n"
+                           << "[lib]\n"
+                           << "crate-type = [\"cdylib\"]\n\n"
+                           << "[dependencies]\n"
+                           << package_name << " = \"*\"\n";
+                cargo_file.close();
+            }
+            
+            // 2. src/lib.rs
+            std::ofstream lib_file(bridge_dir + "/src/lib.rs");
+            if (lib_file.is_open()) {
+                lib_file << genRustLib(funcs, package_name);
+                lib_file.close();
+            }
+            
+            // 3. main.zen
+            std::ofstream zen_file(bridge_dir + "/main.zen");
+            if (zen_file.is_open()) {
+                zen_file << genZenithWrapper(funcs, package_name, "rust");
+                zen_file.close();
+            }
+            
+            std::cout << "  \033[32m✓\033[0m Scaffolded Rust package bridge in: \033[92m" << bridge_dir << "\033[0m\n";
+            std::cout << "  \033[2mTo build, run:\033[0m\n";
+            std::cout << "    cd " << bridge_dir << " && cargo build --release\n\n";
+        }
+        else if (kind == "dart") {
+            // 1. pubspec.yaml
+            std::ofstream pubspec_file(bridge_dir + "/pubspec.yaml");
+            if (pubspec_file.is_open()) {
+                pubspec_file << "name: dart_" << package_name << "_bridge\n"
+                             << "environment:\n"
+                             << "  sdk: '>=2.15.0 <3.0.0'\n\n"
+                             << "dependencies:\n"
+                             << "  " << package_name << ": any\n";
+                pubspec_file.close();
+            }
+            
+            // 2. main.dart
+            std::ofstream main_dart_file(bridge_dir + "/main.dart");
+            if (main_dart_file.is_open()) {
+                main_dart_file << genDartLib(funcs, package_name);
+                main_dart_file.close();
+            }
+            
+            // 3. main.zen
+            std::ofstream zen_file(bridge_dir + "/main.zen");
+            if (zen_file.is_open()) {
+                zen_file << genZenithWrapper(funcs, package_name, "dart");
+                zen_file.close();
+            }
+            
+            std::cout << "  \033[32m✓\033[0m Scaffolded Dart package bridge in: \033[92m" << bridge_dir << "\033[0m\n";
+            std::cout << "  \033[2mTo build, run:\033[0m\n";
+            std::cout << "    cd " << bridge_dir << " && dart pub get && dart compile wasm main.dart\n\n";
+        }
+        return 0;
+    }
+
+    // =========================================================================
+    // SERVE subcommand: zenith serve <file.zen|dir/> [--port 8080] [--target web|wasm]
+    // Dynamic SSR + File-System Router + Static Assets + HMR — like Next.js
+    // =========================================================================
+    if (argc >= 2 && std::string(argv[1]) == "serve") {
+        if (argc < 3) {
+            std::cerr << "Usage: zenith serve <file.zen|project-dir/> [--port 8080] [--target web|wasm]\n";
+            return 1;
+        }
+
+        namespace fs = std::filesystem;
+
+        std::string serve_arg = argv[2];
+        int serve_port = 8080;
+        std::string serve_target = "web";
+
+        for (int i = 3; i < argc; ++i) {
+            std::string a = argv[i];
+            if ((a == "--port" || a == "-p") && i + 1 < argc) {
+                try { serve_port = std::stoi(argv[++i]); } catch (...) {}
+            } else if (a == "--target" && i + 1 < argc) {
+                serve_target = argv[++i];
+            }
+        }
+
+        if (serve_target != "web" && serve_target != "wasm") {
+            std::cerr << "[Serve] Error: --target must be 'web' or 'wasm'\n";
+            return 1;
+        }
+
+        // ----------------------------------------------------------------
+        // Detect mode: single file OR directory (Next.js project router)
+        // ----------------------------------------------------------------
+        bool is_dir_mode = fs::is_directory(serve_arg);
+        std::string serve_file = "";
+
+        // Route table: URL path -> absolute .zen file path
+        std::unordered_map<std::string, std::string> route_table;
+        std::string pages_dir = "";
+        std::string public_dir = "";
+
+        if (is_dir_mode) {
+            pages_dir  = serve_arg + "/pages";
+            public_dir = serve_arg + "/public";
+
+            // Scan pages/ and build route table
+            auto build_routes = [&]() {
+                route_table.clear();
+                if (!fs::exists(pages_dir)) return;
+                for (const auto& entry : fs::recursive_directory_iterator(pages_dir)) {
+                    if (!entry.is_regular_file()) continue;
+                    if (entry.path().extension() != ".zen") continue;
+
+                    // Convert path: pages/index.zen -> /
+                    //               pages/about.zen -> /about
+                    //               pages/blog/post.zen -> /blog/post
+                    std::string rel = fs::relative(entry.path(), pages_dir).string();
+                    // Normalise slashes
+                    for (auto& c : rel) if (c == '\\') c = '/';
+                    // Strip .zen extension
+                    if (rel.size() > 4) rel = rel.substr(0, rel.size() - 4);
+                    // index -> /
+                    std::string route = "/" + rel;
+                    if (rel == "index") route = "/";
+                    // Strip trailing /index
+                    if (route.size() > 7 && route.substr(route.size() - 6) == "/index")
+                        route = route.substr(0, route.size() - 6);
+
+                    route_table[route] = entry.path().string();
+                }
+            };
+            build_routes();
+
+            if (route_table.empty()) {
+                std::cerr << "[Serve] No .zen files found in " << pages_dir << "\n";
+                std::cerr << "[Serve] Create pages/index.zen to get started.\n";
+                return 1;
+            }
+        } else {
+            // Single file mode (original behaviour)
+            serve_file = serve_arg;
+            route_table["/"] = serve_file;
+        }
+
+        // ----------------------------------------------------------------
+        // MIME type table for static asset serving
+        // ----------------------------------------------------------------
+        auto get_mime = [](const std::string& ext) -> std::string {
+            if (ext == ".html" || ext == ".htm") return "text/html";
+            if (ext == ".css")  return "text/css";
+            if (ext == ".js")   return "application/javascript";
+            if (ext == ".json") return "application/json";
+            if (ext == ".png")  return "image/png";
+            if (ext == ".jpg" || ext == ".jpeg") return "image/jpeg";
+            if (ext == ".gif")  return "image/gif";
+            if (ext == ".svg")  return "image/svg+xml";
+            if (ext == ".ico")  return "image/x-icon";
+            if (ext == ".wasm") return "application/wasm";
+            if (ext == ".ttf")  return "font/ttf";
+            if (ext == ".woff" || ext == ".woff2") return "font/woff2";
+            return "application/octet-stream";
+        };
+
+        // ----------------------------------------------------------------
+        // 404 page generator — lists all available routes
+        // ----------------------------------------------------------------
+        auto make_404 = [&](const std::string& path) -> std::string {
+            std::string links;
+            for (const auto& [r, _] : route_table) {
+                links += "<li><a href=\"" + r + "\">" + r + "</a></li>\n";
+            }
+            return R"html(
+<!DOCTYPE html><html lang="en"><head>
+<meta charset="UTF-8"><title>404 — Zenith SSR</title>
+<style>
+body{margin:0;background:#0b0f19;color:#e2e8f0;font-family:'Segoe UI',sans-serif;
+display:flex;align-items:center;justify-content:center;min-height:100vh;}
+.box{text-align:center;padding:40px;border:1px solid rgba(255,255,255,0.08);
+border-radius:16px;background:rgba(255,255,255,0.03);}
+h1{font-size:5rem;margin:0;background:linear-gradient(135deg,#a5b4fc,#c084fc);
+-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+p{color:#94a3b8;margin:8px 0 24px;} ul{text-align:left;}
+a{color:#818cf8;text-decoration:none;} a:hover{text-decoration:underline;}
+</style></head><body>
+<div class="box">
+<h1>404</h1>
+<p>Page <code>)html" + path + R"html(</code> not found in Zenith router.</p>
+<p style="font-size:0.9rem;">Available routes:</p>
+<ul>)html" + links + R"html(</ul>
+</div></body></html>
+)html";
+        };
+
+        // ----------------------------------------------------------------
+        // Helper: transpile the zen file and return HTML string
+        // ----------------------------------------------------------------
+        auto transpile_to_html = [&](const std::string& zen_path, const std::string& tgt) -> std::string {
+            std::ifstream f(zen_path);
+            if (!f.is_open()) return "<html><body><h1>Error: Cannot open " + zen_path + "</h1></body></html>";
+            std::stringstream buf; buf << f.rdbuf();
+            std::string source = buf.str(); f.close();
+
+            Lexer lexer(source);
+            auto tokens = lexer.tokenize();
+            Parser parser(tokens);
+            auto ast = parser.parseProgram();
+            if (!ast) return "<html><body><h1>Parse error in " + zen_path + "</h1></body></html>";
+
+            SemanticAnalyzer analyzer;
+            analyzer.analyze(ast.get());
+
+            if (tgt == "wasm") {
+                WasmCodeGenerator wasm_gen;
+                return wasm_gen.generate(ast.get());
+            } else {
+                JsCodeGenerator js_gen;
+                return js_gen.generate(ast.get());
+            }
+        };
+
+        // ----------------------------------------------------------------
+        // Helper: parse HTTP request line to extract method + path
+        // ----------------------------------------------------------------
+        auto parse_request_line = [](const std::string& req, std::string& method, std::string& path) {
+            method = "GET"; path = "/";
+            size_t line_end = req.find("\r\n");
+            if (line_end == std::string::npos) line_end = req.find("\n");
+            if (line_end == std::string::npos) return;
+            std::string first_line = req.substr(0, line_end);
+            size_t sp1 = first_line.find(' ');
+            if (sp1 == std::string::npos) return;
+            method = first_line.substr(0, sp1);
+            size_t sp2 = first_line.find(' ', sp1 + 1);
+            if (sp2 == std::string::npos) sp2 = first_line.size();
+            path = first_line.substr(sp1 + 1, sp2 - sp1 - 1);
+        };
+
+        // ----------------------------------------------------------------
+        // Helper: build a complete HTTP/1.1 response string
+        // ----------------------------------------------------------------
+        auto make_http_response = [](int status, const std::string& status_text,
+                                     const std::string& content_type, const std::string& body) -> std::string {
+            std::string resp;
+            resp += "HTTP/1.1 " + std::to_string(status) + " " + status_text + "\r\n";
+            resp += "Content-Type: " + content_type + "; charset=utf-8\r\n";
+            resp += "Content-Length: " + std::to_string(body.size()) + "\r\n";
+            resp += "Connection: close\r\n";
+            resp += "Cache-Control: no-store\r\n";
+            resp += "X-Powered-By: Zenith-SSR/1.0\r\n";
+            resp += "\r\n";
+            resp += body;
+            return resp;
+        };
+
+        // ----------------------------------------------------------------
+        // HMR: atomic file-change generation + background watcher thread
+        // ----------------------------------------------------------------
+        std::atomic<uint64_t> hmr_generation{0};
+        fs::file_time_type hmr_last_mtime{};
+        try {
+            std::string watch_target_path = is_dir_mode ? pages_dir : serve_file;
+            hmr_last_mtime = fs::last_write_time(watch_target_path);
+        } catch (...) {}
+
+        // Background thread: poll all .zen files mtime every 300ms
+        std::thread hmr_watcher([&]() {
+            while (true) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(300));
+                try {
+                    if (is_dir_mode) {
+                        // Watch entire pages/ directory modification time
+                        auto mtime = fs::last_write_time(pages_dir);
+                        if (mtime != hmr_last_mtime) {
+                            hmr_last_mtime = mtime;
+                            ++hmr_generation;
+                            std::cout << "  \033[93m\u21bb\033[0m  HMR: pages/ changed, reloading browsers...\n";
+                        }
+                        // Also scan individual files in case dir mtime didn't change
+                        for (const auto& entry : fs::recursive_directory_iterator(pages_dir)) {
+                            if (!entry.is_regular_file() || entry.path().extension() != ".zen") continue;
+                            auto fmtime = fs::last_write_time(entry);
+                            if (fmtime != hmr_last_mtime) {
+                                hmr_last_mtime = fmtime;
+                                ++hmr_generation;
+                                std::cout << "  \033[93m\u21bb\033[0m  HMR: " << entry.path().filename().string() << " changed, reloading browsers...\n";
+                                break;
+                            }
+                        }
+                    } else {
+                        auto mtime = fs::last_write_time(serve_file);
+                        if (mtime != hmr_last_mtime) {
+                            hmr_last_mtime = mtime;
+                            ++hmr_generation;
+                            std::cout << "  \033[93m\u21bb\033[0m  HMR: change detected, reloading browsers...\n";
+                        }
+                    }
+                } catch (...) {}
+            }
+        });
+        hmr_watcher.detach();
+
+        // ----------------------------------------------------------------
+        // HMR: tiny JS snippet injected into every served page
+        // ----------------------------------------------------------------
+        std::string hmr_script = R"rawhmr(
+<script>
+// Zenith HMR Client — auto-injected by `zenith serve`
+(function() {
+    var port = )rawhmr" + std::to_string(serve_port) + R"rawhmr(;
+    function connect() {
+        var es = new EventSource('http://localhost:' + port + '/__zenith_hmr');
+        es.onmessage = function(e) {
+            if (e.data === 'reload') {
+                console.log('[Zenith HMR] Reloading...');
+                location.reload();
+            }
+        };
+        es.onerror = function() {
+            es.close();
+            setTimeout(connect, 2000); // reconnect on server restart
+        };
+    }
+    connect();
+    console.log('[Zenith HMR] Hot reload active on port )rawhmr" + std::to_string(serve_port) + R"rawhmr(');
+})();
+</script>
+)rawhmr";
+
+        // ----------------------------------------------------------------
+        // Helper: inject HMR script before </body>
+        // ----------------------------------------------------------------
+        auto inject_hmr = [&](std::string html) -> std::string {
+            auto pos = html.rfind("</body>");
+            if (pos != std::string::npos) {
+                html.insert(pos, hmr_script);
+            } else {
+                html += hmr_script;
+            }
+            return html;
+        };
+
+        // Print banner
+        std::cout << "\n";
+        std::cout << "  \033[1m\033[96m\u2554\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2557\033[0m\n";
+        std::cout << "  \033[1m\033[96m\u2551   Zenith SSR Web Server  \u26a1  v1.0          \u2551\033[0m\n";
+        std::cout << "  \033[1m\033[96m\u255a\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u255d\033[0m\n\n";
+        if (is_dir_mode) {
+            std::cout << "  \033[2mMode   :\033[0m  \033[1mDirectory Router\033[0m (Next.js-style)\n";
+            std::cout << "  \033[2mPages  :\033[0m  " << pages_dir << "\n";
+            std::cout << "  \033[2mPublic :\033[0m  " << public_dir << "\n";
+            std::cout << "  \033[2mRoutes :\033[0m\n";
+            for (const auto& [r, f] : route_table) {
+                std::cout << "           \033[32m" << r << "\033[0m  \033[2m→  " << f << "\033[0m\n";
+            }
+        } else {
+            std::cout << "  \033[2mSource :\033[0m  " << serve_file << "\n";
+            std::cout << "  \033[2mMode   :\033[0m  Single File SSR\n";
+        }
+        std::cout << "  \033[2mTarget :\033[0m  " << serve_target << "\n";
+        std::cout << "  \033[2mPort   :\033[0m  " << serve_port << "\n";
+        std::cout << "  \033[2mHMR    :\033[0m  http://localhost:" << serve_port << "/__zenith_hmr\n\n";
+
+#ifdef _WIN32
+        // ----------------------------------------------------------------
+        // Windows: WinSock2 TCP server
+        // ----------------------------------------------------------------
+        WSADATA wsa_data;
+        if (WSAStartup(MAKEWORD(2, 2), &wsa_data) != 0) {
+            std::cerr << "[Serve] Error: WSAStartup failed.\n";
+            return 1;
+        }
+
+        SOCKET server_sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+        if (server_sock == INVALID_SOCKET) {
+            std::cerr << "[Serve] Error: socket() failed: " << WSAGetLastError() << "\n";
+            WSACleanup();
+            return 1;
+        }
+
+        // Allow port reuse
+        int opt_val = 1;
+        setsockopt(server_sock, SOL_SOCKET, SO_REUSEADDR, (const char*)&opt_val, sizeof(opt_val));
+
+        sockaddr_in server_addr{};
+        server_addr.sin_family      = AF_INET;
+        server_addr.sin_addr.s_addr = INADDR_ANY;
+        server_addr.sin_port        = htons((u_short)serve_port);
+
+        if (bind(server_sock, (sockaddr*)&server_addr, sizeof(server_addr)) == SOCKET_ERROR) {
+            std::cerr << "[Serve] Error: bind() failed on port " << serve_port << ": " << WSAGetLastError() << "\n";
+            closesocket(server_sock);
+            WSACleanup();
+            return 1;
+        }
+
+        listen(server_sock, SOMAXCONN);
+
+        std::cout << "  \033[32m✓ Server listening on\033[0m  \033[1mhttp://localhost:" << serve_port << "\033[0m\n\n";
+        std::cout << "  Press \033[1mCtrl+C\033[0m to stop.\n\n";
+        std::cout << "  \033[2m──────────────────────────────────────────────\033[0m\n";
+        std::cout << "  \033[2m  Request Log\033[0m\n";
+        std::cout << "  \033[2m──────────────────────────────────────────────\033[0m\n\n";
+
+        while (true) {
+            sockaddr_in client_addr{};
+            int client_len = sizeof(client_addr);
+            SOCKET client_sock = accept(server_sock, (sockaddr*)&client_addr, &client_len);
+            if (client_sock == INVALID_SOCKET) continue;
+
+            // Read the HTTP request
+            std::string request_data;
+            char recv_buf[4096];
+            int bytes_recv = recv(client_sock, recv_buf, sizeof(recv_buf) - 1, 0);
+            if (bytes_recv > 0) {
+                recv_buf[bytes_recv] = '\0';
+                request_data = recv_buf;
+            }
+
+            std::string method, req_path;
+            parse_request_line(request_data, method, req_path);
+
+            // Strip query string from path
+            auto qpos = req_path.find('?');
+            if (qpos != std::string::npos) req_path = req_path.substr(0, qpos);
+
+            std::string response_str;
+
+            if (req_path == "/__zenith_hmr") {
+                // SSE endpoint: long-poll until generation changes
+                uint64_t client_gen = hmr_generation.load();
+                std::string sse_header;
+                sse_header += "HTTP/1.1 200 OK\r\n";
+                sse_header += "Content-Type: text/event-stream\r\n";
+                sse_header += "Cache-Control: no-cache\r\n";
+                sse_header += "Connection: keep-alive\r\n";
+                sse_header += "Access-Control-Allow-Origin: *\r\n";
+                sse_header += "X-Powered-By: Zenith-HMR/1.0\r\n";
+                sse_header += "\r\n";
+                send(client_sock, sse_header.c_str(), (int)sse_header.size(), 0);
+                for (int w = 0; w < 300; ++w) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                    if (hmr_generation.load() != client_gen) {
+                        std::string evt = "data: reload\n\n";
+                        send(client_sock, evt.c_str(), (int)evt.size(), 0);
+                        break;
+                    }
+                }
+                closesocket(client_sock);
+                continue;
+            }
+
+            // Static file from public/
+            if (!public_dir.empty() && fs::exists(public_dir)) {
+                std::string static_path = public_dir + req_path;
+                if (fs::is_regular_file(static_path)) {
+                    std::ifstream sf(static_path, std::ios::binary);
+                    std::string body((std::istreambuf_iterator<char>(sf)), {});
+                    std::string ext = fs::path(static_path).extension().string();
+                    std::string mime = get_mime(ext);
+                    std::string resp = "HTTP/1.1 200 OK\r\nContent-Type: " + mime + "\r\n";
+                    resp += "Content-Length: " + std::to_string(body.size()) + "\r\n";
+                    resp += "Cache-Control: public, max-age=3600\r\nConnection: close\r\n\r\n";
+                    resp += body;
+                    send(client_sock, resp.c_str(), (int)resp.size(), 0);
+                    closesocket(client_sock);
+                    std::cout << "  \033[34m◆\033[0m  " << method << "  " << req_path << "  \033[2m[static]\033[0m\n";
+                    continue;
+                }
+            }
+
+            // Route lookup
+            auto route_it = route_table.find(req_path);
+            if (route_it == route_table.end()) {
+                std::string body404 = make_404(req_path);
+                response_str = make_http_response(404, "Not Found", "text/html", body404);
+                std::cout << "  \033[31m✗\033[0m  " << method << "  " << req_path << "  \033[2m[404]\033[0m\n";
+            } else {
+                auto t_start = std::chrono::steady_clock::now();
+                std::string html = inject_hmr(transpile_to_html(route_it->second, serve_target));
+                auto t_end = std::chrono::steady_clock::now();
+                double ms = std::chrono::duration<double, std::milli>(t_end - t_start).count();
+                response_str = make_http_response(200, "OK", "text/html", html);
+                std::cout << "  \033[32m●\033[0m  " << method << "  " << req_path
+                          << "  \033[2m[" << std::fixed << std::setprecision(1) << ms << "ms]\033[0m\n";
+            }
+
+            send(client_sock, response_str.c_str(), (int)response_str.size(), 0);
+            closesocket(client_sock);
+        }
+
+        closesocket(server_sock);
+        WSACleanup();
+
+#else
+        // ----------------------------------------------------------------
+        // POSIX: BSD sockets TCP server
+        // ----------------------------------------------------------------
+        int server_sock = socket(AF_INET, SOCK_STREAM, 0);
+        if (server_sock < 0) {
+            std::cerr << "[Serve] Error: socket() failed.\n";
+            return 1;
+        }
+
+        int opt_val = 1;
+        setsockopt(server_sock, SOL_SOCKET, SO_REUSEADDR, &opt_val, sizeof(opt_val));
+
+        sockaddr_in server_addr{};
+        server_addr.sin_family      = AF_INET;
+        server_addr.sin_addr.s_addr = INADDR_ANY;
+        server_addr.sin_port        = htons(serve_port);
+
+        if (bind(server_sock, (sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
+            std::cerr << "[Serve] Error: bind() failed on port " << serve_port << ".\n";
+            close(server_sock);
+            return 1;
+        }
+
+        listen(server_sock, SOMAXCONN);
+
+        std::cout << "  \033[32m✓ Server listening on\033[0m  \033[1mhttp://localhost:" << serve_port << "\033[0m\n\n";
+        std::cout << "  Press \033[1mCtrl+C\033[0m to stop.\n\n";
+        std::cout << "  \033[2m──────────────────────────────────────────────\033[0m\n";
+        std::cout << "  \033[2m  Request Log\033[0m\n";
+        std::cout << "  \033[2m──────────────────────────────────────────────\033[0m\n\n";
+
+        while (true) {
+            sockaddr_in client_addr{};
+            socklen_t client_len = sizeof(client_addr);
+            int client_sock = accept(server_sock, (sockaddr*)&client_addr, &client_len);
+            if (client_sock < 0) continue;
+
+            std::string request_data;
+            char recv_buf[4096];
+            ssize_t bytes_recv = recv(client_sock, recv_buf, sizeof(recv_buf) - 1, 0);
+            if (bytes_recv > 0) {
+                recv_buf[bytes_recv] = '\0';
+                request_data = recv_buf;
+            }
+
+            std::string method, req_path;
+            parse_request_line(request_data, method, req_path);
+
+            std::string response_str;
+            if (req_path == "/favicon.ico") {
+                response_str = make_http_response(204, "No Content", "text/plain", "");
+            } else if (req_path == "/__zenith_hmr") {
+                // SSE endpoint: long-poll until generation changes, then send reload
+                uint64_t client_gen = hmr_generation.load();
+                std::string sse_header;
+                sse_header += "HTTP/1.1 200 OK\r\n";
+                sse_header += "Content-Type: text/event-stream\r\n";
+                sse_header += "Cache-Control: no-cache\r\n";
+                sse_header += "Connection: keep-alive\r\n";
+                sse_header += "Access-Control-Allow-Origin: *\r\n";
+                sse_header += "X-Powered-By: Zenith-HMR/1.0\r\n";
+                sse_header += "\r\n";
+                send(client_sock, sse_header.c_str(), sse_header.size(), 0);
+                for (int w = 0; w < 300; ++w) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                    if (hmr_generation.load() != client_gen) {
+                        std::string evt = "data: reload\n\n";
+                        send(client_sock, evt.c_str(), evt.size(), 0);
+                        break;
+                    }
+                }
+                close(client_sock);
+                continue;
+            } else {
+                auto t_start = std::chrono::steady_clock::now();
+                std::string html = inject_hmr(transpile_to_html(serve_file, serve_target));
+                auto t_end = std::chrono::steady_clock::now();
+                double ms = std::chrono::duration<double, std::milli>(t_end - t_start).count();
+
+                response_str = make_http_response(200, "OK", "text/html", html);
+                std::cout << "  \033[32m●\033[0m  " << method << "  " << req_path
+                          << "  \033[2m[" << std::fixed << std::setprecision(1) << ms << "ms]\033[0m\n";
+            }
+
+            send(client_sock, response_str.c_str(), response_str.size(), 0);
+            close(client_sock);
+        }
+
+        close(server_sock);
+#endif
+        return 0;
+    }
+
     // Watch subcommand
     if (argc >= 2 && std::string(argv[1]) == "watch") {
         if (argc < 3) {
@@ -2585,6 +3624,10 @@ int main(int argc, char* argv[]) {
         std::cerr << "  zenith create <name|.>                Create a new Zenith project\n";
         std::cerr << "  zenith run <desktop|web|wasm|android|ios>  Run the project\n";
         std::cerr << "  zenith format [-w] <file.zen>         Format a Zenith source file\n\n";
+        std::cerr << "\033[1mSSR WEB SERVER:\033[0m\n";
+        std::cerr << "  zenith serve <file.zen> [--port 8080] [--target web|wasm]\n";
+        std::cerr << "               Start a dynamic SSR HTTP server — recompiles .zen on every\n";
+        std::cerr << "               request and streams fresh HTML, just like Next.js on Vercel.\n\n";
         std::cerr << "\033[1mPACKAGE MANAGER:\033[0m\n";
         std::cerr << "  zenith install <url>                  Install package from git URL\n";
         std::cerr << "  zenith install                        Install all from zenith.json\n";
@@ -2592,13 +3635,15 @@ int main(int argc, char* argv[]) {
         std::cerr << "  zenith search [query]                 Search package registry\n";
         std::cerr << "  zenith update [package]               Update one or all packages\n";
         std::cerr << "  zenith remove <package>               Uninstall a package\n";
-        std::cerr << "  zenith publish                        Publish package instructions\n\n";
+        std::cerr << "  zenith publish                        Publish package instructions\n";
+        std::cerr << "  zenith bridge <dart|rust> <pkg> \"<specs>\" Scaffold binary FFI packages\n\n";
         std::cerr << "\033[1mDEVELOPER TOOLS:\033[0m\n";
         std::cerr << "  zenith lsp                            Start LSP server (stdio)\n";
         std::cerr << "  zenith daemon start [-d dir]          Start compiler daemon\n";
         std::cerr << "  zenith daemon stop                    Stop compiler daemon\n";
         std::cerr << "  zenith daemon status                  Show daemon status + log\n";
         std::cerr << "  zenith watch <file.zen> [-target ..]  Hot-reload watch mode\n\n";
+
         return 1;
     }
 

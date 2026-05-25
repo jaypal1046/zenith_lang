@@ -1,0 +1,22 @@
+// tests/test_bridge_app.zen
+// Demonstrates using the binary Rust and Dart bridged packages in a Zenith application.
+
+import std.io;
+import zen "uuid";
+import zen "crypto";
+
+Void main() {
+    println("--- Booting Zenith Bridge Test App ---");
+    
+    // 1. Call Rust uuid bridge
+    println("Generating UUID from Rust:");
+    String rust_uuid = generate_uuid();
+    println("  UUID: " + rust_uuid);
+    
+    // 2. Call Dart crypto bridge
+    println("Calculating SHA-256 hash from Dart:");
+    String dart_hash = sha256("Zenith Language");
+    println("  Hash: " + dart_hash);
+    
+    println("--- Test Completed Successfully ---");
+}

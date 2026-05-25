@@ -851,6 +851,54 @@ std::string CodeGenerator::generate(ProgramNode* program) {
     output << "#include \"zenith_runtime.h\"\n";
     output << "#include \"zenith/std/concurrency.hpp\"\n\n";
 
+    // Emit native target-scoped imports for C++ target
+    for (const auto& stmt : program->statements) {
+        if (auto* imp = dynamic_cast<ImportNode*>(stmt.get())) {
+            if (imp->isActiveFor("cpp") && imp->kind == ImportNode::ImportKind::Native) {
+                output << "#include \"" << imp->cdn_url << "\"\n";
+            }
+    }
+    output << "\n";
+
+    // Target Platform Detection Constants
+    output << "#ifdef __ANDROID__\n";
+    output << "const bool isAndroid = true;\n";
+    output << "#else\n";
+    output << "const bool isAndroid = false;\n";
+    output << "#endif\n\n";
+
+    output << "#ifdef __APPLE__\n";
+    output << "  #include <TargetConditionals.h>\n";
+    output << "  #if TARGET_OS_IPHONE\n";
+    output << "    const bool isIos = true;\n";
+    output << "    const bool isMac = false;\n";
+    output << "  #else\n";
+    output << "    const bool isIos = false;\n";
+    output << "    const bool isMac = true;\n";
+    output << "  #endif\n";
+    output << "#else\n";
+    output << "  const bool isIos = false;\n";
+    output << "  const bool isMac = false;\n";
+    output << "#endif\n\n";
+
+    output << "#ifdef __linux__\n";
+    output << "  #ifndef __ANDROID__\n";
+    output << "    const bool isLinux = true;\n";
+    output << "  #else\n";
+    output << "    const bool isLinux = false;\n";
+    output << "  #endif\n";
+    output << "#else\n";
+    output << "  const bool isLinux = false;\n";
+    output << "#endif\n\n";
+
+    output << "#ifdef _WIN32\n";
+    output << "const bool isWindows = true;\n";
+    output << "#else\n";
+    output << "const bool isWindows = false;\n";
+    output << "#endif\n\n";
+
+    output << "const bool isWeb = false;\n\n";
+
     bool has_std_io = false;
     for (const auto& stmt : program->statements) {
         if (auto* imp = dynamic_cast<ImportNode*>(stmt.get())) {

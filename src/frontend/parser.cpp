@@ -887,19 +887,69 @@ std::unique_ptr<ProgramNode> Parser::parseProgram() {
         } 
         else if (current().type == TokenType::KEYWORD && current().value == "import") {
             const Token& imp_tok = current();
-            advance();
-            std::string mod;
-            if (current().type == TokenType::STRING) {
-                mod = std::string(current().value);
-                advance();
-            } else {
-                while (current().type == TokenType::ID || (current().type == TokenType::PUNCT && current().value == ".")) {
-                    mod += current().value;
+            advance(); // consume "import"
+
+            // Check for: import cdn "url"  OR  import npm "package"  OR  import native "path"  OR  import zen "package"
+            if (current().type == TokenType::ID && (current().value == "cdn" || current().value == "npm" || current().value == "native" || current().value == "zen")) {
+                std::string kind_str(current().value);
+                advance(); // consume kind keyword
+
+                std::string pkg_or_url;
+                if (current().type == TokenType::STRING) {
+                    pkg_or_url = std::string(current().value);
                     advance();
+                } else {
+                    std::cerr << "Parser Error: Expected URL/package string after 'import " << kind_str << "' at line " << current().line << "\n";
+                    exit(1);
                 }
+
+                std::string target_filter = "";
+                if (current().type == TokenType::KEYWORD && current().value == "for") {
+                    advance(); // consume "for"
+                    if (current().type == TokenType::STRING || current().type == TokenType::ID) {
+                        target_filter = std::string(current().value);
+                        advance();
+                    } else {
+                        std::cerr << "Parser Error: Expected target identifier or string after 'for' at line " << current().line << "\n";
+                        exit(1);
+                    }
+                }
+
+                // Optional semicolon
+                if (current().type == TokenType::PUNCT && current().value == ";") advance();
+
+                ImportNode::ImportKind kind = ImportNode::ImportKind::Module;
+                std::string cdn_url = pkg_or_url;
+
+                if (kind_str == "cdn") {
+                    kind = ImportNode::ImportKind::Cdn;
+                } else if (kind_str == "npm") {
+                    kind = ImportNode::ImportKind::Npm;
+                    cdn_url = "https://cdn.jsdelivr.net/npm/" + pkg_or_url;
+                } else if (kind_str == "native") {
+                    kind = ImportNode::ImportKind::Native;
+                } else if (kind_str == "zen") {
+                    kind = ImportNode::ImportKind::Zen;
+                }
+
+                program->statements.push_back(
+                    locate(std::make_unique<ImportNode>(pkg_or_url, kind, cdn_url, target_filter), imp_tok));
+            } else {
+                // Classic: import std.io or import "path"
+                std::string mod;
+                if (current().type == TokenType::STRING) {
+                    mod = std::string(current().value);
+                    advance();
+                } else {
+                    while (current().type == TokenType::ID || (current().type == TokenType::PUNCT && current().value == ".")) {
+                        mod += current().value;
+                        advance();
+                    }
+                }
+                if (current().type == TokenType::PUNCT && current().value == ";") advance();
+                program->statements.push_back(
+                    locate(std::make_unique<ImportNode>(mod, ImportNode::ImportKind::Module), imp_tok));
             }
-            expect(TokenType::PUNCT, "Expected ';' after import statement");
-            program->statements.push_back(locate(std::make_unique<ImportNode>(mod), imp_tok));
         }
         else {
             advance();

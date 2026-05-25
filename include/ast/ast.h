@@ -344,8 +344,29 @@ public:
 
 class ImportNode : public ASTNode {
 public:
-    std::string module_name;
-    ImportNode(std::string name) : module_name(std::move(name)) {}
+    enum class ImportKind {
+        Module,  // import std.io              (classic Zenith module)
+        Cdn,     // import cdn "https://..."   (direct CDN URL, web only)
+        Npm,     // import npm "chart.js"      (jsDelivr CDN, web/wasm only)
+        Native,  // import native "openssl"    (system/C++ lib, cpp/android/ios targets)
+        Zen,     // import zen "zenith-chart"  (cross-platform Zenith package, all targets)
+    };
+
+    std::string module_name;    // package name or module path
+    std::string cdn_url;        // resolved CDN/path URL
+    std::string target_filter;  // "" = all targets | "web" | "cpp" | "android" | "ios" | "wasm"
+    ImportKind  kind = ImportKind::Module;
+
+    ImportNode(std::string name, ImportKind k = ImportKind::Module,
+               std::string url = "", std::string filter = "")
+        : module_name(std::move(name)), kind(k),
+          cdn_url(std::move(url)), target_filter(std::move(filter)) {}
+
+    // Returns true if this import should be active for the given target
+    bool isActiveFor(const std::string& target) const {
+        if (target_filter.empty()) return true;   // no filter = all targets
+        return target_filter == target;
+    }
 };
 
 // Memory annotation node — represents @managed, @weak, @gc_root decorators

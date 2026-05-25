@@ -1,104 +1,26 @@
 @echo off
-echo Building Zenith Compiler...
-g++ -O3 -std=c++17 src/main.cpp src/frontend/lexer.cpp src/frontend/parser.cpp src/frontend/semantic.cpp src/frontend/formatter.cpp src/lsp/lsp.cpp src/backend/codegen.cpp src/backend/js_codegen.cpp src/backend/wasm_codegen.cpp -I include -o zenith.exe
-if %errorlevel% neq 0 (
-    echo Build failed.
-    exit /b %errorlevel%
-)
-echo Build succeeded!
-
-echo Running Zenith Compiler on tests/main.zen (C++ Target)...
-.\zenith.exe tests/main.zen
-if %errorlevel% neq 0 (
-    echo C++ Compilation failed.
-    exit /b %errorlevel%
-)
+setlocal
 
 echo.
-echo Running Zenith Compiler on tests/main.zen (Web Target)...
-.\zenith.exe tests/main.zen -target web
+echo   +==================================================+
+2: echo   ^|          Building Zenith Compiler               ^|
+3: echo   +==================================================+
+4: echo.
+
+g++ -O3 -std=c++17 src/main.cpp src/frontend/lexer.cpp src/frontend/parser.cpp src/frontend/semantic.cpp src/frontend/formatter.cpp src/lsp/lsp.cpp src/backend/codegen.cpp src/backend/js_codegen.cpp src/backend/wasm_codegen.cpp -I include -o zenith.exe -lws2_32 -lpthread
 if %errorlevel% neq 0 (
-    echo Web Compilation failed.
+    echo [ERROR] Zenith compiler build failed.
     exit /b %errorlevel%
 )
-
+echo [OK] Zenith compiler built successfully (zenith.exe).
 echo.
-echo Running Zenith Compiler on tests/main.zen (WASM Target)...
-.\zenith.exe tests/main.zen -target wasm
+
+echo Running Zenith Reorganized Test Suite...
+py tests/run_tests.py
 if %errorlevel% neq 0 (
-    echo WASM Compilation failed.
+    echo [ERROR] Test suite failed.
     exit /b %errorlevel%
 )
 
-echo.
-echo Running Zenith Compiler on tests/website.zen (WASM Target)...
-.\zenith.exe tests/website.zen -target wasm
-if %errorlevel% neq 0 (
-    echo WASM Website Compilation failed.
-    exit /b %errorlevel%
-)
-
-echo.
-echo Running Zenith Compiler on tests/gallery.zen (C++, Web, WASM Targets)...
-.\zenith.exe tests/gallery.zen -target cpp
-if %errorlevel% neq 0 (
-    echo Gallery C++ Transpilation failed.
-    exit /b %errorlevel%
-)
-.\zenith.exe tests/gallery.zen -target web
-if %errorlevel% neq 0 (
-    echo Gallery Web Transpilation failed.
-    exit /b %errorlevel%
-)
-.\zenith.exe tests/gallery.zen -target wasm
-if %errorlevel% neq 0 (
-    echo Gallery WASM Transpilation failed.
-    exit /b %errorlevel%
-)
-
-echo.
-echo Running Zenith Compiler on tests/test_widgets.zen (C++, Web, WASM Targets)...
-.\zenith.exe tests/test_widgets.zen -target cpp
-if %errorlevel% neq 0 (
-    echo Widgets C++ Transpilation failed.
-    exit /b %errorlevel%
-)
-.\zenith.exe tests/test_widgets.zen -target web
-if %errorlevel% neq 0 (
-    echo Widgets Web Transpilation failed.
-    exit /b %errorlevel%
-)
-.\zenith.exe tests/test_widgets.zen -target wasm
-if %errorlevel% neq 0 (
-    echo Widgets WASM Transpilation failed.
-    exit /b %errorlevel%
-)
-
-echo.
-echo Compiling Generated C++ Code...
-g++ -O3 -std=c++17 -DYOGA_AVAILABLE tests/main.cpp src/zenith/ui/yoga_layout.cpp lib/yoga/*.cpp lib/yoga/event/*.cpp lib/yoga/internal/*.cpp -I include -I lib -o tests/zenith_app.exe -lwinhttp
-if %errorlevel% neq 0 (
-    echo App build failed.
-    exit /b %errorlevel%
-)
-
-g++ -O3 -std=c++17 -DYOGA_AVAILABLE tests/gallery.cpp src/zenith/ui/yoga_layout.cpp lib/yoga/*.cpp lib/yoga/event/*.cpp lib/yoga/internal/*.cpp -I include -I lib -o tests/gallery_app.exe -lwinhttp
-if %errorlevel% neq 0 (
-    echo Gallery App build failed.
-    exit /b %errorlevel%
-)
-
-g++ -O3 -std=c++17 -DYOGA_AVAILABLE tests/test_widgets.cpp src/zenith/ui/yoga_layout.cpp lib/yoga/*.cpp lib/yoga/event/*.cpp lib/yoga/internal/*.cpp -I include -I lib -o tests/test_widgets_app.exe -lwinhttp
-if %errorlevel% neq 0 (
-    echo Widgets App build failed.
-    exit /b %errorlevel%
-)
-
-echo.
-echo Executing Compiled Zenith Application...
-.\tests\zenith_app.exe
-
-echo.
-echo Executing Widget Demo App...
-.\tests\test_widgets_app.exe
-
+echo [OK] All tasks completed successfully!
+endlocal

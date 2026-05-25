@@ -1,0 +1,49 @@
+{
+  "name": "zenith",
+  "displayName": "Zenith",
+  "description": "Syntax highlighting and language support for the Zenith programming language",
+  "version": "1.0.0",
+  "publisher": "zenith-lang",
+  "engines": {
+    "vscode": "^1.60.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "activationEvents": [
+    "onLanguage:zenith"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "zenith",
+        "aliases": [
+          "Zenith",
+          "zenith"
+        ],
+        "extensions": [
+          ".zen"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "zenith",
+        "scopeName": "source.zenith",
+        "path": "./syntaxes/zenith.tmLanguage.json"
+      }
+    ],
+    "configuration": {
+      "title": "Zenith",
+      "properties": {
+        "zenith.compilerPath": {
+          "type": "string",
+          "default": "zenith",
+          "description": "Path to the zenith compiler executable (e.g. zenith.exe or /usr/local/bin/zenith)"
+        }
+      }
+    }
+  }
+}

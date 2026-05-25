@@ -17,6 +17,11 @@ tests/*_wasm.html
 
 # Test runner binaries
 tests/*.exe
+tests/ui_tests/*.cpp
+tests/ui_tests/*.html
+tests/ui_tests/*.wat
+tests/language_tests/*.cpp
+tests/language_tests/*.exe
 tests/simple_inference
 tests/simple_inference_bin
 tests/test_type_inference

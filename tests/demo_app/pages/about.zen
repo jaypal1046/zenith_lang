@@ -1,0 +1,33 @@
+// pages/about.zen - About page  → route: /about
+import std.io;
+
+class AboutPage() {
+    String heading = "About Zenith";
+    String body = "Zenith is a compiled language that transpiles to C++, Web (HTML/JS), and WASM.";
+
+    UI build() {
+        return Column(
+            Text(heading, fontWeight: "bold", color: "cyan"),
+            Text(body, color: "white"),
+            Card(
+                Text("Language Features", fontWeight: "bold"),
+                Column(
+                    Text("- Zero-boilerplate component system", color: "green"),
+                    Text("- File-system based SSR routing", color: "green"),
+                    Text("- Hot Module Replacement (HMR)", color: "green"),
+                    Text("- Targets: C++, Web, WASM, Android, iOS", color: "green")
+                ),
+                padding: 2
+            ),
+            Button("Back to Home", onClick: goHome)
+        );
+    }
+
+    Void goHome() {
+        println("Navigating to /");
+    }
+}
+
+Void main() {
+    println("[SSR] Rendered: about");
+}

@@ -64,22 +64,55 @@ static std::string preRenderUIComponent(ASTNode* node, const std::unordered_map<
             if (!ui->children.empty()) {
                 placeholder = preRenderUIComponent(ui->children[0].get(), fields);
             }
-            attrs += " type=\"text\" class=\"zenith-input\" placeholder=\"" + placeholder + "\"";
+            std::string val_val = "";
+            for (const auto& arg : ui->named_args) {
+                if (arg.first == "value") {
+                    val_val = preRenderUIComponent(arg.second.get(), fields);
+                }
+            }
+            std::string val_attr = val_val.empty() ? "" : " value=\"" + val_val + "\"";
+            attrs += " type=\"text\" class=\"zenith-input\" placeholder=\"" + placeholder + "\"" + val_attr;
         } else if (ui->component_type == "Checkbox") {
             std::string label = "";
             if (!ui->children.empty()) {
                 label = preRenderUIComponent(ui->children[0].get(), fields);
             }
-            return "<label style=\"display: flex; align-items: center; gap: 8px; cursor: pointer; margin: 5px; color: rgb(226, 232, 240);\"><input type=\"checkbox\" style=\"width: 18px; height: 18px; accent-color: rgb(0, 242, 254); cursor: pointer;\" /><span>" + label + "</span></label>";
+            std::string is_checked_val = "false";
+            for (const auto& arg : ui->named_args) {
+                if (arg.first == "checked") {
+                    is_checked_val = preRenderUIComponent(arg.second.get(), fields);
+                }
+            }
+            std::string checked_attr = (is_checked_val == "true") ? " checked" : "";
+            return "<label style=\"display: flex; align-items: center; gap: 8px; cursor: pointer; margin: 5px; color: rgb(226, 232, 240);\"><input type=\"checkbox\" style=\"width: 18px; height: 18px; accent-color: rgb(0, 242, 254); cursor: pointer;\"" + checked_attr + " /><span>" + label + "</span></label>";
         } else if (ui->component_type == "Slider") {
             tag = "input";
-            attrs += " type=\"range\" class=\"zenith-input\" style=\"accent-color: rgb(0, 242, 254); cursor: pointer;\"";
+            std::string min_val = "0";
+            std::string max_val = "100";
+            std::string cur_val = "50";
+            for (const auto& arg : ui->named_args) {
+                std::string key = arg.first;
+                std::string val = preRenderUIComponent(arg.second.get(), fields);
+                if (key == "min") min_val = val;
+                else if (key == "max") max_val = val;
+                else if (key == "value") cur_val = val;
+            }
+            attrs += " type=\"range\" class=\"zenith-input\" min=\"" + min_val + "\" max=\"" + max_val + "\" value=\"" + cur_val + "\" style=\"accent-color: rgb(0, 242, 254); cursor: pointer;\"";
         } else if (ui->component_type == "Toggle") {
             std::string label = "";
             if (!ui->children.empty()) {
                 label = preRenderUIComponent(ui->children[0].get(), fields);
             }
-            return "<label style=\"display: flex; align-items: center; gap: 10px; cursor: pointer; margin: 5px;\"><div style=\"position: relative; width: 44px; height: 24px; background-color: rgb(71, 85, 105); border-radius: 12px; transition: background-color 0.2s;\"><div style=\"position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; border-radius: 50%; background-color: rgb(255, 255, 255); transition: transform 0.2s;\"></div></div><span style=\"color: rgb(226, 232, 240);\">" + label + "</span></label>";
+            std::string is_on_val = "false";
+            for (const auto& arg : ui->named_args) {
+                if (arg.first == "isOn") {
+                    is_on_val = preRenderUIComponent(arg.second.get(), fields);
+                }
+            }
+            bool is_on = (is_on_val == "true");
+            std::string bg_color = is_on ? "rgb(16, 185, 129)" : "rgb(71, 85, 105)";
+            std::string transform = is_on ? "transform: translateX(20px);" : "";
+            return "<label style=\"display: flex; align-items: center; gap: 10px; cursor: pointer; margin: 5px;\"><div style=\"position: relative; width: 44px; height: 24px; background-color: " + bg_color + "; border-radius: 12px; transition: background-color 0.2s;\"><div style=\"position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; border-radius: 50%; background-color: rgb(255, 255, 255); transition: transform 0.2s; " + transform + "\"></div></div><span style=\"color: rgb(226, 232, 240);\">" + label + "</span></label>";
         } else if (ui->component_type == "Dropdown") {
             tag = "select";
             css_class = "zenith-input";
@@ -87,6 +120,12 @@ static std::string preRenderUIComponent(ASTNode* node, const std::unordered_map<
             std::string options_str = "";
             if (!ui->children.empty()) {
                 options_str = preRenderUIComponent(ui->children[0].get(), fields);
+            }
+            std::string current_val = "";
+            for (const auto& arg : ui->named_args) {
+                if (arg.first == "value") {
+                    current_val = preRenderUIComponent(arg.second.get(), fields);
+                }
             }
             std::string opts_html = "";
             size_t pos = 0;
@@ -96,7 +135,8 @@ static std::string preRenderUIComponent(ASTNode* node, const std::unordered_map<
                 opt.erase(0, opt.find_first_not_of(" \t\r\n"));
                 opt.erase(opt.find_last_not_of(" \t\r\n") + 1);
                 if (!opt.empty()) {
-                    opts_html += "<option value=\"" + opt + "\">" + opt + "</option>";
+                    std::string selected = (opt == current_val) ? " selected" : "";
+                    opts_html += "<option value=\"" + opt + "\"" + selected + ">" + opt + "</option>";
                 }
                 if (comma == std::string::npos) break;
                 pos = comma + 1;
@@ -288,6 +328,16 @@ std::string JSCodeGenerator::generateExpression(ExprNode* expr) {
         for (size_t i = 0; i < call->arguments.size(); ++i) {
             res += generateExpression(call->arguments[i].get());
             if (i < call->arguments.size() - 1) res += ", ";
+        }
+        res += ")";
+        return res;
+    }
+    if (auto* fcall = dynamic_cast<FunctionCallNode*>(expr)) {
+        bool is_async_call = async_functions.count(fcall->function_name) > 0;
+        std::string res = (is_async_call ? "await " : "") + fcall->function_name + "(";
+        for (size_t i = 0; i < fcall->arguments.size(); ++i) {
+            res += generateExpression(fcall->arguments[i].get());
+            if (i < fcall->arguments.size() - 1) res += ", ";
         }
         res += ")";
         return res;
@@ -911,7 +961,24 @@ std::string JSCodeGenerator::generate(ProgramNode* program) {
     output << "            transform: translateY(-1px);\n";
     output << "            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);\n";
     output << "        }\n";
-    output << "    </style>\n</head>\n<body>\n";
+    output << "    </style>\n";
+
+    // ----------------------------------------------------------------
+    // CDN/npm library injection — collect import cdn/npm from AST
+    // ----------------------------------------------------------------
+    for (const auto& stmt : program->statements) {
+        if (auto* imp = dynamic_cast<ImportNode*>(stmt.get())) {
+            if (imp->isActiveFor("web")) {
+                if (imp->kind == ImportNode::ImportKind::Cdn || imp->kind == ImportNode::ImportKind::Npm) {
+                    // Emit <script src="..."> in <head> before any app code runs
+                    output << "    <!-- Zenith Library: " << imp->module_name << " -->\n";
+                    output << "    <script src=\"" << imp->cdn_url << "\" crossorigin=\"anonymous\"></script>\n";
+                }
+            }
+        }
+    }
+
+    output << "</head>\n<body>\n";
     output << "    <div class=\"app-header\">\n";
     output << "        <h1>Zenith Live Web Target</h1>\n";
     output << "        <p>Statically compiled Zenith layout engine & LLM bindings running live in browser</p>\n";
@@ -969,6 +1036,13 @@ std::string JSCodeGenerator::generate(ProgramNode* program) {
     output << "    </div>\n\n";
     
     output << "    <script>\n";
+    output << "        // Platform Detection Constants\n";
+    output << "        const isAndroid = false;\n";
+    output << "        const isIos = false;\n";
+    output << "        const isMac = false;\n";
+    output << "        const isLinux = false;\n";
+    output << "        const isWeb = true;\n";
+    output << "        const isWindows = false;\n\n";
     output << "        const zenith = {\n";
     output << "            consoleElement: null,\n";
     output << "            print: function(msg) {\n";

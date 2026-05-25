@@ -40,6 +40,20 @@ UI ChatScreen() {
 
 Void main() {
     println("--- Booting Zenith App ---");
+    if (isWeb) {
+        println("Target platform: Web/Browser");
+    } else if (isWindows) {
+        println("Target platform: Windows Desktop");
+    } else if (isLinux) {
+        println("Target platform: Linux Native");
+    } else if (isMac) {
+        println("Target platform: macOS Native");
+    } else if (isAndroid) {
+        println("Target platform: Android Mobile");
+    } else if (isIos) {
+        println("Target platform: iOS Mobile");
+    }
+    
     UI app = ChatScreen();
     app.render();
 

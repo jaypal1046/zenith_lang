@@ -1,0 +1,32 @@
+// tests/test_npm_chart.zen
+// Demo: using Chart.js from npm via Zenith's CDN bridge
+// Build: zenith test_npm_chart.zen -target web -o test_npm_chart.html
+
+import npm "chart.js@4";
+
+// Declare Chart.js constructor via JS interop bridge
+foreign "js" {
+    Void Chart(canvasId: String, config: String);
+}
+
+class ChartPage() {
+    String title = "Zenith + Chart.js — npm CDN Bridge Demo";
+    String subtitle = "Chart.js loaded via jsDelivr CDN, called via Zenith JS interop";
+
+    UI build() {
+        return Column(
+            Text(title, fontWeight: "bold", color: "cyan"),
+            Text(subtitle, color: "gray"),
+            Card(
+                Text("Sales Dashboard", fontWeight: "bold"),
+                Text("Powered by Chart.js via import npm", color: "green"),
+                padding: 2
+            ),
+            Text("Open browser console to see Chart.js initialization.", color: "yellow")
+        );
+    }
+}
+
+Void main() {
+    println("Chart.js loaded via Zenith npm CDN bridge!");
+}

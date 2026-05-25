@@ -60,28 +60,67 @@ static std::string preRenderUIComponent(ASTNode* node, const std::unordered_map<
             if (!ui->children.empty()) {
                 placeholder = preRenderUIComponent(ui->children[0].get(), fields);
             }
-            attrs += " type=\"text\" placeholder=\"" + placeholder + "\" style=\"background: rgba(15, 23, 42, 0.8); color: rgb(248, 250, 252); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 8px; padding: 8px 12px;\"";
+            std::string val_val = "";
+            for (const auto& arg : ui->named_args) {
+                if (arg.first == "value") {
+                    val_val = preRenderUIComponent(arg.second.get(), fields);
+                }
+            }
+            std::string val_attr = val_val.empty() ? "" : " value=\"" + val_val + "\"";
+            attrs += " type=\"text\" placeholder=\"" + placeholder + "\"" + val_attr + " style=\"background: rgba(15, 23, 42, 0.8); color: rgb(248, 250, 252); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 8px; padding: 8px 12px;\"";
         } else if (ui->component_type == "Checkbox") {
             std::string label = "";
             if (!ui->children.empty()) {
                 label = preRenderUIComponent(ui->children[0].get(), fields);
             }
-            return "<label style=\"display: flex; align-items: center; gap: 8px; cursor: pointer; color: rgb(226, 232, 240); margin: 5px;\"><input type=\"checkbox\" style=\"cursor: pointer; width: 18px; height: 18px; accent-color: rgb(56, 189, 248);\" /><span>" + label + "</span></label>";
+            std::string is_checked_val = "false";
+            for (const auto& arg : ui->named_args) {
+                if (arg.first == "checked") {
+                    is_checked_val = preRenderUIComponent(arg.second.get(), fields);
+                }
+            }
+            std::string checked_attr = (is_checked_val == "true") ? " checked" : "";
+            return "<label style=\"display: flex; align-items: center; gap: 8px; cursor: pointer; color: rgb(226, 232, 240); margin: 5px;\"><input type=\"checkbox\" style=\"cursor: pointer; width: 18px; height: 18px; accent-color: rgb(56, 189, 248);\"" + checked_attr + " /><span>" + label + "</span></label>";
         } else if (ui->component_type == "Slider") {
             tag = "input";
-            attrs += " type=\"range\" style=\"margin: 5px; accent-color: rgb(56, 189, 248); background: rgba(255,255,255,0.1);\"";
+            std::string min_val = "0";
+            std::string max_val = "100";
+            std::string cur_val = "50";
+            for (const auto& arg : ui->named_args) {
+                std::string key = arg.first;
+                std::string val = preRenderUIComponent(arg.second.get(), fields);
+                if (key == "min") min_val = val;
+                else if (key == "max") max_val = val;
+                else if (key == "value") cur_val = val;
+            }
+            attrs += " type=\"range\" min=\"" + min_val + "\" max=\"" + max_val + "\" value=\"" + cur_val + "\" style=\"margin: 5px; accent-color: rgb(56, 189, 248); background: rgba(255,255,255,0.1);\"";
         } else if (ui->component_type == "Toggle") {
             std::string label = "";
             if (!ui->children.empty()) {
                 label = preRenderUIComponent(ui->children[0].get(), fields);
             }
-            return "<label style=\"display: flex; align-items: center; gap: 10px; cursor: pointer; margin: 5px;\"><div style=\"position: relative; width: 44px; height: 24px; background-color: rgb(71, 85, 105); border-radius: 12px; transition: background-color 0.2s;\"><div style=\"position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; border-radius: 50%; background-color: rgb(255, 255, 255); transition: transform 0.2s;\"></div></div><span style=\"color: rgb(226, 232, 240);\">" + label + "</span></label>";
+            std::string is_on_val = "false";
+            for (const auto& arg : ui->named_args) {
+                if (arg.first == "isOn") {
+                    is_on_val = preRenderUIComponent(arg.second.get(), fields);
+                }
+            }
+            bool is_on = (is_on_val == "true");
+            std::string bg_color = is_on ? "rgb(16, 185, 129)" : "rgb(71, 85, 105)";
+            std::string transform = is_on ? "transform: translateX(20px);" : "";
+            return "<label style=\"display: flex; align-items: center; gap: 10px; cursor: pointer; margin: 5px;\"><div style=\"position: relative; width: 44px; height: 24px; background-color: " + bg_color + "; border-radius: 12px; transition: background-color 0.2s;\"><div style=\"position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; border-radius: 50%; background-color: rgb(255, 255, 255); transition: transform 0.2s; " + transform + "\"></div></div><span style=\"color: rgb(226, 232, 240);\">" + label + "</span></label>";
         } else if (ui->component_type == "Dropdown") {
             tag = "select";
             attrs += " style=\"background: rgba(15, 23, 42, 0.8); color: rgb(248, 250, 252); border: 1px solid rgba(0, 242, 254, 0.3); border-radius: 8px; padding: 8px 12px; cursor: pointer;\"";
             std::string options_str = "";
             if (!ui->children.empty()) {
                 options_str = preRenderUIComponent(ui->children[0].get(), fields);
+            }
+            std::string current_val = "";
+            for (const auto& arg : ui->named_args) {
+                if (arg.first == "value") {
+                    current_val = preRenderUIComponent(arg.second.get(), fields);
+                }
             }
             std::string opts_html = "";
             size_t pos = 0;
@@ -91,7 +130,8 @@ static std::string preRenderUIComponent(ASTNode* node, const std::unordered_map<
                 opt.erase(0, opt.find_first_not_of(" \t\r\n"));
                 opt.erase(opt.find_last_not_of(" \t\r\n") + 1);
                 if (!opt.empty()) {
-                    opts_html += "<option value=\"" + opt + "\">" + opt + "</option>";
+                    std::string selected = (opt == current_val) ? " selected" : "";
+                    opts_html += "<option value=\"" + opt + "\"" + selected + ">" + opt + "</option>";
                 }
                 if (comma == std::string::npos) break;
                 pos = comma + 1;
@@ -232,7 +272,19 @@ void WASMCodeGenerator::generateExpression(ExprNode* expr) {
     }
     else if (auto* id = dynamic_cast<IdentifierNode*>(expr)) {
         indent();
-        if (!current_class_name.empty() && class_field_offsets[current_class_name].find(id->name) != class_field_offsets[current_class_name].end()) {
+        if (id->name == "isAndroid") {
+            output << "i32.const 0\n";
+        } else if (id->name == "isIos") {
+            output << "i32.const 0\n";
+        } else if (id->name == "isMac") {
+            output << "i32.const 0\n";
+        } else if (id->name == "isLinux") {
+            output << "i32.const 0\n";
+        } else if (id->name == "isWeb") {
+            output << "i32.const 1\n";
+        } else if (id->name == "isWindows") {
+            output << "i32.const 0\n";
+        } else if (!current_class_name.empty() && class_field_offsets[current_class_name].find(id->name) != class_field_offsets[current_class_name].end()) {
             output << "local.get $this\n";
             indent();
             if (class_field_types[current_class_name][id->name] == "Float") {
@@ -1094,6 +1146,13 @@ std::string WASMCodeGenerator::generateHTMLWrapper() {
     html << "        <div id=\"console\"></div>\n";
     html << "    </div>\n";
     html << "    <script>\n";
+    html << "        // Platform Detection Constants\n";
+    html << "        const isAndroid = false;\n";
+    html << "        const isIos = false;\n";
+    html << "        const isMac = false;\n";
+    html << "        const isLinux = false;\n";
+    html << "        const isWeb = true;\n";
+    html << "        const isWindows = false;\n\n";
     html << "        function logToConsole(msg, type = 'system') {\n";
     html << "            const consoleEl = document.getElementById('console');\n";
     html << "            if (consoleEl) {\n";

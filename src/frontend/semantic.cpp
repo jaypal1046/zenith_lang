@@ -811,6 +811,14 @@ bool SemanticAnalyzer::analyze(ProgramNode* program) {
     builtin_fns.clear();
     has_errors = false;
 
+    // Register platform detection constants
+    current_scope->define("isAndroid", "Bool");
+    current_scope->define("isIos", "Bool");
+    current_scope->define("isMac", "Bool");
+    current_scope->define("isLinux", "Bool");
+    current_scope->define("isWeb", "Bool");
+    current_scope->define("isWindows", "Bool");
+
     // First pass: Register all global classes, interfaces, and functions
     for (const auto& stmt : program->statements) {
         if (auto* class_decl = dynamic_cast<ClassDeclNode*>(stmt.get())) {

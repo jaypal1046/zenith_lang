@@ -1,5 +1,0 @@
-class AppLinux() {
-    String getPlatformName() {
-        return "Linux Native Application";
-    }
-}

@@ -1,5 +1,0 @@
-class AppIos() {
-    String getPlatformName() {
-        return "iOS Client";
-    }
-}

@@ -207,37 +207,72 @@ Source (.zen)
 
 ## 🛠️ CLI Reference
 
-### Compiler
+### 💻 Compiler & Core
 ```bash
-zenith <file.zen> [-target cpp|web|wasm] [-o output]
+# Transpiles a Zenith source file to a target platform
+zenith <file.zen> [-target cpp|web|wasm] [-o <output_file>]
 ```
 
-### Project
+### 📁 Project Management
 ```bash
-zenith create <name|.>          # Scaffold a new project
-zenith run <desktop|web|wasm>   # Build & run for platform
-zenith format [-w] <file.zen>   # Format source file
+# Scaffold a new project or library
+zenith create <name|.> [--template=app|package]
+
+# Build and run the project for a specific target platform
+# Supported platforms: desktop, windows, linux, mac, web, wasm, android, ios
+zenith run <platform>
+
+# Format a Zenith source file using the AST-based formatter
+zenith format [-w] <file.zen>   # Use -w / --write to edit the file in-place
 ```
 
-### Package Manager
+### ⚡ SSR Web Server (Next.js Style)
+Zenith features a built-in high-performance Server-Side Rendering (SSR) web server with file-system routing, public static asset support, and hot module reloading.
 ```bash
-zenith install <git-url>        # Install a package
-zenith install                  # Install all from zenith.json
-zenith list                     # List installed packages
-zenith search [query]           # Search package registry
-zenith update [package]         # Update one or all packages
-zenith remove <package>         # Uninstall a package
-zenith publish                  # Publish your package
+# Start a dynamic SSR server
+zenith serve <file.zen|directory/> [--port 8080] [--target web|wasm]
 ```
+- **File-System Routing**: If a directory is served, files under `pages/` are auto-mapped to routes (e.g., `pages/index.zen` → `/`, `pages/about.zen` → `/about`, `pages/blog/post.zen` → `/blog/post`). If a single file is served, it routes `/`.
+- **Static Assets**: Automatically serves any static files in the `public/` directory (e.g., `public/logo.png` is served at `/logo.png`).
+- **Live HMR**: Automatically injects a lightweight Hot Module Replacement client script that listens via Server-Sent Events (SSE) at `/__zenith_hmr` and instantly reloads the browser when any page source code changes.
 
-### Developer Tools
+### 📦 Package Manager & FFI Bridges
+Zenith's package manager handles native Zenith dependencies, npm/CDN frontend integrations, and low-level FFI bridges.
 ```bash
-zenith lsp                      # Start LSP server (stdio, for editors)
-zenith daemon start             # Start background compiler daemon
-zenith daemon stop              # Stop daemon
-zenith daemon status            # Show daemon status + recent log
-zenith watch <file.zen>         # Hot-reload watch mode
+# Dependency Management
+zenith install <git-url>        # Clone a git package into lib/ and register in zenith.json
+zenith install                  # Install all missing dependencies from zenith.json
+zenith list                     # List all installed packages and registered details
+zenith search [query]           # Search the curated Zenith package registry
+zenith update [package]         # Pull/update one or all libraries from git remotes
+zenith remove <package>         # Uninstall and delete library + remove from zenith.json
+zenith publish                  # Print instructions to register your package
+
+# npm CDN Bridge
+# Installs an npm package as a CDN import, creating a .zen wrapper stub with `foreign "js"` bindings
+zenith add <npm-package-name>   # e.g., zenith add chart.js
+
+# Low-Level FFI Bridge
+# Scaffolds native Rust or Dart compiled library stubs and FFI declarations
+zenith bridge <dart|rust> <package_name> "<exported_signatures>"
 ```
+- **npm CDN Bridge**: Resolves and maps the library to a jsDelivr CDN source in `zenith.json`.
+- **Low-Level FFI**: Scaffolds FFI wrapper projects for Rust and Dart to import arbitrary packages from **Crates.io** and **Pub.dev**. Both support compiling to **native shared libraries** (`.dll`, `.so`, `.dylib` on desktop loaded via `import native`) as well as **WASM targets** (`.wasm` loaded via CDN on web).
+
+### 🔌 Developer Tools
+```bash
+# Language Server Protocol (LSP)
+zenith lsp                      # Starts a JSON-RPC 2.0 LSP server on stdin/stdout for IDEs
+
+# Background Compiler Daemon
+zenith daemon start [-d <dir>]  # Start background daemon file watcher & semantic parser cache
+zenith daemon stop              # Stop the daemon
+zenith daemon status            # View PID, log location, and recent worker log output
+
+# Hot-Reload Watch Mode
+zenith watch <file.zen> [-target cpp|web|wasm]
+```
+- **Hot-Reload Watch**: Watches the source directory for changes. On save, it compiles, compiles the generated native target, terminates the running process, and starts a fresh instance automatically.
 
 ---
 
@@ -274,6 +309,64 @@ zenith install
 | `zenith-forms` | Form validation & inputs |
 | `zenith-state` | Global state management |
 | `zenith-test` | Unit testing framework |
+
+### 🦀 Crates.io & 🎯 Pub.dev Integration
+
+Zenith supports integrating arbitrary, non-UI backend and utility libraries directly from **Crates.io** (Rust) or **Pub.dev** (Dart). 
+
+Using the `zenith bridge` command, Zenith automatically scaffolds a local target environment, downloads dependencies via the native package managers (`cargo` / `pub`), compiles the packages into shared native binaries or WASM payloads, and connects them directly back to your Zenith application via compiled bindings:
+
+#### Example: Integrating Rust's `uuid` crate from Crates.io
+1. **Scaffold the Bridge**:
+   ```bash
+   zenith bridge rust uuid "String generate_uuid();"
+   ```
+   This scaffolds a Cargo package inside `lib/uuid/` pre-configured to fetch `uuid` from Crates.io, exports a C FFI wrapper function in `lib/uuid/src/lib.rs`, and generates the Zenith FFI mapping file in `lib/uuid/main.zen`.
+
+2. **Build the Target (Native or WASM)**:
+   - **For Desktop (Native Shared Library)**:
+     ```bash
+     cd lib/uuid && cargo build --release
+     ```
+     This compiles the Rust crate to a shared library (e.g., `bridge.dll` on Windows, or `bridge.so` / `bridge.dylib` on POSIX).
+   - **For Web (WebAssembly)**:
+     ```bash
+     cd lib/uuid && cargo build --target wasm32-unknown-unknown --release
+     ```
+     This compiles to `bridge.wasm` for web browser environments.
+
+3. **Import and Connect**:
+   Import the bridge inside your Zenith code:
+   ```Zenith
+   import "uuid/main.zen";
+   
+   Void main() {
+       let my_uuid = generate_uuid();
+       println("Generated UUID from Rust crate: " + my_uuid);
+   }
+   ```
+
+#### Example: Integrating Dart's `crypto` package from Pub.dev
+1. **Scaffold the Bridge**:
+   ```bash
+   zenith bridge dart crypto "String sha256(String input);"
+   ```
+2. **Build the Target (Native or WASM)**:
+   - **For Desktop (Native Shared Library)**:
+     ```bash
+     cd lib/crypto && dart pub get && dart compile shared-library main.dart -o bridge.dll # or bridge.so / bridge.dylib
+     ```
+     This compiles the Dart package to a native shared library for desktop platforms.
+   - **For Web (WebAssembly)**:
+     ```bash
+     cd lib/crypto && dart pub get && dart compile wasm main.dart
+     ```
+     This compiles to `bridge.wasm` for web environments.
+3. **Import and Connect**:
+   Import the bridge inside your Zenith code:
+   ```Zenith
+   import "crypto/main.zen";
+   ```
 
 ---
 

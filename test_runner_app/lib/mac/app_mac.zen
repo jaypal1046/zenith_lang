@@ -1,5 +1,0 @@
-class AppMac() {
-    String getPlatformName() {
-        return "macOS Native Application";
-    }
-}

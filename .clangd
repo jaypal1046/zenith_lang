@@ -1,0 +1,5 @@
+CompileFlags:
+  Compiler: C:/TDM-GCC-64/bin/g++.exe
+  Add:
+    - -Iinclude
+    - -std=c++17

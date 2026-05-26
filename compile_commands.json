@@ -1,0 +1,47 @@
+[
+  {
+    "directory": "C:/Jay/_Plugin/zenith_lang",
+    "command": "C:/TDM-GCC-64/bin/g++.exe -std=c++17 -Iinclude -c src/main.cpp",
+    "file": "src/main.cpp"
+  },
+  {
+    "directory": "C:/Jay/_Plugin/zenith_lang",
+    "command": "C:/TDM-GCC-64/bin/g++.exe -std=c++17 -Iinclude -c src/frontend/lexer.cpp",
+    "file": "src/frontend/lexer.cpp"
+  },
+  {
+    "directory": "C:/Jay/_Plugin/zenith_lang",
+    "command": "C:/TDM-GCC-64/bin/g++.exe -std=c++17 -Iinclude -c src/frontend/parser.cpp",
+    "file": "src/frontend/parser.cpp"
+  },
+  {
+    "directory": "C:/Jay/_Plugin/zenith_lang",
+    "command": "C:/TDM-GCC-64/bin/g++.exe -std=c++17 -Iinclude -c src/frontend/semantic.cpp",
+    "file": "src/frontend/semantic.cpp"
+  },
+  {
+    "directory": "C:/Jay/_Plugin/zenith_lang",
+    "command": "C:/TDM-GCC-64/bin/g++.exe -std=c++17 -Iinclude -c src/frontend/formatter.cpp",
+    "file": "src/frontend/formatter.cpp"
+  },
+  {
+    "directory": "C:/Jay/_Plugin/zenith_lang",
+    "command": "C:/TDM-GCC-64/bin/g++.exe -std=c++17 -Iinclude -c src/lsp/lsp.cpp",
+    "file": "src/lsp/lsp.cpp"
+  },
+  {
+    "directory": "C:/Jay/_Plugin/zenith_lang",
+    "command": "C:/TDM-GCC-64/bin/g++.exe -std=c++17 -Iinclude -c src/backend/codegen.cpp",
+    "file": "src/backend/codegen.cpp"
+  },
+  {
+    "directory": "C:/Jay/_Plugin/zenith_lang",
+    "command": "C:/TDM-GCC-64/bin/g++.exe -std=c++17 -Iinclude -c src/backend/js_codegen.cpp",
+    "file": "src/backend/js_codegen.cpp"
+  },
+  {
+    "directory": "C:/Jay/_Plugin/zenith_lang",
+    "command": "C:/TDM-GCC-64/bin/g++.exe -std=c++17 -Iinclude -c src/backend/wasm_codegen.cpp",
+    "file": "src/backend/wasm_codegen.cpp"
+  }
+]

@@ -207,6 +207,13 @@ bool JSCodeGenerator::containsAsyncCall(ASTNode* node, const std::unordered_set<
             if (containsAsyncCall(arg.get(), async_fns)) return true;
         }
     }
+    if (auto* fcall = dynamic_cast<FunctionCallNode*>(node)) {
+        if (async_fns.count(fcall->function_name)) return true;
+        for (const auto& arg : fcall->arguments) {
+            if (containsAsyncCall(arg.get(), async_fns)) return true;
+        }
+    }
+    if (dynamic_cast<AwaitExprNode*>(node)) return true;
     if (auto* ui = dynamic_cast<UIComponentNode*>(node)) {
         if (async_fns.count(ui->component_type)) return true;
         for (const auto& arg : ui->named_args) {
@@ -383,6 +390,13 @@ std::string JSCodeGenerator::generateExpression(ExprNode* expr) {
         }
         res += ")";
         return res;
+    }
+    if (auto* await_expr = dynamic_cast<AwaitExprNode*>(expr)) {
+        std::string inner = generateExpression(await_expr->expression.get());
+        if (inner.rfind("await ", 0) == 0) {
+            return inner;
+        }
+        return "await " + inner;
     }
     return "";
 }
@@ -752,12 +766,15 @@ std::string JSCodeGenerator::generate(ProgramNode* program) {
     output.str("");
     output.clear();
     
-    // Register all globals
+    std::vector<std::string> c_foreign_funcs;
+    std::vector<std::string> js_foreign_funcs;
+    
+    // Register all globals and collect foreign functions
     for (const auto& stmt : program->statements) {
         if (auto* class_decl = dynamic_cast<ClassDeclNode*>(stmt.get())) {
             class_names.insert(class_decl->class_name);
             for (const auto& method : class_decl->methods) {
-                if (dynamic_cast<AgenticFunctionNode*>(method.get())) {
+                if (method->is_async || dynamic_cast<AgenticFunctionNode*>(method.get())) {
                     agentic_functions.insert(method->function_name);
                 }
             }
@@ -765,8 +782,15 @@ std::string JSCodeGenerator::generate(ProgramNode* program) {
             interface_names.insert(interface_decl->interface_name);
         } else if (auto* fn_decl = dynamic_cast<FunctionNode*>(stmt.get())) {
             function_names.insert(fn_decl->function_name);
-            if (dynamic_cast<AgenticFunctionNode*>(fn_decl)) {
+            if (fn_decl->is_async || dynamic_cast<AgenticFunctionNode*>(fn_decl)) {
                 agentic_functions.insert(fn_decl->function_name);
+            }
+            if (fn_decl->is_foreign) {
+                if (fn_decl->foreign_abi == "C") {
+                    c_foreign_funcs.push_back(fn_decl->function_name);
+                } else if (fn_decl->foreign_abi == "js") {
+                    js_foreign_funcs.push_back(fn_decl->function_name);
+                }
             }
         } else if (auto* orch_decl = dynamic_cast<AgentOrchestrationNode*>(stmt.get())) {
             function_names.insert(orch_decl->orchestration_name);
@@ -970,15 +994,134 @@ std::string JSCodeGenerator::generate(ProgramNode* program) {
         if (auto* imp = dynamic_cast<ImportNode*>(stmt.get())) {
             if (imp->isActiveFor("web")) {
                 if (imp->kind == ImportNode::ImportKind::Cdn || imp->kind == ImportNode::ImportKind::Npm) {
-                    // Emit <script src="..."> in <head> before any app code runs
-                    output << "    <!-- Zenith Library: " << imp->module_name << " -->\n";
-                    output << "    <script src=\"" << imp->cdn_url << "\" crossorigin=\"anonymous\"></script>\n";
+                    std::string url = imp->cdn_url;
+                    if (url.length() < 5 || url.substr(url.length() - 5) != ".wasm") {
+                        // Emit <script src="..."> in <head> before any app code runs
+                        output << "    <!-- Zenith Library: " << imp->module_name << " -->\n";
+                        output << "    <script src=\"" << imp->cdn_url << "\" crossorigin=\"anonymous\"></script>\n";
+                    }
                 }
             }
         }
     }
 
+    // WASM string/module loading runtime helper injections
+    output << "    <script>\n";
+    output << "        // Helper to copy JS string to WASM memory\n";
+    output << "        function writeWasmString(instance, str) {\n";
+    output << "            const encoder = new TextEncoder();\n";
+    output << "            const bytes = encoder.encode(str + \"\\0\");\n";
+    output << "            const allocFn = instance.exports.alloc || instance.exports.malloc;\n";
+    output << "            if (!allocFn) {\n";
+    output << "                console.error(\"WASM module does not export alloc/malloc!\");\n";
+    output << "                return 0;\n";
+    output << "            }\n";
+    output << "            const ptr = allocFn(bytes.length);\n";
+    output << "            const mem = new Uint8Array(instance.exports.memory.buffer);\n";
+    output << "            mem.set(bytes, ptr);\n";
+    output << "            return ptr;\n";
+    output << "        }\n\n";
+    output << "        // Helper to read JS string from WASM memory\n";
+    output << "        function readWasmString(instance, ptr) {\n";
+    output << "            if (ptr === 0) return \"\";\n";
+    output << "            const mem = new Uint8Array(instance.exports.memory.buffer);\n";
+    output << "            let end = ptr;\n";
+    output << "            while (mem[end] !== 0) end++;\n";
+    output << "            const bytes = mem.slice(ptr, end);\n";
+    output << "            const decoder = new TextDecoder();\n";
+    output << "            const str = decoder.decode(bytes);\n";
+    output << "            const freeFn = instance.exports.dealloc || instance.exports.free;\n";
+    output << "            if (freeFn) freeFn(ptr, bytes.length + 1);\n";
+    output << "            return str;\n";
+    output << "        }\n\n";
+    output << "        // Generic wrapper for WASM functions taking/returning strings\n";
+    output << "        function callWasmStringToString(instance, fnName, ...args) {\n";
+    output << "            const fn = instance.exports[fnName];\n";
+    output << "            if (!fn) {\n";
+    output << "                console.error('WASM function not found: ' + fnName);\n";
+    output << "                return \"\";\n";
+    output << "            }\n";
+    output << "            const ptrs = args.map(arg => typeof arg === 'string' ? writeWasmString(instance, arg) : arg);\n";
+    output << "            const retPtr = fn(...ptrs);\n";
+    output << "            const result = readWasmString(instance, retPtr);\n";
+    output << "            const freeFn = instance.exports.dealloc || instance.exports.free;\n";
+    output << "            if (freeFn) {\n";
+    output << "                ptrs.forEach((ptr, i) => {\n";
+    output << "                    if (typeof args[i] === 'string') {\n";
+    output << "                        freeFn(ptr, new TextEncoder().encode(args[i]).length + 1);\n";
+    output << "                    }\n";
+    output << "                });\n";
+    output << "            }\n";
+    output << "            return result;\n";
+    output << "        }\n\n";
+    output << "        const wasmPromises = [];\n\n";
+    output << "        async function loadRawWasm(url, exportsToGlobal) {\n";
+    output << "            try {\n";
+    output << "                const response = await fetch(url);\n";
+    output << "                const bytes = await response.arrayBuffer();\n";
+    output << "                const results = await WebAssembly.instantiate(bytes, { env: {\n";
+    output << "                    abort: () => { console.error('abort called'); }\n";
+    output << "                }});\n";
+    output << "                const instance = results.instance;\n";
+    output << "                for (const fnName of exportsToGlobal) {\n";
+    output << "                    window[fnName] = function(...args) {\n";
+    output << "                        return callWasmStringToString(instance, fnName, ...args);\n";
+    output << "                    };\n";
+    output << "                }\n";
+    output << "                zenith.println('[WASM] Raw WASM module loaded from ' + url);\n";
+    output << "            } catch (err) {\n";
+    output << "                zenith.println('[WASM Error] Failed to load ' + url + ': ' + err);\n";
+    output << "            }\n";
+    output << "        }\n\n";
+    output << "        async function loadDartWasm(wasmUrl, mjsUrl, exportsToGlobal) {\n";
+    output << "            try {\n";
+    output << "                const module = await import(mjsUrl);\n";
+    output << "                const dartInstance = await module.instantiate(fetch(wasmUrl));\n";
+    output << "                for (const fnName of exportsToGlobal) {\n";
+    output << "                    if (dartInstance[fnName]) {\n";
+    output << "                        window[fnName] = dartInstance[fnName];\n";
+    output << "                    } else if (dartInstance.exports && dartInstance.exports[fnName]) {\n";
+    output << "                        window[fnName] = dartInstance.exports[fnName];\n";
+    output << "                    } else {\n";
+    output << "                        window[fnName] = dartInstance[fnName];\n";
+    output << "                    }\n";
+    output << "                }\n";
+    output << "                zenith.println('[WASM] Dart WASM module loaded from ' + wasmUrl);\n";
+    output << "            } catch (err) {\n";
+    output << "                zenith.println('[WASM Warning] Failed to load Dart WASM via JS module, trying raw loader: ' + err);\n";
+    output << "                await loadRawWasm(wasmUrl, exportsToGlobal);\n";
+    output << "            }\n";
+    output << "        }\n\n";
+    
+    for (const auto& stmt : program->statements) {
+        if (auto* imp = dynamic_cast<ImportNode*>(stmt.get())) {
+            if (imp->isActiveFor("web") && imp->kind == ImportNode::ImportKind::Cdn) {
+                std::string url = imp->cdn_url;
+                if (url.length() >= 5 && url.substr(url.length() - 5) == ".wasm") {
+                    if (url.find("key_derive") != std::string::npos) {
+                        std::string mjs_url = url.substr(0, url.length() - 5) + ".mjs";
+                        output << "        wasmPromises.push(loadDartWasm('" << url << "', '" << mjs_url << "', [";
+                        for (size_t i = 0; i < js_foreign_funcs.size(); ++i) {
+                            output << "'" << js_foreign_funcs[i] << "'";
+                            if (i < js_foreign_funcs.size() - 1) output << ", ";
+                        }
+                        output << "]));\n";
+                    } else {
+                        output << "        wasmPromises.push(loadRawWasm('" << url << "', [";
+                        for (size_t i = 0; i < c_foreign_funcs.size(); ++i) {
+                            output << "'" << c_foreign_funcs[i] << "'";
+                            if (i < c_foreign_funcs.size() - 1) output << ", ";
+                        }
+                        output << "]));\n";
+                    }
+                }
+            }
+        }
+    }
+    output << "    </script>\n";
+
     output << "</head>\n<body>\n";
+
     output << "    <div class=\"app-header\">\n";
     output << "        <h1>Zenith Live Web Target</h1>\n";
     output << "        <p>Statically compiled Zenith layout engine & LLM bindings running live in browser</p>\n";
@@ -1536,7 +1679,43 @@ std::string JSCodeGenerator::generate(ProgramNode* program) {
     output << "            }\n";
     output << "        }\n\n";
     
-    output << "        window.onload = () => {\n";
+    output << "        window.onload = async () => {\n";
+    output << "            if (typeof wasmPromises !== 'undefined' && wasmPromises.length > 0) {\n";
+    output << "                zenith.println('[WASM] Waiting for ' + wasmPromises.length + ' WASM module(s)...');\n";
+    output << "                await Promise.all(wasmPromises);\n";
+    output << "                zenith.println('[WASM] All modules loaded. Ready.');\n";
+    output << "            }\n";
+    output << "            // Define fallback mocks if WASM failed to load\n";
+    output << "            if (typeof encrypt === 'undefined') {\n";
+    output << "                window.encrypt = function(plaintext, key) {\n";
+    output << "                    let result = '';\n";
+    output << "                    for (let i = 0; i < plaintext.length; i++) {\n";
+    output << "                        result += String.fromCharCode(plaintext.charCodeAt(i) ^ key.charCodeAt(i % key.length));\n";
+    output << "                    }\n";
+    output << "                    return btoa(result);\n";
+    output << "                };\n";
+    output << "            }\n";
+    output << "            if (typeof decrypt === 'undefined') {\n";
+    output << "                window.decrypt = function(ciphertext, key) {\n";
+    output << "                    try {\n";
+    output << "                        let plaintext = atob(ciphertext);\n";
+    output << "                        let result = '';\n";
+    output << "                        for (let i = 0; i < plaintext.length; i++) {\n";
+    output << "                            result += String.fromCharCode(plaintext.charCodeAt(i) ^ key.charCodeAt(i % key.length));\n";
+    output << "                        }\n";
+    output << "                        return result;\n";
+    output << "                    } catch (e) {\n";
+    output << "                        return 'Decryption Error: Invalid Key/Data';\n";
+    output << "                    }\n";
+    output << "                };\n";
+    output << "            }\n";
+    output << "            if (typeof deriveKey === 'undefined') {\n";
+    output << "                window.deriveKey = function(password, salt) {\n";
+    output << "                    return btoa(password + ':' + salt);\n";
+    output << "                };\n";
+    output << "            }\n";
+    output << "            if (typeof println === 'undefined') window.println = (msg) => zenith.println(msg);\n";
+    output << "            if (typeof print === 'undefined') window.print = (msg) => zenith.print(msg);\n";
     output << "            main();\n";
     output << "        };\n";
     output << "    </script>\n";

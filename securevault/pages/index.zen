@@ -1,0 +1,111 @@
+import std.io;
+import "../src/vault.zen";
+
+class NotesApp() {
+
+    String currentNote = "";
+    String passwordInput = "";
+    String noteInput = "";
+    String status = "Locked";
+    String decryptedNote = "";
+    String aiSummary = "";
+    String encryptedSavedNote = "";
+
+    UI build() {
+        return Column(
+            Text("SecureVault - Encrypted Notes", fontWeight: "bold", color: "cyan"),
+            Text("Status: " + status, color: (status == "Locked" ? "red" : "green")),
+            
+            // Password entry card
+            Card(
+                Text("1. Authenticate / Unlock:"),
+                Row(
+                    Text("Password:"),
+                    TextField(placeholder: "Enter Password", onChange: handlePasswordChange),
+                    Button("Unlock", onClick: handleUnlock)
+                ),
+                padding: 1
+            ),
+            
+            // Notes editor card (shown if unlocked)
+            Card(
+                Text("2. Secure Notes Editor:"),
+                Row(
+                    Text("Note text:"),
+                    TextField(placeholder: "Secret content...", onChange: handleNoteChange)
+                ),
+                Row(
+                    Button("Save Encrypted", onClick: handleSave),
+                    Button("Decrypt Note", onClick: handleDecrypt),
+                    Button("Summarize (AI)", onClick: handleSummarize)
+                ),
+                padding: 1
+            ),
+
+            // Outputs
+            Card(
+                Text("Encrypted Payload:"),
+                Text(encryptedSavedNote, color: "yellow"),
+                Text("Decrypted Note:"),
+                Text(decryptedNote, color: "green"),
+                Text("AI Summary:"),
+                Text(aiSummary, color: "magenta"),
+                padding: 1
+            )
+        );
+    }
+
+    Void handlePasswordChange(String val) {
+        setState {
+            passwordInput = val;
+        }
+    }
+
+    Void handleNoteChange(String val) {
+        setState {
+            noteInput = val;
+        }
+    }
+
+    Void handleUnlock() {
+        VaultService vault = VaultService();
+        vault.unlock(passwordInput);
+        setState {
+            status = "Unlocked";
+        }
+    }
+
+    async Void handleSave() {
+        VaultService vault = VaultService();
+        vault.unlock(passwordInput);
+        String encrypted = vault.save(noteInput);
+        setState {
+            encryptedSavedNote = encrypted;
+            decryptedNote = "";
+            aiSummary = "";
+        }
+        println("Saved Encrypted: " + encrypted);
+    }
+
+    async Void handleDecrypt() {
+        VaultService vault = VaultService();
+        vault.unlock(passwordInput);
+        String decrypted = vault.open(encryptedSavedNote);
+        setState {
+            decryptedNote = decrypted;
+        }
+    }
+
+    async Void handleSummarize() {
+        VaultService vault = VaultService();
+        String summary = await vault.summarize(noteInput);
+        setState {
+            aiSummary = summary;
+        }
+    }
+}
+
+Void main() {
+    NotesApp app = NotesApp();
+    zenith::runInteractiveLoop(app);
+}

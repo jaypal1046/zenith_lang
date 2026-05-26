@@ -857,6 +857,7 @@ std::string CodeGenerator::generate(ProgramNode* program) {
             if (imp->isActiveFor("cpp") && imp->kind == ImportNode::ImportKind::Native) {
                 output << "#include \"" << imp->cdn_url << "\"\n";
             }
+        }
     }
     output << "\n";
 

@@ -1,0 +1,7 @@
+import native "lib/aes_vault/bridge.dll" for "cpp";
+import cdn "lib/aes_vault/bridge.wasm" for "web";
+
+foreign "C" {
+    String encrypt(String plaintext, String key);
+    String decrypt(String ciphertext, String key);
+}

@@ -1,3 +1,4 @@
+// ── STL headers ──────────────────────────────────────────────────────────────
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -15,6 +16,23 @@
 #include <algorithm>
 #include <atomic>
 #include <iomanip>
+
+// ── Zenith project headers ────────────────────────────────────────────────────
+// IMPORTANT: These MUST be included before any Windows SDK headers.
+// winnt.h (pulled in by winsock2.h) declares `TokenType = 8` as an unscoped
+// enumerator inside _TOKEN_INFORMATION_CLASS. That global name shadows Zenith's
+// `enum class TokenType` defined in lexer.h unless lexer.h is seen first.
+#include "../include/ast/ast.h"
+#include "../include/frontend/lexer.h"
+#include "../include/frontend/parser.h"
+#include "../include/frontend/semantic.h"
+#include "../include/frontend/formatter.h"
+#include "../include/lsp/lsp.h"
+#include "../include/backend/codegen.h"
+#include "../include/backend/js_codegen.h"
+#include "../include/backend/wasm_codegen.h"
+
+// ── Platform / networking headers (AFTER Zenith headers) ─────────────────────
 #ifdef _WIN32
   #ifndef WIN32_LEAN_AND_MEAN
     #define WIN32_LEAN_AND_MEAN
@@ -30,14 +48,7 @@
   #include <netinet/in.h>
   #include <arpa/inet.h>
 #endif
-#include "../include/frontend/lexer.h"
-#include "../include/frontend/parser.h"
-#include "../include/frontend/semantic.h"
-#include "../include/frontend/formatter.h"
-#include "../include/lsp/lsp.h"
-#include "../include/backend/codegen.h"
-#include "../include/backend/js_codegen.h"
-#include "../include/backend/wasm_codegen.h"
+
 
 std::string getDirectory(const std::string& filepath) {
     size_t last_slash = filepath.find_last_of("/\\");
@@ -142,6 +153,20 @@ std::string genRustLib(const std::vector<BridgeFunction>& funcs, const std::stri
     std::stringstream code;
     code << "use std::ffi::{CString, CStr};\n";
     code << "use std::os::raw::c_char;\n\n";
+    code << "// Memory allocator for FFI WASM string interop\n";
+    code << "#[no_mangle]\n";
+    code << "pub extern \"C\" fn alloc(size: usize) -> *mut u8 {\n";
+    code << "    let mut buf = Vec::with_capacity(size);\n";
+    code << "    let ptr = buf.as_mut_ptr();\n";
+    code << "    std::mem::forget(buf);\n";
+    code << "    ptr\n";
+    code << "}\n\n";
+    code << "#[no_mangle]\n";
+    code << "pub extern \"C\" fn dealloc(ptr: *mut u8, size: usize) {\n";
+    code << "    unsafe {\n";
+    code << "        let _ = Vec::from_raw_parts(ptr, 0, size);\n";
+    code << "    }\n";
+    code << "}\n\n";
     
     for (const auto& f : funcs) {
         std::vector<std::string> rust_args;
@@ -274,25 +299,302 @@ std::string genZenithWrapper(const std::vector<BridgeFunction>& funcs, const std
     return code.str();
 }
 
+// ── YAML Manifest Parser Structures & Functions ───────────────────────────────
+struct ZenithDependency {
+    std::string name;
+    std::string git_url;
+    std::string pub_pkg;
+    std::string crate_name;
+    std::string path;
+    std::string type; // "rust", "dart", "zenith", "npm" etc.
+};
+
+struct ZenithProjectConfig {
+    std::string name;
+    std::string version;
+    std::string description;
+    std::vector<ZenithDependency> dependencies;
+};
+
+// Helper to parse zenith.yaml
+ZenithProjectConfig parseZenithYaml(const std::string& filepath) {
+    ZenithProjectConfig config;
+    std::ifstream file(filepath);
+    if (!file.is_open()) return config;
+
+    std::string line;
+    std::string current_section = "";
+    std::string current_pkg = "";
+    ZenithDependency temp_dep;
+
+    while (std::getline(file, line)) {
+        size_t comment_pos = line.find('#');
+        if (comment_pos != std::string::npos) {
+            line = line.substr(0, comment_pos);
+        }
+        
+        std::string trimmed = line;
+        size_t first = trimmed.find_first_not_of(" \t\r\n");
+        if (first == std::string::npos) continue;
+        size_t last = trimmed.find_last_not_of(" \t\r\n");
+        trimmed = trimmed.substr(first, (last - first + 1));
+
+        int indent = 0;
+        for (char c : line) {
+            if (c == ' ') indent++;
+            else if (c == '\t') indent += 4;
+            else break;
+        }
+
+        size_t colon_pos = trimmed.find(':');
+        if (colon_pos == std::string::npos) continue;
+
+        std::string key = trimmed.substr(0, colon_pos);
+        size_t k_first = key.find_first_not_of(" \t\r\n");
+        size_t k_last = key.find_last_not_of(" \t\r\n");
+        if (k_first != std::string::npos && k_last != std::string::npos) {
+            key = key.substr(k_first, (k_last - k_first + 1));
+        }
+
+        std::string val = trimmed.substr(colon_pos + 1);
+        size_t v_first = val.find_first_not_of(" \t\r\n");
+        size_t v_last = val.find_last_not_of(" \t\r\n");
+        if (v_first != std::string::npos && v_last != std::string::npos) {
+            val = val.substr(v_first, (v_last - v_first + 1));
+        } else {
+            val = "";
+        }
+
+        if (val.length() >= 2 && ((val.front() == '"' && val.back() == '"') || (val.front() == '\'' && val.back() == '\''))) {
+            val = val.substr(1, val.length() - 2);
+        }
+
+        if (indent == 0) {
+            current_section = key;
+            if (!current_pkg.empty()) {
+                config.dependencies.push_back(temp_dep);
+                current_pkg = "";
+            }
+            if (key == "name") config.name = val;
+            else if (key == "version") config.version = val;
+            else if (key == "description") config.description = val;
+        } else if (current_section == "dependencies") {
+            if (indent == 2) {
+                if (!current_pkg.empty()) {
+                    config.dependencies.push_back(temp_dep);
+                }
+                current_pkg = key;
+                temp_dep = ZenithDependency{};
+                temp_dep.name = key;
+                if (!val.empty()) {
+                    if (val.rfind("http", 0) == 0) {
+                        temp_dep.git_url = val;
+                    } else {
+                        temp_dep.git_url = val;
+                    }
+                }
+            } else if (indent > 2 && !current_pkg.empty()) {
+                if (key == "git") temp_dep.git_url = val;
+                else if (key == "pub") temp_dep.pub_pkg = val;
+                else if (key == "crate") temp_dep.crate_name = val;
+                else if (key == "path") temp_dep.path = val;
+                else if (key == "type") temp_dep.type = val;
+            }
+        }
+    }
+    if (!current_pkg.empty()) {
+        config.dependencies.push_back(temp_dep);
+    }
+    return config;
+}
+
+// Helper to write zenith.yaml
+void writeZenithYaml(const std::string& filepath, const ZenithProjectConfig& config) {
+    std::ofstream file(filepath);
+    if (!file.is_open()) return;
+
+    file << "name: " << config.name << "\n";
+    file << "version: " << config.version << "\n";
+    file << "description: " << config.description << "\n\n";
+    file << "dependencies:\n";
+    for (const auto& dep : config.dependencies) {
+        file << "  " << dep.name << ":\n";
+        if (!dep.git_url.empty()) file << "    git: " << dep.git_url << "\n";
+        if (!dep.pub_pkg.empty()) file << "    pub: " << dep.pub_pkg << "\n";
+        if (!dep.crate_name.empty()) file << "    crate: " << dep.crate_name << "\n";
+        if (!dep.path.empty()) file << "    path: " << dep.path << "\n";
+        if (!dep.type.empty()) file << "    type: " << dep.type << "\n";
+    }
+}
+
+bool commandExists(const std::string& cmd) {
+#ifdef _WIN32
+    std::string check_cmd = "where " + cmd + " >nul 2>nul";
+#else
+    std::string check_cmd = "which " + cmd + " >/dev/null 2>&1";
+#endif
+    return std::system(check_cmd.c_str()) == 0;
+}
+
+bool installRust() {
+    std::cout << "Rust (cargo) not found. Attempting to install Rust toolchain...\n";
+#ifdef _WIN32
+    std::string download_cmd = "powershell -Command \"Invoke-WebRequest -Uri https://win.rustup.rs/x86_64/rustup-init.exe -OutFile rustup-init.exe\"";
+    std::cout << "Downloading rustup-init.exe...\n";
+    if (std::system(download_cmd.c_str()) != 0) {
+        std::cerr << "Failed to download rustup-init.exe\n";
+        return false;
+    }
+    std::cout << "Installing Rust silently (this may take a few minutes)...\n";
+    std::string install_cmd = "rustup-init.exe -y";
+    int install_res = std::system(install_cmd.c_str());
+    std::filesystem::remove("rustup-init.exe");
+    if (install_res != 0) {
+        std::cerr << "Rust installation failed.\n";
+        return false;
+    }
+    std::cout << "Rust installed successfully!\n";
+    const char* user_profile = std::getenv("USERPROFILE");
+    if (user_profile) {
+        std::string cargo_bin = std::string(user_profile) + "\\.cargo\\bin";
+        std::string current_path = std::getenv("PATH");
+        std::string updated_path = "PATH=" + current_path + ";" + cargo_bin;
+        _putenv(updated_path.c_str());
+        std::cout << "Added " << cargo_bin << " to PATH.\n";
+        
+        std::string set_path_cmd = "powershell -Command \"[Environment]::SetEnvironmentVariable('Path', [Environment]::GetEnvironmentVariable('Path', 'User') + ';' + [Environment]::GetFolderPath('UserProfile') + '\\.cargo\\bin', 'User')\"";
+        std::system(set_path_cmd.c_str());
+        std::cout << "Permanently registered Rust/Cargo in User environment Path.\n";
+    }
+#else
+    std::cout << "Downloading and running rustup.sh...\n";
+    std::string install_cmd = "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y";
+    if (std::system(install_cmd.c_str()) != 0) {
+        std::cerr << "Rust installation failed.\n";
+        return false;
+    }
+    std::cout << "Rust installed successfully!\n";
+    const char* home = std::getenv("HOME");
+    if (home) {
+        std::string cargo_bin = std::string(home) + "/.cargo/bin";
+        std::string current_path = std::getenv("PATH");
+        std::string updated_path = "PATH=" + current_path + ":" + cargo_bin;
+        putenv(const_cast<char*>(updated_path.c_str()));
+        std::cout << "Added " << cargo_bin << " to PATH.\n";
+    }
+#endif
+    return true;
+}
+
+bool installDart() {
+    std::cout << "Dart SDK not found. Attempting to install Dart SDK...\n";
+#ifdef _WIN32
+    const char* user_profile = std::getenv("USERPROFILE");
+    if (!user_profile) {
+        std::cerr << "USERPROFILE environment variable not set.\n";
+        return false;
+    }
+    std::string zenith_dir = std::string(user_profile) + "\\.zenith";
+    std::filesystem::create_directories(zenith_dir);
+    
+    std::string zip_path = zenith_dir + "\\dart-sdk.zip";
+    std::string download_cmd = "powershell -Command \"Invoke-WebRequest -Uri https://storage.googleapis.com/dart-archive/channels/stable/release/latest/sdk/dartsdk-windows-x64-release.zip -OutFile '" + zip_path + "'\"";
+    std::cout << "Downloading Dart SDK...\n";
+    if (std::system(download_cmd.c_str()) != 0) {
+        std::cerr << "Failed to download Dart SDK\n";
+        return false;
+    }
+    
+    std::cout << "Extracting Dart SDK to " << zenith_dir << "...\n";
+    std::string extract_cmd = "powershell -Command \"Expand-Archive -Path '" + zip_path + "' -DestinationPath '" + zenith_dir + "' -Force\"";
+    int extract_res = std::system(extract_cmd.c_str());
+    std::filesystem::remove(zip_path);
+    if (extract_res != 0) {
+        std::cerr << "Dart extraction failed.\n";
+        return false;
+    }
+    std::cout << "Dart SDK installed successfully!\n";
+    
+    std::string dart_bin = zenith_dir + "\\dart-sdk\\bin";
+    std::string current_path = std::getenv("PATH");
+    std::string updated_path = "PATH=" + current_path + ";" + dart_bin;
+    _putenv(updated_path.c_str());
+    std::cout << "Added " << dart_bin << " to PATH.\n";
+    
+    std::string set_path_cmd = "powershell -Command \"[Environment]::SetEnvironmentVariable('Path', [Environment]::GetEnvironmentVariable('Path', 'User') + ';' + [Environment]::GetFolderPath('UserProfile') + '\\.zenith\\dart-sdk\\bin', 'User')\"";
+    std::system(set_path_cmd.c_str());
+    std::cout << "Permanently registered Dart SDK in User environment Path.\n";
+#else
+    const char* home = std::getenv("HOME");
+    if (!home) {
+        std::cerr << "HOME environment variable not set.\n";
+        return false;
+    }
+    std::string zenith_dir = std::string(home) + "/.zenith";
+    std::filesystem::create_directories(zenith_dir);
+    
+    std::string os_type = "linux";
+#ifdef __APPLE__
+    os_type = "macos";
+#endif
+
+    std::string zip_path = zenith_dir + "/dart-sdk.zip";
+    std::string download_cmd = "curl -o " + zip_path + " https://storage.googleapis.com/dart-archive/channels/stable/release/latest/sdk/dartsdk-" + os_type + "-x64-release.zip";
+    std::cout << "Downloading Dart SDK...\n";
+    if (std::system(download_cmd.c_str()) != 0) {
+        std::cerr << "Failed to download Dart SDK\n";
+        return false;
+    }
+    
+    std::cout << "Extracting Dart SDK...\n";
+    std::string extract_cmd = "unzip -q -o " + zip_path + " -d " + zenith_dir;
+    int extract_res = std::system(extract_cmd.c_str());
+    std::filesystem::remove(zip_path);
+    if (extract_res != 0) {
+        std::cerr << "Dart extraction failed.\n";
+        return false;
+    }
+    std::cout << "Dart SDK installed successfully!\n";
+    
+    std::string dart_bin = zenith_dir + "/dart-sdk/bin";
+    std::string current_path = std::getenv("PATH");
+    std::string updated_path = "PATH=" + current_path + ":" + dart_bin;
+    putenv(const_cast<char*>(updated_path.c_str()));
+    std::cout << "Added " << dart_bin << " to PATH.\n";
+#endif
+    return true;
+}
+
 int runCreateProject(const std::string& project_name, const std::string& template_type, const std::string& argv0) {
     namespace fs = std::filesystem;
     fs::path project_path = (project_name == ".") ? fs::current_path() : fs::absolute(project_name);
     
     std::cout << "Creating new Zenith project (" << template_type << ") in: " << project_path.string() << "\n";
     
+    if (!commandExists("cargo")) {
+        if (!installRust()) {
+            std::cerr << "Warning: Could not automatically setup Rust (cargo). Some features may not work.\n";
+        }
+    } else {
+        std::cout << "   [OK] Rust (cargo) is already installed.\n";
+    }
+    
+    if (!commandExists("dart")) {
+        if (!installDart()) {
+            std::cerr << "Warning: Could not automatically setup Dart SDK. Some features may not work.\n";
+        }
+    } else {
+        std::cout << "   [OK] Dart SDK is already installed.\n";
+    }
+    
     try {
         fs::create_directories(project_path);
         fs::create_directories(project_path / "include");
+        // lib/ is flat: only main.zen + bridge packages added via 'zenith bridge'
         fs::create_directories(project_path / "lib");
         if (template_type == "app") {
-            fs::create_directories(project_path / "lib" / "common");
-            fs::create_directories(project_path / "lib" / "android");
-            fs::create_directories(project_path / "lib" / "ios");
-            fs::create_directories(project_path / "lib" / "web");
-            fs::create_directories(project_path / "lib" / "desktop");
-            fs::create_directories(project_path / "lib" / "linux");
-            fs::create_directories(project_path / "lib" / "windows");
-            fs::create_directories(project_path / "lib" / "mac");
+            // Platform build scripts live in their own top-level dirs.
+            // lib/ stays cross-platform — one codebase for all targets.
             fs::create_directories(project_path / "android");
             fs::create_directories(project_path / "ios");
             fs::create_directories(project_path / "web");
@@ -350,153 +652,29 @@ int runCreateProject(const std::string& project_name, const std::string& templat
     }
     
     if (template_type == "app") {
-        // 2. Write lib platform-specific templates
-        std::ofstream common_file(project_path / "lib" / "common" / "app_common.zen");
-    if (common_file.is_open()) {
-        common_file << R"raw(class AppCommon() {
-    String getCommonMessage() {
-        return "Shared Code Block";
-    }
-}
-)raw";
-        common_file.close();
-        std::cout << "   [OK] Created 'lib/common/app_common.zen'\n";
-    }
-
-    std::ofstream android_file(project_path / "lib" / "android" / "app_android.zen");
-    if (android_file.is_open()) {
-        android_file << R"raw(class AppAndroid() {
-    String getPlatformName() {
-        return "Android Client";
-    }
-}
-)raw";
-        android_file.close();
-        std::cout << "   [OK] Created 'lib/android/app_android.zen'\n";
-    }
-
-    std::ofstream ios_file(project_path / "lib" / "ios" / "app_ios.zen");
-    if (ios_file.is_open()) {
-        ios_file << R"raw(class AppIos() {
-    String getPlatformName() {
-        return "iOS Client";
-    }
-}
-)raw";
-        ios_file.close();
-        std::cout << "   [OK] Created 'lib/ios/app_ios.zen'\n";
-    }
-
-    std::ofstream web_file(project_path / "lib" / "web" / "app_web.zen");
-    if (web_file.is_open()) {
-        web_file << R"raw(class AppWeb() {
-    String getPlatformName() {
-        return "Web Application";
-    }
-}
-)raw";
-        web_file.close();
-        std::cout << "   [OK] Created 'lib/web/app_web.zen'\n";
-    }
-
-    std::ofstream desktop_file(project_path / "lib" / "desktop" / "app_desktop.zen");
-    if (desktop_file.is_open()) {
-        desktop_file << R"raw(class AppDesktop() {
-    String getPlatformName() {
-        return "Desktop Native Application";
-    }
-}
-)raw";
-        desktop_file.close();
-        std::cout << "   [OK] Created 'lib/desktop/app_desktop.zen'\n";
-    }
-
-    std::ofstream linux_file(project_path / "lib" / "linux" / "app_linux.zen");
-    if (linux_file.is_open()) {
-        linux_file << R"raw(class AppLinux() {
-    String getPlatformName() {
-        return "Linux Native Application";
-    }
-}
-)raw";
-        linux_file.close();
-        std::cout << "   [OK] Created 'lib/linux/app_linux.zen'\n";
-    }
-
-    std::ofstream windows_file(project_path / "lib" / "windows" / "app_windows.zen");
-    if (windows_file.is_open()) {
-        windows_file << R"raw(class AppWindows() {
-    String getPlatformName() {
-        return "Windows Native Application";
-    }
-}
-)raw";
-        windows_file.close();
-        std::cout << "   [OK] Created 'lib/windows/app_windows.zen'\n";
-    }
-
-    std::ofstream mac_file(project_path / "lib" / "mac" / "app_mac.zen");
-    if (mac_file.is_open()) {
-        mac_file << R"raw(class AppMac() {
-    String getPlatformName() {
-        return "macOS Native Application";
-    }
-}
-)raw";
-        mac_file.close();
-        std::cout << "   [OK] Created 'lib/mac/app_mac.zen'\n";
-    }
-
-    // 2.2 Write lib/main.zen
-    std::string main_zen_content = R"raw(// Zenith Multiplatform Reorganized Application
+        // 2. Write lib/main.zen — single cross-platform entry point
+        // lib/ is flat: no platform subfolders. Zenith compiles the same .zen
+        // code to web, android, desktop etc. via the build scripts.
+        std::string main_zen_content = R"raw(// Zenith Cross-Platform Application
+// One codebase — runs on Web, Android, iOS, Desktop
 import std.io;
-import "common/app_common.zen";
-import "desktop/app_desktop.zen";
-import "android/app_android.zen";
-import "ios/app_ios.zen";
-import "web/app_web.zen";
-import "linux/app_linux.zen";
-import "windows/app_windows.zen";
-import "mac/app_mac.zen";
 
 class MyApp() {
-    String title = "Zenith Cross-Platform App";
+    String title = "Zenith App";
     Int counter = 0;
     String api_result = "No data fetched.";
-    AppCommon common = AppCommon();
-    AppDesktop desktop = AppDesktop();
-    AppAndroid android = AppAndroid();
-    AppIos ios = AppIos();
-    AppWeb web = AppWeb();
-    AppLinux linux = AppLinux();
-    AppWindows windows = AppWindows();
-    AppMac mac = AppMac();
 
     UI build() {
         return Column(
             // Header
             Container(
-                Text(title + " (" + common.getCommonMessage() + ")", fontWeight: "bold", color: "cyan"),
-                padding: 1
-            ),
-
-            // Platform details
-            Card(
-                Text("Platform Modules Loaded:", fontWeight: "bold", color: "blue"),
-                Text(" - Common: " + common.getCommonMessage()),
-                Text(" - Desktop module target: " + desktop.getPlatformName()),
-                Text(" - Android module target: " + android.getPlatformName()),
-                Text(" - iOS module target: " + ios.getPlatformName()),
-                Text(" - Web module target: " + web.getPlatformName()),
-                Text(" - Linux module target: " + linux.getPlatformName()),
-                Text(" - Windows module target: " + windows.getPlatformName()),
-                Text(" - macOS module target: " + mac.getPlatformName()),
+                Text(title, fontWeight: "bold", color: "cyan"),
                 padding: 1
             ),
 
             // Counter section (Reactive)
             Card(
-                Text("Click Counter Sample", fontWeight: "bold", color: "yellow"),
+                Text("Click Counter", fontWeight: "bold", color: "yellow"),
                 Row(
                     Text("Value: " + counter, color: "green"),
                     Button("Increment", onClick: handleIncrement)
@@ -506,9 +684,9 @@ class MyApp() {
 
             // REST API Integration
             Card(
-                Text("REST Network API Verification", fontWeight: "bold", color: "magenta"),
+                Text("Network API", fontWeight: "bold", color: "magenta"),
                 Row(
-                    Text("API Payload: " + api_result),
+                    Text("Result: " + api_result),
                     Button("Fetch Data", onClick: handleFetch)
                 ),
                 padding: 1
@@ -531,10 +709,8 @@ class MyApp() {
 }
 
 Void main() {
-    println("Initializing Reorganized Zenith Application...");
     MyApp app = MyApp();
     app.build().render();
-    println("Zenith Application Shutdown.");
 }
 )raw";
 
@@ -546,6 +722,23 @@ Void main() {
     } else {
         std::cerr << "Error: Could not write lib/main.zen\n";
         return 1;
+    }
+
+    // Write zenith.yaml
+    std::string leaf_name = project_path.filename().string();
+    if (leaf_name == "." || leaf_name.empty()) {
+        leaf_name = "zenith_app";
+    }
+    std::ofstream yaml_file(project_path / "zenith.yaml");
+    if (yaml_file.is_open()) {
+        yaml_file << "name: " << leaf_name << "\n"
+                  << "version: 1.0.0\n"
+                  << "description: A new Zenith project\n\n"
+                  << "dependencies:\n";
+        yaml_file.close();
+        std::cout << "   [OK] Created 'zenith.yaml'\n";
+    } else {
+        std::cerr << "Warning: Could not write zenith.yaml\n";
     }
 
     // 3. Write desktop/build.bat
@@ -2171,71 +2364,103 @@ int main(int argc, char* argv[]) {
             }
             std::cout << "[OK] Package " << package_name << " installed successfully under " << target_dir << ".\n";
 
-            // Update zenith.json
-            std::ifstream f_in("zenith.json");
-            std::string content = "";
-            if (f_in.is_open()) {
-                std::stringstream buffer;
-                buffer << f_in.rdbuf();
-                content = buffer.str();
-                f_in.close();
+            // Update zenith.yaml
+            std::string yaml_path = "zenith.yaml";
+            ZenithProjectConfig config = parseZenithYaml(yaml_path);
+            if (config.name.empty()) {
+                config.name = fs::current_path().filename().string();
+                config.version = "1.0.0";
+                config.description = "A new Zenith project";
             }
-
-            if (content.empty()) {
-                std::ofstream f_out("zenith.json");
-                f_out << "{\n  \"dependencies\": {\n    \"" << package_name << "\": \"" << url << "\"\n  }\n}\n";
-                f_out.close();
-            } else {
-                if (content.find(url) == std::string::npos) {
-                    size_t deps = content.find("\"dependencies\"");
-                    if (deps != std::string::npos) {
-                        size_t closing_brace = content.find("}", deps);
-                        if (closing_brace != std::string::npos) {
-                            size_t last_comma_search = content.rfind("\"", closing_brace);
-                            std::string comma = "";
-                            if (last_comma_search != std::string::npos && last_comma_search > deps) {
-                                comma = ",\n";
-                            }
-                            std::string insertion = comma + "    \"" + package_name + "\": \"" + url + "\"";
-                            content.insert(closing_brace, insertion);
-                            std::ofstream f_out("zenith.json");
-                            f_out << content;
-                            f_out.close();
-                        }
-                    } else {
-                        std::ofstream f_out("zenith.json");
-                        f_out << "{\n  \"dependencies\": {\n    \"" << package_name << "\": \"" << url << "\"\n  }\n}\n";
-                        f_out.close();
-                    }
+            
+            bool found = false;
+            for (auto& dep : config.dependencies) {
+                if (dep.name == package_name) {
+                    dep.git_url = url;
+                    found = true;
+                    break;
                 }
             }
+            if (!found) {
+                ZenithDependency dep;
+                dep.name = package_name;
+                dep.git_url = url;
+                config.dependencies.push_back(dep);
+            }
+            writeZenithYaml(yaml_path, config);
         } else {
-            // Restore all packages from zenith.json
-            std::ifstream f_in("zenith.json");
-            if (!f_in.is_open()) {
-                std::cerr << "Usage: zenith install <package-url> OR create zenith.json dependencies.\n";
+            // Restore all packages from zenith.yaml
+            std::string yaml_path = "zenith.yaml";
+            if (!fs::exists(yaml_path)) {
+                std::cerr << "Usage: zenith install <package-url> OR create zenith.yaml dependencies.\n";
                 return 1;
             }
-            std::stringstream buffer;
-            buffer << f_in.rdbuf();
-            std::string content = buffer.str();
-            f_in.close();
-
-            std::regex dep_regex("\"([a-zA-Z0-9_\\-]+)\"\\s*:\\s*\"([^\"]+)\"");
-            auto words_begin = std::sregex_iterator(content.begin(), content.end(), dep_regex);
-            auto words_end = std::sregex_iterator();
-            for (std::sregex_iterator i = words_begin; i != words_end; ++i) {
-                std::string dep_name = (*i)[1].str();
-                std::string dep_url = (*i)[2].str();
-                if (dep_name == "dependencies") continue;
+            ZenithProjectConfig config = parseZenithYaml(yaml_path);
+            for (const auto& dep : config.dependencies) {
+                std::string target_dir = dep.path.empty() ? ("lib/" + dep.name) : dep.path;
                 
-                std::string target_dir = "lib/" + dep_name;
-                if (!fs::exists(target_dir)) {
-                    std::string cmd = "git clone " + dep_url + " " + target_dir;
-                    std::cout << "Installing missing dependency " << dep_name << " from " << dep_url << "...\n";
+                if (!dep.git_url.empty()) {
+                    if (!fs::exists(target_dir)) {
+                        std::string cmd = "git clone " + dep.git_url + " " + target_dir;
+                        std::cout << "Installing missing dependency " << dep.name << " from " << dep.git_url << "...\n";
+                        system(cmd.c_str());
+                    } else {
+                        std::cout << "Dependency " << dep.name << " is already installed.\n";
+                    }
+                }
+
+                // Restore Dart dependencies if it is a Dart project
+                if (dep.type == "dart" || !dep.pub_pkg.empty() || fs::exists(target_dir + "/pubspec.yaml")) {
+                    std::cout << "Restoring Dart dependencies for " << dep.name << "...\n";
+                    std::string cmd = "cd " + target_dir + " && dart pub get";
                     system(cmd.c_str());
-                } else {
-                    std::cout << "Dependency " << dep_name << " is already installed.\n";
+                    
+                    std::cout << "Compiling Dart WASM module for " << dep.name << "...\n";
+                    std::string wasm_cmd = "cd " + target_dir + " && dart compile wasm main.dart -o bridge.wasm";
+                    system(wasm_cmd.c_str());
+                }
+
+                // Restore Rust dependencies / build bridge if it is a Rust project
+                if (dep.type == "rust" || !dep.crate_name.empty() || fs::exists(target_dir + "/Cargo.toml")) {
+                    std::cout << "Restoring Rust dependencies for " << dep.name << "...\n";
+                    std::string cmd = "cd " + target_dir + " && cargo build --release";
+                    system(cmd.c_str());
+                    
+                    std::cout << "Building Rust WASM module for " << dep.name << "...\n";
+                    std::string wasm_cmd = "cd " + target_dir + " && cargo build --target wasm32-unknown-unknown --release";
+                    system(wasm_cmd.c_str());
+                    
+                    // Copy dynamic libraries
+                    std::string lib_name = "rust_" + dep.name + "_bridge";
+                    std::string target_release = target_dir + "/target/release/";
+                    std::string dest_lib = target_dir + "/bridge";
+                    
+                    #ifdef _WIN32
+                    std::string src_dll = target_release + lib_name + ".dll";
+                    if (fs::exists(src_dll)) {
+                        fs::copy_file(src_dll, dest_lib + ".dll", fs::copy_options::overwrite_existing);
+                        std::cout << "Copied " << src_dll << " to " << dest_lib << ".dll\n";
+                    }
+                    #elif defined(__APPLE__)
+                    std::string src_dylib = target_release + "lib" + lib_name + ".dylib";
+                    if (fs::exists(src_dylib)) {
+                        fs::copy_file(src_dylib, dest_lib + ".dylib", fs::copy_options::overwrite_existing);
+                        std::cout << "Copied " << src_dylib << " to " << dest_lib << ".dylib\n";
+                    }
+                    #else
+                    std::string src_so = target_release + "lib" + lib_name + ".so";
+                    if (fs::exists(src_so)) {
+                        fs::copy_file(src_so, dest_lib + ".so", fs::copy_options::overwrite_existing);
+                        std::cout << "Copied " << src_so << " to " << dest_lib << ".so\n";
+                    }
+                    #endif
+                    
+                    // Copy WASM
+                    std::string src_wasm = target_dir + "/target/wasm32-unknown-unknown/release/" + lib_name + ".wasm";
+                    if (fs::exists(src_wasm)) {
+                        fs::copy_file(src_wasm, target_dir + "/bridge.wasm", fs::copy_options::overwrite_existing);
+                        std::cout << "Copied " << src_wasm << " to " << target_dir << "/bridge.wasm\n";
+                    }
                 }
             }
         }
@@ -2251,48 +2476,45 @@ int main(int argc, char* argv[]) {
         std::cout << "\033[1m\033[96m║   Zenith Package Manager — Installed  ║\033[0m\n";
         std::cout << "\033[1m\033[96m╚══════════════════════════════════════╝\033[0m\n\n";
 
-        // Read zenith.json
-        std::ifstream f_in("zenith.json");
-        std::string content = "";
-        if (f_in.is_open()) {
-            std::stringstream buffer; buffer << f_in.rdbuf();
-            content = buffer.str(); f_in.close();
-        }
+        // Read zenith.yaml
+        std::string yaml_path = "zenith.yaml";
+        ZenithProjectConfig config = parseZenithYaml(yaml_path);
 
-        // Parse dependencies
-        std::vector<std::pair<std::string,std::string>> deps;
-        std::regex dep_regex("\"([a-zA-Z0-9_\\-]+)\"\\s*:\\s*\"([^\"]+)\"");
-        auto words_begin = std::sregex_iterator(content.begin(), content.end(), dep_regex);
-        auto words_end = std::sregex_iterator();
-        for (std::sregex_iterator i = words_begin; i != words_end; ++i) {
-            std::string name = (*i)[1].str();
-            std::string url = (*i)[2].str();
-            if (name != "dependencies") deps.push_back({name, url});
-        }
-
-        if (deps.empty()) {
-            std::cout << "  \033[33mNo packages declared in zenith.json\033[0m\n";
+        if (config.dependencies.empty()) {
+            std::cout << "  \033[33mNo packages declared in zenith.yaml\033[0m\n";
         } else {
-            std::cout << "  \033[1mPackage\033[0m             \033[1mSource\033[0m\n";
+            std::cout << "  \033[1mPackage\033[0m             \033[1mSource / Type\033[0m\n";
             std::cout << "  " << std::string(50, '-') << "\n";
-            for (const auto& dep : deps) {
-                std::string installed_str = fs::exists("lib/" + dep.first) ? " \033[32m✓ installed\033[0m" : " \033[31m✗ missing\033[0m";
-                std::cout << "  \033[96m" << dep.first << "\033[0m" << std::string(std::max(1,(int)(20-dep.first.size())), ' ')
-                          << dep.second << installed_str << "\n";
+            for (const auto& dep : config.dependencies) {
+                std::string target_dir = dep.path.empty() ? ("lib/" + dep.name) : dep.path;
+                std::string installed_str = fs::exists(target_dir) ? " \033[32m✓ installed\033[0m" : " \033[31m✗ missing\033[0m";
+                
+                std::string source_info = "";
+                if (!dep.git_url.empty()) source_info = "git:" + dep.git_url;
+                else if (!dep.pub_pkg.empty()) source_info = "pub:" + dep.pub_pkg;
+                else if (!dep.crate_name.empty()) source_info = "crate:" + dep.crate_name;
+                else if (!dep.path.empty()) source_info = "path:" + dep.path;
+                
+                if (!dep.type.empty()) source_info += " (" + dep.type + ")";
+
+                std::cout << "  \033[96m" << dep.name << "\033[0m" << std::string(std::max(1,(int)(20-dep.name.size())), ' ')
+                          << source_info << installed_str << "\n";
             }
         }
 
-        // Also scan lib/ for packages not in zenith.json
+        // Also scan lib/ for packages not in zenith.yaml
         std::cout << "\n  \033[1mScanned lib/ directory:\033[0m\n";
         if (fs::exists("lib")) {
             bool found = false;
             for (const auto& entry : fs::directory_iterator("lib")) {
                 if (entry.is_directory()) {
                     found = true;
-                    bool in_json = false;
-                    for (const auto& d : deps) { if (d.first == entry.path().filename().string()) in_json = true; }
+                    bool in_yaml = false;
+                    for (const auto& d : config.dependencies) {
+                        if (d.name == entry.path().filename().string()) in_yaml = true;
+                    }
                     std::cout << "  \033[36m  " << entry.path().filename().string() << "\033[0m"
-                              << (in_json ? " (registered)" : " \033[33m(unregistered)\033[0m") << "\n";
+                              << (in_yaml ? " (registered)" : " \033[33m(unregistered)\033[0m") << "\n";
                 }
             }
             if (!found) std::cout << "  \033[2m  (empty)\033[0m\n";
@@ -2362,35 +2584,53 @@ int main(int argc, char* argv[]) {
         std::string target_pkg = (argc >= 3) ? std::string(argv[2]) : "";
         std::cout << "\n\033[1m\033[92m[Zenith] Updating packages...\033[0m\n";
 
-        auto do_update = [&](const std::string& name) {
-            std::string pkg_path = "lib/" + name;
-            if (!fs::exists(pkg_path)) {
-                std::cout << "  \033[31m[!] Package '" << name << "' not found in lib/\033[0m\n";
+        // Read zenith.yaml
+        std::string yaml_path = "zenith.yaml";
+        ZenithProjectConfig config = parseZenithYaml(yaml_path);
+
+        auto do_update = [&](const ZenithDependency& dep) {
+            std::string target_dir = dep.path.empty() ? ("lib/" + dep.name) : dep.path;
+            if (!fs::exists(target_dir)) {
+                std::cout << "  \033[31m[!] Package '" << dep.name << "' not found at " << target_dir << "\033[0m\n";
                 return;
             }
-            std::cout << "  \033[96m→\033[0m Updating " << name << "... ";
-            std::string cmd = "git -C " + pkg_path + " pull --ff-only 2>&1";
-            int res = system(cmd.c_str());
+            std::cout << "  \033[96m→\033[0m Updating " << dep.name << "... ";
+            
+            int res = 0;
+            if (!dep.git_url.empty()) {
+                std::string cmd = "git -C " + target_dir + " pull --ff-only 2>&1";
+                res = system(cmd.c_str());
+            }
+            
+            if (dep.type == "dart" || !dep.pub_pkg.empty() || fs::exists(target_dir + "/pubspec.yaml")) {
+                std::string cmd = "cd " + target_dir + " && dart pub upgrade";
+                res = system(cmd.c_str());
+            }
+            
+            if (dep.type == "rust" || !dep.crate_name.empty() || fs::exists(target_dir + "/Cargo.toml")) {
+                std::string cmd = "cd " + target_dir + " && cargo update";
+                res = system(cmd.c_str());
+            }
+
             if (res == 0) std::cout << "\033[32m✓ up to date\033[0m\n";
             else std::cout << "\033[31m✗ update failed (exit " << res << ")\033[0m\n";
         };
 
         if (!target_pkg.empty()) {
-            do_update(target_pkg);
-        } else {
-            // Update all from zenith.json
-            std::ifstream f_in("zenith.json");
-            if (!f_in.is_open()) {
-                std::cerr << "  No zenith.json found. Run 'zenith install <url>' first.\n";
-                return 1;
+            bool found = false;
+            for (const auto& dep : config.dependencies) {
+                if (dep.name == target_pkg) {
+                    do_update(dep);
+                    found = true;
+                    break;
+                }
             }
-            std::stringstream buffer; buffer << f_in.rdbuf();
-            std::string content = buffer.str(); f_in.close();
-            std::regex dep_regex("\"([a-zA-Z0-9_\\-]+)\"\\s*:\\s*\"([^\"]+)\"");
-            auto it = std::sregex_iterator(content.begin(), content.end(), dep_regex);
-            for (; it != std::sregex_iterator(); ++it) {
-                std::string name = (*it)[1].str();
-                if (name != "dependencies") do_update(name);
+            if (!found) {
+                std::cout << "  \033[31m[!] Package '" << target_pkg << "' not declared in zenith.yaml\033[0m\n";
+            }
+        } else {
+            for (const auto& dep : config.dependencies) {
+                do_update(dep);
             }
         }
         std::cout << "\033[32m[OK] Update complete.\033[0m\n\n";
@@ -2407,35 +2647,39 @@ int main(int argc, char* argv[]) {
             return 1;
         }
         std::string pkg = argv[2];
-        std::string pkg_path = "lib/" + pkg;
+        
+        std::string yaml_path = "zenith.yaml";
+        ZenithProjectConfig config = parseZenithYaml(yaml_path);
+
         std::cout << "\n\033[1m\033[91m[Zenith] Removing package: " << pkg << "\033[0m\n";
 
         bool removed_dir = false;
-        if (fs::exists(pkg_path)) {
-            fs::remove_all(pkg_path);
-            std::cout << "  \033[32m✓\033[0m Deleted lib/" << pkg << "/\n";
+        std::string target_dir = "lib/" + pkg;
+        for (const auto& dep : config.dependencies) {
+            if (dep.name == pkg) {
+                target_dir = dep.path.empty() ? ("lib/" + dep.name) : dep.path;
+                break;
+            }
+        }
+
+        if (fs::exists(target_dir)) {
+            fs::remove_all(target_dir);
+            std::cout << "  \033[32m✓\033[0m Deleted " << target_dir << "/\n";
             removed_dir = true;
         } else {
-            std::cout << "  \033[33m⚠\033[0m lib/" << pkg << "/ not found (already removed?)\n";
+            std::cout << "  \033[33m⚠\033[0m " << target_dir << "/ not found (already removed?)\n";
         }
 
-        // Remove from zenith.json
-        std::ifstream f_in("zenith.json");
-        if (f_in.is_open()) {
-            std::stringstream buffer; buffer << f_in.rdbuf();
-            std::string content = buffer.str(); f_in.close();
-
-            // Remove the line with this package
-            std::regex rm_regex("\\s*\"" + pkg + "\"\\s*:\\s*\"[^\"]*\",?");
-            std::string updated = std::regex_replace(content, rm_regex, "");
-            // Clean up trailing commas before closing brace
-            std::regex trailing_comma(",\\s*\\}");
-            updated = std::regex_replace(updated, trailing_comma, "\n}");
-
-            std::ofstream f_out("zenith.json");
-            f_out << updated; f_out.close();
-            std::cout << "  \033[32m✓\033[0m Removed from zenith.json\n";
+        // Remove from config.dependencies
+        std::vector<ZenithDependency> new_deps;
+        for (const auto& dep : config.dependencies) {
+            if (dep.name != pkg) {
+                new_deps.push_back(dep);
+            }
         }
+        config.dependencies = new_deps;
+        writeZenithYaml(yaml_path, config);
+        std::cout << "  \033[32m✓\033[0m Removed from zenith.yaml\n";
 
         if (removed_dir)
             std::cout << "\033[32m[OK] Package '" << pkg << "' removed successfully.\033[0m\n\n";
@@ -2451,17 +2695,11 @@ int main(int argc, char* argv[]) {
         std::cout << "\033[1m\033[93m║   Zenith Package Publisher             ║\033[0m\n";
         std::cout << "\033[1m\033[93m╚═══════════════════════════════════════╝\033[0m\n\n";
 
-        // Read zenith.json for package name
-        std::ifstream f_in("zenith.json");
-        std::string pkg_name = fs::current_path().filename().string();
+        // Read zenith.yaml
+        std::string yaml_path = "zenith.yaml";
+        ZenithProjectConfig config = parseZenithYaml(yaml_path);
+        std::string pkg_name = config.name.empty() ? fs::current_path().filename().string() : config.name;
         std::string git_url = "";
-        if (f_in.is_open()) {
-            std::stringstream buffer; buffer << f_in.rdbuf();
-            std::string content = buffer.str(); f_in.close();
-            std::regex name_re("\"name\"\\s*:\\s*\"([^\"]+)\"");
-            std::smatch nm;
-            if (std::regex_search(content, nm, name_re)) pkg_name = nm[1].str();
-        }
 
         // Check git remote
         FILE* git_remote = popen("git remote get-url origin 2>&1", "r");
@@ -2779,33 +3017,32 @@ int main(int argc, char* argv[]) {
             std::cerr << "  \033[31m✗\033[0m  Failed to write " << zen_file << "\n";
         }
 
-        // 3. Update zenith.json
-        std::string json_path = "zenith.json";
-        std::string json_content = "{}";
-        {
-            std::ifstream jf(json_path);
-            if (jf.is_open()) {
-                std::stringstream jbuf; jbuf << jf.rdbuf();
-                json_content = jbuf.str();
+        // 3. Update zenith.yaml
+        std::string yaml_path = "zenith.yaml";
+        ZenithProjectConfig config = parseZenithYaml(yaml_path);
+        if (config.name.empty()) {
+            config.name = fs::current_path().filename().string();
+            config.version = "1.0.0";
+            config.description = "A new Zenith project";
+        }
+        bool found = false;
+        for (auto& dep : config.dependencies) {
+            if (dep.name == json_key) {
+                dep.git_url = cdn_url;
+                dep.type = "npm";
+                found = true;
+                break;
             }
         }
-        // Inject the new dependency into the JSON (simple string manipulation)
-        std::string dep_entry = "\"" + json_key + "\": \"" + cdn_url + "\"";
-        if (json_content.find(dep_entry) == std::string::npos) {
-            // Find the closing } and insert before it
-            auto close_pos = json_content.rfind('}');
-            if (close_pos != std::string::npos) {
-                // Check if there are existing entries (need comma)
-                bool has_entries = (json_content.find(':') != std::string::npos);
-                std::string insert_str = (has_entries ? ",\n  " : "\n  ") + dep_entry + "\n";
-                json_content.insert(close_pos, insert_str);
-            }
-            std::ofstream jout(json_path);
-            if (jout.is_open()) { jout << json_content; jout.close(); }
-            std::cout << "  \033[32m✓\033[0m  Updated zenith.json\n";
-        } else {
-            std::cout << "  \033[33m⚠\033[0m  Already in zenith.json (no change)\n";
+        if (!found) {
+            ZenithDependency dep;
+            dep.name = json_key;
+            dep.git_url = cdn_url;
+            dep.type = "npm";
+            config.dependencies.push_back(dep);
         }
+        writeZenithYaml(yaml_path, config);
+        std::cout << "  \033[32m✓\033[0m  Updated zenith.yaml\n";
 
         std::cout << "\n";
         std::cout << "  \033[1m\033[32m✓ Package '" << pkg << "' added!\033[0m\n\n";
@@ -2902,6 +3139,32 @@ int main(int argc, char* argv[]) {
             std::cout << "  \033[32m✓\033[0m Scaffolded Rust package bridge in: \033[92m" << bridge_dir << "\033[0m\n";
             std::cout << "  \033[2mTo build, run:\033[0m\n";
             std::cout << "    cd " << bridge_dir << " && cargo build --release\n\n";
+
+            // Update zenith.yaml
+            std::string yaml_path = "zenith.yaml";
+            ZenithProjectConfig config = parseZenithYaml(yaml_path);
+            if (config.name.empty()) {
+                config.name = fs::current_path().filename().string();
+                config.version = "1.0.0";
+                config.description = "A new Zenith project";
+            }
+            bool found = false;
+            for (auto& dep : config.dependencies) {
+                if (dep.name == package_name) {
+                    dep.path = bridge_dir;
+                    dep.type = kind;
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                ZenithDependency dep;
+                dep.name = package_name;
+                dep.path = bridge_dir;
+                dep.type = kind;
+                config.dependencies.push_back(dep);
+            }
+            writeZenithYaml(yaml_path, config);
         }
         else if (kind == "dart") {
             // 1. pubspec.yaml
@@ -2932,6 +3195,32 @@ int main(int argc, char* argv[]) {
             std::cout << "  \033[32m✓\033[0m Scaffolded Dart package bridge in: \033[92m" << bridge_dir << "\033[0m\n";
             std::cout << "  \033[2mTo build, run:\033[0m\n";
             std::cout << "    cd " << bridge_dir << " && dart pub get && dart compile wasm main.dart\n\n";
+
+            // Update zenith.yaml
+            std::string yaml_path = "zenith.yaml";
+            ZenithProjectConfig config = parseZenithYaml(yaml_path);
+            if (config.name.empty()) {
+                config.name = fs::current_path().filename().string();
+                config.version = "1.0.0";
+                config.description = "A new Zenith project";
+            }
+            bool found = false;
+            for (auto& dep : config.dependencies) {
+                if (dep.name == package_name) {
+                    dep.path = bridge_dir;
+                    dep.type = kind;
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                ZenithDependency dep;
+                dep.name = package_name;
+                dep.path = bridge_dir;
+                dep.type = kind;
+                config.dependencies.push_back(dep);
+            }
+            writeZenithYaml(yaml_path, config);
         }
         return 0;
     }
@@ -3088,10 +3377,10 @@ a{color:#818cf8;text-decoration:none;} a:hover{text-decoration:underline;}
             analyzer.analyze(ast.get());
 
             if (tgt == "wasm") {
-                WasmCodeGenerator wasm_gen;
+                WASMCodeGenerator wasm_gen;
                 return wasm_gen.generate(ast.get());
             } else {
-                JsCodeGenerator js_gen;
+                JSCodeGenerator js_gen;
                 return js_gen.generate(ast.get());
             }
         };

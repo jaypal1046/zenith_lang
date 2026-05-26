@@ -1,5 +1,0 @@
-class AppCommon() {
-    String getCommonMessage() {
-        return "Shared Code Block";
-    }
-}

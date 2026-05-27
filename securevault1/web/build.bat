@@ -22,16 +22,16 @@ if %errorlevel% neq 0 (
 )
 echo   [OK]    HTML + JS output ready: web/main.html
 
-echo   [2/3]   Starting Python HTTP server on port 8080 ...
-start /b python -m http.server 8080 2>nul
+echo   [2/3]   Starting Python HTTP server on port 8085 ...
+start /b py -m http.server 8085 2>nul
 if %errorlevel% neq 0 (
     echo   [WARN]  Could not start Python HTTP server automatically.
 ) else (
-    echo   [OK]    Server running in background on port 8080
+    echo   [OK]    Server running in background on port 8085
 )
 
 echo   [3/3]   Launching in Google Chrome ...
-start chrome http://localhost:8080/main.html
+start chrome http://localhost:8085/main.html
 
 echo.
 echo   [OK] Server started and Chrome launched!

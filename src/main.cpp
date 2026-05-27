@@ -3373,6 +3373,10 @@ a{color:#818cf8;text-decoration:none;} a:hover{text-decoration:underline;}
             auto ast = parser.parseProgram();
             if (!ast) return "<html><body><h1>Parse error in " + zen_path + "</h1></body></html>";
 
+            std::set<std::string> loaded_files;
+            loaded_files.insert(zen_path);
+            resolveImports(ast.get(), loaded_files, getDirectory(zen_path));
+
             SemanticAnalyzer analyzer;
             analyzer.analyze(ast.get());
 

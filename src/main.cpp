@@ -16,6 +16,7 @@
 #include <algorithm>
 #include <atomic>
 #include <iomanip>
+#include <cstring>
 
 // ── Zenith project headers ────────────────────────────────────────────────────
 // IMPORTANT: These MUST be included before any Windows SDK headers.
@@ -38,7 +39,9 @@
     #define WIN32_LEAN_AND_MEAN
   #endif
   #include <winsock2.h>
+  #include <windows.h>
   #pragma comment(lib, "ws2_32.lib")
+  #pragma comment(lib, "winhttp.lib")
 #else
   #include <unistd.h>
   #include <signal.h>
@@ -47,6 +50,82 @@
   #include <sys/socket.h>
   #include <netinet/in.h>
   #include <arpa/inet.h>
+#endif
+
+
+// ── HTTP Client for Registry Access ───────────────────────────────────────────
+#ifdef _WIN32
+std::string httpGet(const std::string& url) {
+    std::string result;
+    
+    // Parse URL
+    size_t protocol_end = url.find("://");
+    if (protocol_end == std::string::npos || url.substr(0, protocol_end) != "https") {
+        return "";
+    }
+    
+    size_t host_start = protocol_end + 3;
+    size_t path_start = url.find('/', host_start);
+    std::string host = (path_start == std::string::npos) ? url.substr(host_start) : url.substr(host_start, path_start - host_start);
+    std::string path = (path_start == std::string::npos) ? "/" : url.substr(path_start);
+    
+    HINTERNET hSession = WinHttpOpen(L"Zenith CLI/1.0", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+    if (!hSession) return "";
+    
+    HINTERNET hConnect = WinHttpConnect(hSession, std::wstring(host.begin(), host.end()).c_str(), INTERNET_DEFAULT_HTTPS_PORT, 0);
+    if (!hConnect) { WinHttpCloseHandle(hSession); return ""; }
+    
+    HINTERNET hRequest = WinHttpOpenRequest(hConnect, L"GET", std::wstring(path.begin(), path.end()).c_str(), NULL, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE);
+    if (!hRequest) { WinHttpCloseHandle(hConnect); WinHttpCloseHandle(hSession); return ""; }
+    
+    if (WinHttpSendRequest(hRequest, WINHTTP_NO_ADDITIONAL_HEADERS, 0, WINHTTP_NO_REQUEST_DATA, 0, 0, 0) &&
+        WinHttpReceiveResponse(hRequest)) {
+        
+        DWORD bytesAvailable = 0;
+        DWORD bytesRead = 0;
+        char buffer[4096];
+        
+        do {
+            bytesAvailable = 0;
+            WinHttpQueryDataAvailable(hRequest, &bytesAvailable);
+            if (bytesAvailable > 0) {
+                WinHttpReadData(hRequest, buffer, sizeof(buffer), &bytesRead);
+                result.append(buffer, bytesRead);
+            }
+        } while (bytesAvailable > 0);
+    }
+    
+    WinHttpCloseHandle(hRequest);
+    WinHttpCloseHandle(hConnect);
+    WinHttpCloseHandle(hSession);
+    
+    return result;
+}
+#else
+#include <curl/curl.h>
+
+static size_t WriteCallback(void* contents, size_t size, size_t nmemb, std::string* userp) {
+    size_t totalSize = size * nmemb;
+    userp->append((char*)contents, totalSize);
+    return totalSize;
+}
+
+std::string httpGet(const std::string& url) {
+    std::string result;
+    CURL* curl = curl_easy_init();
+    if (!curl) return "";
+    
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &result);
+    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);  // For development; enable in production
+    
+    CURLcode res = curl_easy_perform(curl);
+    curl_easy_cleanup(curl);
+    
+    return (res == CURLE_OK) ? result : "";
+}
 #endif
 
 
@@ -2534,21 +2613,68 @@ int main(int argc, char* argv[]) {
         std::cout << "\033[1m\033[95m║   Zenith Package Registry — Search    ║\033[0m\n";
         std::cout << "\033[1m\033[95m╚══════════════════════════════════════╝\033[0m\n\n";
 
-        // Curated registry of known Zenith-compatible packages
+        // Fetch package registry from online index
+        std::string registry_url = "https://raw.githubusercontent.com/zenith-lang/registry/main/index.json";
+        std::string registry_response = httpGet(registry_url);
+        
         struct RegEntry { std::string name, desc, url, tags; };
-        static const std::vector<RegEntry> registry = {
-            {"zenith-ui",       "Core UI component library for Zenith apps",          "https://github.com/zenith-lang/zenith-ui.git",       "ui widgets components"},
-            {"zenith-http",     "HTTP client with async/await for Zenith",             "https://github.com/zenith-lang/zenith-http.git",      "http networking async"},
-            {"zenith-auth",     "Authentication and JWT utilities",                    "https://github.com/zenith-lang/zenith-auth.git",      "auth jwt security"},
-            {"zenith-db",       "Database abstraction layer (SQLite/Postgres)",        "https://github.com/zenith-lang/zenith-db.git",        "database sql sqlite"},
-            {"zenith-charts",   "Data visualization and charting widgets",             "https://github.com/zenith-lang/zenith-charts.git",    "charts graphs visualization"},
-            {"zenith-i18n",     "Internationalization and localization support",       "https://github.com/zenith-lang/zenith-i18n.git",      "i18n l10n localization"},
-            {"zenith-router",   "Client-side router for single-page apps",             "https://github.com/zenith-lang/zenith-router.git",    "routing navigation spa"},
-            {"zenith-forms",    "Form validation and input management",                "https://github.com/zenith-lang/zenith-forms.git",     "forms validation input"},
-            {"zenith-state",    "Global state management (Flux/Redux pattern)",        "https://github.com/zenith-lang/zenith-state.git",     "state management redux"},
-            {"zenith-test",     "Unit testing framework for Zenith projects",          "https://github.com/zenith-lang/zenith-test.git",      "testing unit test"},
-            {"Spoon-Knife",     "GitHub demo repository (default example)",            "https://github.com/octocat/Spoon-Knife.git",          "demo example"},
-        };
+        std::vector<RegEntry> registry;
+        
+        // Parse JSON response (simple manual parsing for registry index)
+        // Expected format: [{\"name\":\"...\",\"description\":\"...\",\"repository\":\"...\",\"tags\":\"...\"},...]
+        if (!registry_response.empty()) {
+            size_t pos = 0;
+            while ((pos = registry_response.find("{", pos)) != std::string::npos) {
+                size_t end_pos = registry_response.find("}", pos);
+                if (end_pos == std::string::npos) break;
+                
+                std::string entry = registry_response.substr(pos, end_pos - pos + 1);
+                pos = end_pos + 1;
+                
+                auto extract_field = [&](const std::string& field) -> std::string {
+                    std::string key = "\"" + field + "\"";
+                    size_t key_pos = entry.find(key);
+                    if (key_pos == std::string::npos) return "";
+                    size_t colon_pos = entry.find(':', key_pos);
+                    if (colon_pos == std::string::npos) return "";
+                    size_t val_start = entry.find_first_not_of(" \t\r\n\"", colon_pos + 1);
+                    if (val_start == std::string::npos) return "";
+                    size_t val_end = entry.find('"', val_start);
+                    if (val_end == std::string::npos) return "";
+                    return entry.substr(val_start, val_end - val_start);
+                };
+                
+                RegEntry e;
+                e.name = extract_field("name");
+                e.desc = extract_field("description");
+                e.url = extract_field("repository");
+                e.tags = extract_field("tags");
+                
+                if (!e.name.empty()) {
+                    registry.push_back(e);
+                }
+            }
+        }
+        
+        // Fallback to hardcoded list if network request fails
+        if (registry.empty()) {
+            registry = {
+                {"zenith-ui",       "Core UI component library for Zenith apps",          "https://github.com/zenith-lang/zenith-ui.git",       "ui widgets components"},
+                {"zenith-http",     "HTTP client with async/await for Zenith",             "https://github.com/zenith-lang/zenith-http.git",      "http networking async"},
+                {"zenith-auth",     "Authentication and JWT utilities",                    "https://github.com/zenith-lang/zenith-auth.git",      "auth jwt security"},
+                {"zenith-db",       "Database abstraction layer (SQLite/Postgres)",        "https://github.com/zenith-lang/zenith-db.git",        "database sql sqlite"},
+                {"zenith-charts",   "Data visualization and charting widgets",             "https://github.com/zenith-lang/zenith-charts.git",    "charts graphs visualization"},
+                {"zenith-i18n",     "Internationalization and localization support",       "https://github.com/zenith-lang/zenith-i18n.git",      "i18n l10n localization"},
+                {"zenith-router",   "Client-side router for single-page apps",             "https://github.com/zenith-lang/zenith-router.git",    "routing navigation spa"},
+                {"zenith-forms",    "Form validation and input management",                "https://github.com/zenith-lang/zenith-forms.git",     "forms validation input"},
+                {"zenith-state",    "Global state management (Flux/Redux pattern)",        "https://github.com/zenith-lang/zenith-state.git",     "state management redux"},
+                {"zenith-test",     "Unit testing framework for Zenith projects",          "https://github.com/zenith-lang/zenith-test.git",      "testing unit test"},
+                {"Spoon-Knife",     "GitHub demo repository (default example)",            "https://github.com/octocat/Spoon-Knife.git",          "demo example"},
+            };
+            std::cout << "  \033[33m[INFO] Using cached registry (network unavailable)\033[0m\n\n";
+        } else {
+            std::cout << "  \033[32m[OK] Fetched live registry from " << registry_url << "\033[0m\n\n";
+        }
 
         std::string q_lower = query;
         std::transform(q_lower.begin(), q_lower.end(), q_lower.begin(), ::tolower);

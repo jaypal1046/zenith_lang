@@ -17,6 +17,7 @@ private:
     bool is_generating_async_function = false;
     bool current_function_is_exported_with_string_return = false;
     std::string current_async_promise_name = "promise";
+    bool has_python_ffi = false;
 
     void indent();
     std::string mapType(TypeNode* type);

@@ -8,7 +8,9 @@ ifeq ($(UNAME),Windows)
     TARGET = zenith.exe
     PYTHON = py
 else
-    LDFLAGS = -lpthread
+    # POSIX systems: add pthread, dl for dynamic library loading, and Python embedding
+    LDFLAGS = -lpthread -ldl $(shell python3-config --ldflags)
+    CXXFLAGS += $(shell python3-config --includes)
     TARGET = zenith
     PYTHON = python3
 endif

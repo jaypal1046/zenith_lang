@@ -1,0 +1,21 @@
+// Test Python FFI bridge
+foreign "python" {
+    fn python_add(a: Int, b: Int) -> Int;
+    fn python_greet(name: String) -> String;
+    fn python_is_positive(n: Int) -> Bool;
+    fn python_calculate(x: Float) -> Float;
+}
+
+fn main() {
+    let sum = python_add(10, 20);
+    print("Sum from Python: ", sum);
+    
+    let greeting = python_greet("World");
+    print("Greeting: ", greeting);
+    
+    let is_pos = python_is_positive(5);
+    print("Is positive: ", is_pos);
+    
+    let result = python_calculate(3.14);
+    print("Calculation: ", result);
+}

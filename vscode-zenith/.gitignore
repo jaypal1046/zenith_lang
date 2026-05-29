@@ -1,0 +1,7 @@
+# Compiled output
+out/
+.vscode-test/
+node_modules/
+*.vsix
+.DS_Store
+Thumbs.db

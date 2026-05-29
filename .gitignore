@@ -1,54 +1,50 @@
 ```
-# Build artifacts and binaries
+# Compiled and binary files
+*.pyc
 *.o
 *.obj
-*.a
-*.so
-*.dll
 *.exe
+*.dll
+*.so
+*.a
 *.out
 
-# Dependencies and virtual environments
+# Dependencies
 node_modules/
 venv/
 .venv/
 __pycache__/
-.mypy_cache/
-.pytest_cache/
+dist/
+build/
 target/
 .gradle/
 
-# Build directories
-build/
-dist/
-out/
-
-# Editor/IDE files
+# Editors/IDE
 .vscode/
 .idea/
 *.swp
 *.swo
 *.tmp
 
-# Logs
-*.log
-
-# Coverage reports
-coverage/
-htmlcov/
-.coverage
-
-# System files
+# System
 .DS_Store
 Thumbs.db
-
-# Environment files
 .env
 .env.local
 *.env.*
 
-# Temporary and cache files
-*.tmp
-*.temp
-*.cache
+# Logs
+*.log
+
+# Coverage
+coverage/
+htmlcov/
+.coverage
+
+# Python specific
+.mypy_cache/
+.pytest_cache/
+
+# Build artifacts
+zenith.exe
 ```

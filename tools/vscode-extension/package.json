@@ -1,0 +1,67 @@
+{
+  "name": "zenith-language-support",
+  "displayName": "Zenith Language Support",
+  "description": "Syntax highlighting and language server integration for Zenith (.zen) files",
+  "version": "0.1.0",
+  "publisher": "zenith-lang",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Snippets"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "zenith",
+        "aliases": ["Zenith", "zen"],
+        "extensions": [".zen"],
+        "configuration": "./language-configuration.json",
+        "icon": {
+          "light": "./icons/zenith-icon-light.png",
+          "dark": "./icons/zenith-icon-dark.png"
+        }
+      }
+    ],
+    "grammars": [
+      {
+        "language": "zenith",
+        "scopeName": "source.zenith",
+        "path": "./syntaxes/zenith.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "zenith",
+        "path": "./snippets/zenith-snippets.json"
+      }
+    ]
+  },
+  "activationEvents": [
+    "onLanguage:zenith",
+    "onCommand:zenith.startLanguageServer"
+  ],
+  "main": "./out/extension.js",
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src --ext ts",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.75.0",
+    "@types/node": "^18.0.0",
+    "typescript": "^5.0.0",
+    "eslint": "^8.0.0",
+    "@vscode/vsce": "^2.0.0"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^8.1.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/zenith-lang/zenith.git"
+  },
+  "license": "MIT"
+}

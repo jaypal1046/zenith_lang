@@ -1,0 +1,31 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Zenith: Launch Current File",
+      "type": "zenith",
+      "request": "launch",
+      "program": "${file}",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "stopOnEntry": false
+    },
+    {
+      "name": "Zenith: Debug with Args",
+      "type": "zenith",
+      "request": "launch",
+      "program": "${file}",
+      "cwd": "${workspaceFolder}",
+      "args": [],
+      "stopOnEntry": true
+    },
+    {
+      "name": "Zenith: Attach to Running Process",
+      "type": "zenith",
+      "request": "attach",
+      "processId": "${command:PickProcess}",
+      "cwd": "${workspaceFolder}"
+    }
+  ],
+  "compounds": []
+}

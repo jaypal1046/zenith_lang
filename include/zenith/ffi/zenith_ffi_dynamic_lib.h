@@ -18,6 +18,9 @@
 namespace zenith {
 namespace ffi {
 
+// Generic function pointer type for dynamic loading
+using FuncPtr = void*;
+
 /**
  * DynamicLibrary - Cross-platform dynamic library loader
  * 

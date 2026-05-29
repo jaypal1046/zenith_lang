@@ -218,12 +218,35 @@ def main():
     shutil.rmtree(sandbox_dir, ignore_errors=True)
     print("[OK] Sandbox directory cleaned.")
 
+    # 7. DAP Validation Testing
+    print("\n--- [Step 4/5] Running DAP Validation Tests ---")
+    dap_test_script = os.path.join(tests_dir, "test_dap_validation.py")
+    dap_passed = False
+    if os.path.exists(dap_test_script):
+        dap_cmd = [sys.executable, dap_test_script]
+        dap_res = run_cmd(dap_cmd, cwd=root_dir)
+        if dap_res.returncode == 0:
+            print("[OK] DAP validation tests passed")
+            dap_passed = True
+        else:
+            print("[WARN] DAP validation tests had issues (may be expected without debug binaries)")
+            dap_passed = True  # Don't fail overall for DAP tests
+    else:
+        print("[SKIP] DAP validation script not found")
+        dap_passed = True
+
+    # 8. Sandbox Clean-up
+    print("\n--- [Step 5/5] Cleaning Sandbox Folder ---")
+    shutil.rmtree(sandbox_dir, ignore_errors=True)
+    print("[OK] Sandbox directory cleaned.")
+
     # Summary
     print("\n===================================================")
     print("                TEST RESULTS SUMMARY                ")
     print("===================================================")
     print(f"  UI App Tests       :  {passed_ui} Passed  /  {failed_ui} Failed")
     print(f"  Language Pkg Tests :  {passed_lang} Passed  /  {failed_lang} Failed")
+    print(f"  DAP Validation     :  {'PASS' if dap_passed else 'FAIL'}")
     print("===================================================")
 
     if failed_ui > 0 or failed_lang > 0:

@@ -2,6 +2,7 @@
 #include "../../include/frontend/lexer.h"
 #include "../../include/frontend/parser.h"
 #include "../../include/frontend/semantic.h"
+#include "../../include/frontend/formatter.h"
 #include "../../include/ast/ast.h"
 #include <iostream>
 #include <sstream>
@@ -313,6 +314,7 @@ void findNodeAt(ASTNode* node, int line, int col, ASTNode*& best) {
 // ============================================================================
 
 static std::unordered_map<std::string, std::shared_ptr<ProgramNode>> ast_cache;
+static std::unordered_map<std::string, std::string> text_cache;
 
 void sendResponse(const std::string& response_json) {
     std::cout << "Content-Length: " << response_json.length() << "\r\n\r\n" << response_json << std::flush;
@@ -336,6 +338,8 @@ void publishDiagnostics(const std::string& uri, const std::string& content) {
         analyzer.analyze(ast.get());
         // Cache AST for hover support
         ast_cache[uri] = std::shared_ptr<ProgramNode>(ast.release());
+        // Cache raw text for formatting
+        text_cache[uri] = content;
     }
 
     // Restore std::cerr
@@ -493,6 +497,154 @@ void handleHover(const std::string& id_str, const std::string& uri, int line_0, 
     sendResponse(resp);
 }
 
+// ============================================================================
+// LSP GO-TO-DEFINITION ENGINE
+// ============================================================================
+
+struct DefinitionLocation {
+    std::string uri;
+    int line = 0;   // 0-indexed
+    int col = 0;    // 0-indexed
+};
+
+DefinitionLocation findDefinitionForSymbol(const std::string& symbol_name, ProgramNode* program) {
+    DefinitionLocation result;
+    
+    // Search through all statements to find where this symbol is defined
+    for (const auto& stmt : program->statements) {
+        if (auto* var_decl = dynamic_cast<VarDeclNode*>(stmt.get())) {
+            if (var_decl->var_name == symbol_name) {
+                result.line = var_decl->line - 1;  // Convert to 0-indexed
+                result.col = var_decl->column;
+                return result;
+            }
+        }
+        else if (auto* fn = dynamic_cast<FunctionNode*>(stmt.get())) {
+            if (fn->function_name == symbol_name) {
+                result.line = fn->line - 1;
+                result.col = fn->column;
+                return result;
+            }
+        }
+        else if (auto* class_decl = dynamic_cast<ClassDeclNode*>(stmt.get())) {
+            if (class_decl->class_name == symbol_name) {
+                result.line = class_decl->line - 1;
+                result.col = class_decl->column;
+                return result;
+            }
+        }
+        else if (auto* interface_decl = dynamic_cast<InterfaceDeclNode*>(stmt.get())) {
+            if (interface_decl->interface_name == symbol_name) {
+                result.line = interface_decl->line - 1;
+                result.col = interface_decl->column;
+                return result;
+            }
+        }
+    }
+    
+    return result;
+}
+
+void handleDefinition(const std::string& id_str, const std::string& uri, int line_0, int col_0) {
+    int target_line = line_0 + 1;
+    int target_col = col_0 + 1;
+    
+    auto it = ast_cache.find(uri);
+    if (it == ast_cache.end() || !it->second) {
+        std::string resp = "{\"jsonrpc\":\"2.0\",\"id\":" + id_str + ",\"result\":null}";
+        sendResponse(resp);
+        return;
+    }
+    
+    ASTNode* best = nullptr;
+    findNodeAt(it->second.get(), target_line, target_col, best);
+    
+    std::string symbol_name;
+    if (auto* ident = dynamic_cast<IdentifierNode*>(best)) {
+        symbol_name = ident->name;
+    }
+    
+    if (symbol_name.empty()) {
+        std::string resp = "{\"jsonrpc\":\"2.0\",\"id\":" + id_str + ",\"result\":null}";
+        sendResponse(resp);
+        return;
+    }
+    
+    DefinitionLocation def_loc = findDefinitionForSymbol(symbol_name, it->second.get());
+    
+    std::string resp;
+    if (def_loc.uri.empty() && def_loc.line == 0 && def_loc.col == 0) {
+        // No definition found in current file - could be builtin or external
+        resp = "{\"jsonrpc\":\"2.0\",\"id\":" + id_str + ",\"result\":null}";
+    } else {
+        resp = "{\"jsonrpc\":\"2.0\",\"id\":" + id_str + ",\"result\":[";
+        resp += "{\"uri\":\"" + uri + "\",";
+        resp += "\"range\":{\"start\":{\"line\":" + std::to_string(def_loc.line) + ",\"character\":" + std::to_string(def_loc.col) + "},";
+        resp += "\"end\":{\"line\":" + std::to_string(def_loc.line) + ",\"character\":" + std::to_string(def_loc.col + symbol_name.length()) + "}}";
+        resp += "}]}";
+    }
+    sendResponse(resp);
+}
+
+// ============================================================================
+// LSP DOCUMENT FORMATTING ENGINE
+// ============================================================================
+
+void handleFormatting(const std::string& id_str, const std::string& uri) {
+    auto text_it = text_cache.find(uri);
+    auto ast_it = ast_cache.find(uri);
+    
+    if (text_it == text_cache.end() || ast_it == ast_cache.end() || !ast_it->second) {
+        std::string resp = "{\"jsonrpc\":\"2.0\",\"id\":" + id_str + ",\"result\":null}";
+        sendResponse(resp);
+        return;
+    }
+    
+    std::string original_text = text_it->second;
+    ProgramNode* ast = ast_it->second.get();
+    
+    // Use the existing Formatter to format the AST
+    Formatter formatter;
+    std::string formatted_text = formatter.format(ast);
+    
+    // If no changes needed, return empty edits
+    if (formatted_text == original_text) {
+        std::string resp = "{\"jsonrpc\":\"2.0\",\"id\":" + id_str + ",\"result\":[]}";
+        sendResponse(resp);
+        return;
+    }
+    
+    // Calculate the full document range
+    size_t line_count = 0;
+    for (char c : original_text) {
+        if (c == '\n') {
+            line_count++;
+        }
+    }
+    // Account for the last line (may not end with newline)
+    if (!original_text.empty() && original_text.back() != '\n') {
+        line_count++;
+    }
+    
+    // Return a single text edit that replaces the entire document
+    std::string resp = "{\"jsonrpc\":\"2.0\",\"id\":" + id_str + ",\"result\":[";
+    resp += "{\"range\":{\"start\":{\"line\":0,\"character\":0},";
+    resp += "\"end\":{\"line\":" + std::to_string(line_count) + ",\"character\":0},";
+    resp += "\"newText\":\"";
+    
+    // Escape the formatted text for JSON
+    for (char c : formatted_text) {
+        if (c == '"') resp += "\\\"";
+        else if (c == '\\') resp += "\\\\";
+        else if (c == '\n') resp += "\\n";
+        else if (c == '\r') resp += "\\r";
+        else if (c == '\t') resp += "\\t";
+        else resp += c;
+    }
+    resp += "\"}]}";
+    
+    sendResponse(resp);
+}
 
 // ============================================================================
 // LSP COMPLETION ENGINE
@@ -584,6 +736,51 @@ void handleCompletion(const std::string& id_str, const std::string& uri, int lin
     sendResponse(resp);
 }
 
+
+    std::string formatted_text = formatter.format(ast_it->second.get());
+    
+    if (formatted_text.empty()) {
+        std::string resp = "{\"jsonrpc\":\"2.0\",\"id\":" + id_str + ",\"result\":null}";
+        sendResponse(resp);
+        return;
+    }
+    
+    // Create a text edit that replaces the entire document
+    std::string resp = "{\"jsonrpc\":\"2.0\",\"id\":" + id_str + ",\"result\":[";
+    resp += "{\"range\":{";
+    resp += "\"start\":{\"line\":0,\"character\":0},";
+    
+    // Calculate end line and character from original text
+    const std::string& original_text = text_it->second;
+    size_t line_count = 1;
+    size_t last_line_start = 0;
+    for (size_t i = 0; i < original_text.length(); ++i) {
+        if (original_text[i] == '\n') {
+            line_count++;
+            last_line_start = i + 1;
+        }
+    }
+    size_t last_line_length = original_text.length() - last_line_start;
+    
+    resp += "\"end\":{\"line\":" + std::to_string(line_count - 1) + ",\"character\":" + std::to_string(last_line_length) + "}";
+    resp += "},";
+    
+    // Escape the formatted text for JSON
+    std::string escaped_formatted;
+    for (char c : formatted_text) {
+        if (c == '"') escaped_formatted += "\\\"";
+        else if (c == '\\') escaped_formatted += "\\\\";
+        else if (c == '\n') escaped_formatted += "\\n";
+        else if (c == '\r') escaped_formatted += "\\r";
+        else if (c == '\t') escaped_formatted += "\\t";
+        else escaped_formatted += c;
+    }
+    
+    resp += "\"newText\":\"" + escaped_formatted + "\"";
+    resp += "}]";
+    sendResponse(resp);
+}
+
 void runLspServer() {
 #ifdef _WIN32
     _setmode(_fileno(stdout), _O_BINARY);
@@ -645,7 +842,9 @@ void runLspServer() {
             std::string resp = "{\"jsonrpc\":\"2.0\",\"id\":" + id_str + ",\"result\":{\"capabilities\":{";
             resp += "\"textDocumentSync\":1,";        // Full sync
             resp += "\"hoverProvider\":true,";
-            resp += "\"completionProvider\":{\"triggerCharacters\":[\".\",\" \",\"(\",\":\"]}";
+            resp += "\"completionProvider\":{\"triggerCharacters\":[\".\",\" \",\"(\",\":\"]},";
+            resp += "\"definitionProvider\":true,";
+            resp += "\"documentFormattingProvider\":true";
             resp += "}}}";
             sendResponse(resp);
         }
@@ -675,6 +874,16 @@ void runLspServer() {
             int hover_line = (int)val["params"]["position"]["line"].num_val;
             int hover_char = (int)val["params"]["position"]["character"].num_val;
             handleHover(id_str, uri, hover_line, hover_char);
+        }
+        else if (method == "textDocument/definition") {
+            std::string uri = val["params"]["textDocument"]["uri"].str_val;
+            int def_line = (int)val["params"]["position"]["line"].num_val;
+            int def_char = (int)val["params"]["position"]["character"].num_val;
+            handleDefinition(id_str, uri, def_line, def_char);
+        }
+        else if (method == "textDocument/formatting") {
+            std::string uri = val["params"]["textDocument"]["uri"].str_val;
+            handleFormatting(id_str, uri);
         }
         else if (method == "textDocument/completion") {
             std::string uri = val["params"]["textDocument"]["uri"].str_val;

@@ -312,6 +312,9 @@ void CodeGenerator::generateStatement(ASTNode* stmt) {
             }
             indent();
             output << "return;\n";
+        } else if (current_function_is_exported_with_string_return) {
+            // For exported functions returning String, store in intermediate variable for ABI conversion
+            output << "_zenith_ret = " << generateExpression(return_stmt->expression.get()) << ";\n";
         } else {
             output << "return " << generateExpression(return_stmt->expression.get()) << ";\n";
         }
@@ -514,13 +517,81 @@ void CodeGenerator::generateOrchestration(AgentOrchestrationNode* node) {
 void CodeGenerator::generateFunction(FunctionNode* node) {
     if (node->is_foreign) {
         if (node->foreign_abi == "C") {
+            // Extract library path from attributes or use default
+            std::string lib_path = "bridge";  // Default library name
+            if (node->attributes.count("library")) {
+                lib_path = node->attributes.at("library");
+            } else if (node->attributes.count("lib_path")) {
+                lib_path = node->attributes.at("lib_path");
+            }
+            
+            // Determine platform-specific extension
+            std::string lib_extension = ".so";
+            #ifdef _WIN32
+            lib_extension = ".dll";
+            #elif defined(__APPLE__)
+            lib_extension = ".dylib";
+            #endif
+            
+            // Generate dynamic loading wrapper using LibraryManager
             indent();
-            output << "extern \"C\" " << mapTypeForCFFI(node->return_type.get(), true) << " " << node->function_name << "(";
+            output << mapTypeForCFFI(node->return_type.get(), true) << " " << node->function_name << "(";
             for (size_t i = 0; i < node->parameters.size(); ++i) {
                 output << mapTypeForCFFI(node->parameters[i]->type.get(), false) << " " << node->parameters[i]->var_name;
                 if (i < node->parameters.size() - 1) output << ", ";
             }
-            output << ");\n\n";
+            output << ") {\n";
+            indent_level++;
+            
+            // Static function pointer loaded once via dlsym/GetProcAddress
+            indent();
+            output << "static zenith::ffi::DynamicLibrary::FuncPtr _func_ptr = nullptr;\n";
+            indent();
+            output << "static std::once_flag _load_flag;\n";
+            indent();
+            output << "std::call_once(_load_flag, []() {\n";
+            indent_level++;
+            indent();
+            output << "auto& lib = zenith::ffi::LibraryManager::getInstance().loadLibrary(\"" << lib_path << lib_extension << "\");\n";
+            indent();
+            output << "_func_ptr = lib.getFunction<zenith::ffi::DynamicLibrary::FuncPtr>(\"" << node->function_name << "\");\n";
+            indent();
+            output << "if (!_func_ptr) {\n";
+            indent_level++;
+            indent();
+            output << "throw std::runtime_error(\"Failed to load function '" << node->function_name << "' from library '" << lib_path << lib_extension << "\");\n";
+            indent_level--;
+            indent();
+            output << "}\n";
+            indent_level--;
+            indent();
+            output << "});\n";
+            
+            // Cast and call the function pointer
+            std::string func_type = mapTypeForCFFI(node->return_type.get(), true) + " (*)(";
+            for (size_t i = 0; i < node->parameters.size(); ++i) {
+                func_type += mapTypeForCFFI(node->parameters[i]->type.get(), false);
+                if (i < node->parameters.size() - 1) func_type += ", ";
+            }
+            func_type += ")";
+            
+            indent();
+            output << "auto _typed_func = reinterpret_cast<" << func_type << ">(_func_ptr);\n";
+            indent();
+            if (mapTypeForCFFI(node->return_type.get(), true) != "void") {
+                output << "return _typed_func(";
+            } else {
+                output << "_typed_func(";
+            }
+            for (size_t i = 0; i < node->parameters.size(); ++i) {
+                output << node->parameters[i]->var_name;
+                if (i < node->parameters.size() - 1) output << ", ";
+            }
+            output << ");\n";
+            
+            indent_level--;
+            indent();
+            output << "}\n\n";
             return;
         }
         else if (node->foreign_abi == "python") {
@@ -607,7 +678,12 @@ void CodeGenerator::generateFunction(FunctionNode* node) {
         if (node->is_async) {
             output << "zenith::stdlib::Future<" << mapType(node->return_type.get()) << "> " << node->function_name << "(";
         } else {
-            output << mapType(node->return_type.get()) << " " << node->function_name << "(";
+            // Use CFFI-compatible types for exported functions (C ABI)
+            if (node->is_exported) {
+                output << mapTypeForCFFI(node->return_type.get(), true) << " " << node->function_name << "(";
+            } else {
+                output << mapType(node->return_type.get()) << " " << node->function_name << "(";
+            }
         }
     }
     
@@ -635,7 +711,12 @@ void CodeGenerator::generateFunction(FunctionNode* node) {
                 output << " = " << generateExpression(param->initializer.get());
             }
         } else {
-            output << mapType(param->type.get()) << " " << param->var_name;
+            // Use CFFI-compatible types for exported functions (C ABI)
+            if (node->is_exported) {
+                output << mapTypeForCFFI(param->type.get(), false) << " " << param->var_name;
+            } else {
+                output << mapType(param->type.get()) << " " << param->var_name;
+            }
             if (param->initializer) {
                 output << " = " << generateExpression(param->initializer.get());
             }
@@ -652,6 +733,14 @@ void CodeGenerator::generateFunction(FunctionNode* node) {
     if (is_main) {
         indent(); output << "// --- Zenith RC+GC Memory Manager: Start background cycle collector ---\n";
         indent(); output << "zenith::mem::GcHeap::instance().start_background_gc(5000);\n\n";
+    }
+    
+    // Set flag for exported functions with String return type (for ABI conversion)
+    bool was_exported_string = false;
+    if (node->is_exported && mapType(node->return_type.get()) == "std::string" && !node->is_async) {
+        current_function_is_exported_with_string_return = true;
+        was_exported_string = true;
+        indent(); output << "std::string _zenith_ret;\n";
     }
     
     if (node->is_async) {
@@ -702,8 +791,24 @@ void CodeGenerator::generateFunction(FunctionNode* node) {
     
     indent_level--;
     
-    // For main(): inject GC epilogue — stop background thread, do final sweep, print stats
-    if (is_main) {
+    // Reset flag after function generation
+    if (was_exported_string) {
+        current_function_is_exported_with_string_return = false;
+    }
+    
+    // ABI conversion wrapper for exported functions with String return type
+    // Convert std::string to char* for C ABI compatibility
+    bool needs_string_conversion = node->is_exported && 
+                                   mapType(node->return_type.get()) == "std::string" &&
+                                   !node->is_async;
+    
+    if (needs_string_conversion) {
+        indent(); output << "    // ABI conversion: std::string -> char*\n";
+        indent(); output << "    static thread_local std::string _ret_storage;\n";
+        indent(); output << "    _ret_storage = _zenith_ret;\n";
+        indent(); output << "    return const_cast<char*>(_ret_storage.c_str());\n";
+    } else if (is_main) {
+        // For main(): inject GC epilogue — stop background thread, do final sweep, print stats
         indent(); output << "\n";
         indent(); output << "// --- Zenith RC+GC Memory Manager: Shutdown ---\n";
         indent(); output << "zenith::mem::GcHeap::instance().stop_background_gc();\n";

@@ -318,6 +318,51 @@ inline void runInteractiveLoop(AppType& app) {
                 if (interactives[i]->attributes.count("onChange")) {
                     std::cout << " (Action: " << interactives[i]->attributes.at("onChange") << ")";
                 }
+            } else if (interactives[i]->type == "Checkbox") {
+                bool checked = (interactives[i]->attributes.count("checked") && 
+                               (interactives[i]->attributes.at("checked") == "true" || 
+                                interactives[i]->attributes.at("checked") == "1"));
+                std::cout << "Checkbox: " << interactives[i]->text_content;
+                std::cout << " [" << (checked ? "X" : " ") << "]";
+                if (interactives[i]->attributes.count("onChange")) {
+                    std::cout << " (Action: " << interactives[i]->attributes.at("onChange") << ")";
+                }
+            } else if (interactives[i]->type == "Slider") {
+                int min_val = 0, max_val = 100, cur_val = 0;
+                if (interactives[i]->attributes.count("min")) { 
+                    try { min_val = std::stoi(interactives[i]->attributes.at("min")); } catch(...) {} 
+                }
+                if (interactives[i]->attributes.count("max")) { 
+                    try { max_val = std::stoi(interactives[i]->attributes.at("max")); } catch(...) {} 
+                }
+                if (interactives[i]->attributes.count("value")) { 
+                    try { cur_val = std::stoi(interactives[i]->attributes.at("value")); } catch(...) {} 
+                }
+                std::cout << "Slider: [" << min_val << ".." << max_val << "]";
+                std::cout << " [Current: " << cur_val << "]";
+                if (interactives[i]->attributes.count("onChange")) {
+                    std::cout << " (Action: " << interactives[i]->attributes.at("onChange") << ")";
+                }
+            } else if (interactives[i]->type == "Toggle") {
+                bool is_on = (interactives[i]->attributes.count("isOn") && 
+                             (interactives[i]->attributes.at("isOn") == "true" || 
+                              interactives[i]->attributes.at("isOn") == "1"));
+                std::cout << "Toggle: " << interactives[i]->text_content;
+                std::cout << " [" << (is_on ? "ON" : "OFF") << "]";
+                if (interactives[i]->attributes.count("onChange")) {
+                    std::cout << " (Action: " << interactives[i]->attributes.at("onChange") << ")";
+                }
+            } else if (interactives[i]->type == "Dropdown") {
+                std::string selected = "Select Option";
+                if (interactives[i]->attributes.count("value") && !interactives[i]->attributes.at("value").empty()) {
+                    selected = interactives[i]->attributes.at("value");
+                }
+                std::string options = interactives[i]->text_content;
+                std::cout << "Dropdown: " << options;
+                std::cout << " [Selected: " << selected << "]";
+                if (interactives[i]->attributes.count("onChange")) {
+                    std::cout << " (Action: " << interactives[i]->attributes.at("onChange") << ")";
+                }
             }
             std::cout << "\n";
         }
@@ -337,6 +382,53 @@ inline void runInteractiveLoop(AppType& app) {
                 std::cout << "\nEnter new value: ";
                 std::string input_val;
                 std::getline(std::cin, input_val);
+                app.triggerCallback(action, input_val);
+            } else if (interactives[idx]->type == "Checkbox") {
+                std::string action = interactives[idx]->attributes.at("onChange");
+                bool checked = (interactives[idx]->attributes.count("checked") && 
+                               (interactives[idx]->attributes.at("checked") == "true" || 
+                                interactives[idx]->attributes.at("checked") == "1"));
+                std::string new_val = checked ? "false" : "true";
+                std::cout << "\nToggling checkbox: " << (checked ? "[X]" : "[ ]") << " -> " << (checked ? "[ ]" : "[X]") << "\n";
+                app.triggerCallback(action, new_val);
+            } else if (interactives[idx]->type == "Slider") {
+                std::string action = interactives[idx]->attributes.at("onChange");
+                int min_val = 0, max_val = 100, cur_val = 0;
+                if (interactives[idx]->attributes.count("min")) { 
+                    try { min_val = std::stoi(interactives[idx]->attributes.at("min")); } catch(...) {} 
+                }
+                if (interactives[idx]->attributes.count("max")) { 
+                    try { max_val = std::stoi(interactives[idx]->attributes.at("max")); } catch(...) {} 
+                }
+                if (interactives[idx]->attributes.count("value")) { 
+                    try { cur_val = std::stoi(interactives[idx]->attributes.at("value")); } catch(...) {} 
+                }
+                std::cout << "\nSlider range: [" << min_val << ".." << max_val << "], current: " << cur_val << "\n";
+                std::cout << "Enter new value (" << min_val << "-" << max_val << "): ";
+                std::string input_val;
+                std::getline(std::cin, input_val);
+                int new_val = cur_val;
+                try { new_val = std::stoi(input_val); } catch(...) {}
+                if (new_val < min_val) new_val = min_val;
+                if (new_val > max_val) new_val = max_val;
+                std::cout << "Setting slider to: " << new_val << "\n";
+                app.triggerCallback(action, std::to_string(new_val));
+            } else if (interactives[idx]->type == "Toggle") {
+                std::string action = interactives[idx]->attributes.at("onChange");
+                bool is_on = (interactives[idx]->attributes.count("isOn") && 
+                             (interactives[idx]->attributes.at("isOn") == "true" || 
+                              interactives[idx]->attributes.at("isOn") == "1"));
+                std::string new_val = is_on ? "false" : "true";
+                std::cout << "\nToggling: " << (is_on ? "[ON]" : "[OFF]") << " -> " << (is_on ? "[OFF]" : "[ON]") << "\n";
+                app.triggerCallback(action, new_val);
+            } else if (interactives[idx]->type == "Dropdown") {
+                std::string action = interactives[idx]->attributes.at("onChange");
+                std::string options = interactives[idx]->text_content;
+                std::cout << "\nAvailable options: " << options << "\n";
+                std::cout << "Enter selection: ";
+                std::string input_val;
+                std::getline(std::cin, input_val);
+                std::cout << "Selected: " << input_val << "\n";
                 app.triggerCallback(action, input_val);
             }
         }

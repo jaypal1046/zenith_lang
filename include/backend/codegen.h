@@ -15,6 +15,7 @@ private:
     std::unordered_set<std::string> function_names;
     bool is_inside_class_method = false;
     bool is_generating_async_function = false;
+    bool current_function_is_exported_with_string_return = false;
     std::string current_async_promise_name = "promise";
 
     void indent();

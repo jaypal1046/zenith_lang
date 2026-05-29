@@ -38,14 +38,17 @@ public:
             std::wstring wide_home(python_home.begin(), python_home.end());
             Py_SetPythonHome(const_cast<wchar_t*>(wide_home.c_str()));
 #else
-            Py_SetPythonHome(const_cast<char*>(python_home.c_str()));
+            std::wstring wide_home(python_home.begin(), python_home.end());
+            Py_SetPythonHome(wide_home.c_str());
 #endif
         }
         
         Py_Initialize();
         
-        // Ensure thread support
+        // Ensure thread support (PyEval_InitThreads is deprecated in Python 3.9+, no longer needed)
+#if PY_VERSION_HEX < 0x03090000
         PyEval_InitThreads();
+#endif
         
         initialized_ = true;
     }

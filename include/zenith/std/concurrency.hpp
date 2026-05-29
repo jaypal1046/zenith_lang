@@ -264,4 +264,26 @@ inline std::shared_ptr<AsyncTaskExecutor> create_executor(size_t n = 0) {
 }
 
 }} // namespace zenith::stdlib
+
+namespace zenith {
+    template<typename T>
+    auto await_val(stdlib::Future<T>& f) {
+        return f.get();
+    }
+    template<typename T>
+    auto await_val(stdlib::Future<T>&& f) {
+        return f.get();
+    }
+    inline void await_val(stdlib::Future<void>& f) {
+        f.get();
+    }
+    inline void await_val(stdlib::Future<void>&& f) {
+        f.get();
+    }
+    template<typename T>
+    auto await_val(const T& val) {
+        return val;
+    }
+}
+
 #endif

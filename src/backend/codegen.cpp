@@ -49,7 +49,7 @@ std::string CodeGenerator::generateExpression(ExprNode* expr) {
     if (!expr) return "";
     
     if (auto* await_expr = dynamic_cast<AwaitExprNode*>(expr)) {
-        return "(" + generateExpression(await_expr->expression.get()) + ").get()";
+        return "zenith::await_val(" + generateExpression(await_expr->expression.get()) + ")";
     }
     if (auto* id = dynamic_cast<IdentifierNode*>(expr)) {
         return id->name;
@@ -855,7 +855,29 @@ std::string CodeGenerator::generate(ProgramNode* program) {
     for (const auto& stmt : program->statements) {
         if (auto* imp = dynamic_cast<ImportNode*>(stmt.get())) {
             if (imp->isActiveFor("cpp") && imp->kind == ImportNode::ImportKind::Native) {
-                output << "#include \"" << imp->cdn_url << "\"\n";
+                std::string url = imp->cdn_url;
+                bool is_binary_lib = false;
+                if (url.length() >= 3) {
+                    std::string ext3 = url.substr(url.length() - 3);
+                    if (ext3 == ".so" || ext3 == ".a") {
+                        is_binary_lib = true;
+                    }
+                }
+                if (url.length() >= 4) {
+                    std::string ext4 = url.substr(url.length() - 4);
+                    if (ext4 == ".dll" || ext4 == ".lib") {
+                        is_binary_lib = true;
+                    }
+                }
+                if (url.length() >= 6) {
+                    std::string ext6 = url.substr(url.length() - 6);
+                    if (ext6 == ".dylib") {
+                        is_binary_lib = true;
+                    }
+                }
+                if (!is_binary_lib) {
+                    output << "#include \"" << url << "\"\n";
+                }
             }
         }
     }

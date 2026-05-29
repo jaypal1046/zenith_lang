@@ -104,28 +104,112 @@ private:
 public:
     explicit LLMClient(std::string url) : endpoint(std::move(url)) {}
 
-    std::string prompt(const std::string& prompt_str) {
-        std::cout << "\n[Android LLM] Sending prompt to (" << endpoint << "): \""
-                  << prompt_str << "\"\n";
-        std::string escaped;
-        for (char c : prompt_str) {
-            if      (c == '"')  escaped += "\\\"";
-            else if (c == '\\') escaped += "\\\\";
-            else if (c == '\n') escaped += "\\n";
-            else if (c == '\r') escaped += "\\r";
-            else                escaped += c;
+    std::string prompt(const std::string& prompt_str, const std::string& image_path = "") {
+        std::cout << "\n[Android LLM] Sending prompt to local backend (" << endpoint << "): \"" << prompt_str << "\"\n";
+        if (!image_path.empty()) {
+            std::cout << "[Android LLM] Attaching image: " << image_path << "\n";
         }
-        std::string json_body = "{\"model\": \"llama3\", \"prompt\": \""
-                              + escaped + "\", \"stream\": false}";
-        std::string host, path, raw_response;
+        std::string escaped_prompt;
+        for (char c : prompt_str) {
+            if (c == '"') escaped_prompt += "\\\"";
+            else if (c == '\\') escaped_prompt += "\\\\";
+            else if (c == '\n') escaped_prompt += "\\n";
+            else if (c == '\r') escaped_prompt += "\\r";
+            else escaped_prompt += c;
+        }
+        
+        std::string images_json = "";
+        if (!image_path.empty()) {
+            std::string b64 = zenith::base64_encode_file(image_path);
+            if (!b64.empty()) {
+                images_json = ", \"images\": [\"" + b64 + "\"]";
+            }
+        }
+        
+        std::string json_body = "{\"model\": \"llama3\", \"prompt\": \"" + escaped_prompt + "\", \"stream\": false" + images_json + "}";
+        std::string raw_response;
+        bool success = false;
+#ifdef USE_CURL
+        success = curl_post(endpoint, json_body, raw_response);
+#else
+        std::string host, path;
         int port = 80;
         parse_url(endpoint, host, port, path);
         if (path == "/") path = "/api/generate";
-        if (posix_post(host, port, path, json_body, raw_response)) {
-            std::string ai = extract_json_field(raw_response, "response");
-            if (!ai.empty()) return ai;
+        success = posix_post(host, port, path, json_body, raw_response);
+#endif
+        if (success) {
+            std::string ai_response = extract_json_field(raw_response, "response");
+            if (!ai_response.empty()) return ai_response;
         }
-        return "Android LLM Offline Fallback";
+        
+        // High-fidelity simulation mode when offline/failed
+        std::cout << "[Android LLM Simulation] (Offline Fallback)\n";
+        std::string simulated_resp = "Simulated response for prompt: '" + prompt_str + "'";
+        if (!image_path.empty()) {
+            simulated_resp += " with image '" + image_path + "'";
+        }
+        return simulated_resp;
+    }
+
+    std::string promptStream(const std::string& prompt_str, std::function<void(const std::string&)> callback, const std::string& image_path = "") {
+        std::cout << "\n[Android LLM Stream] Sending prompt to local backend (" << endpoint << "): \"" << prompt_str << "\"\n";
+        if (!image_path.empty()) {
+            std::cout << "[Android LLM Stream] Attaching image: " << image_path << "\n";
+        }
+        std::string escaped_prompt;
+        for (char c : prompt_str) {
+            if (c == '"') escaped_prompt += "\\\"";
+            else if (c == '\\') escaped_prompt += "\\\\";
+            else if (c == '\n') escaped_prompt += "\\n";
+            else if (c == '\r') escaped_prompt += "\\r";
+            else escaped_prompt += c;
+        }
+        
+        std::string images_json = "";
+        if (!image_path.empty()) {
+            std::string b64 = zenith::base64_encode_file(image_path);
+            if (!b64.empty()) {
+                images_json = ", \"images\": [\"" + b64 + "\"]";
+            }
+        }
+        
+        std::string json_body = "{\"model\": \"llama3\", \"prompt\": \"" + escaped_prompt + "\", \"stream\": true" + images_json + "}";
+        
+        std::string accumulated;
+        auto stream_callback = [&](const std::string& chunk) {
+            accumulated += chunk;
+            callback(chunk);
+        };
+        
+        bool success = false;
+        std::string host, path;
+        int port = 80;
+        parse_url(endpoint, host, port, path);
+        if (path == "/") path = "/api/generate";
+        
+        success = posix_post_stream(host, port, path, json_body, stream_callback);
+        
+        if (success && !accumulated.empty()) {
+            return accumulated;
+        }
+        
+        // High-fidelity simulation mode when offline/failed
+        std::cout << "[Android LLM Stream Simulation] (Offline Fallback)\n";
+        std::string simulated_resp = "Simulated streaming response for prompt: '" + prompt_str + "'";
+        if (!image_path.empty()) {
+            simulated_resp += " with image '" + image_path + "'";
+        }
+        
+        // Output token by token with micro-delays
+        std::string word;
+        std::stringstream ss(simulated_resp);
+        while (ss >> word) {
+            callback(word + " ");
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        }
+        callback("\n");
+        return simulated_resp + "\n";
     }
 };
 

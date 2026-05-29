@@ -234,8 +234,6 @@
             }
         }
 
-        wasmPromises.push(loadRawWasm('lib/aes_vault/bridge.wasm', ['encrypt', 'decrypt']));
-        wasmPromises.push(loadDartWasm('lib/key_derive/bridge.wasm', 'lib/key_derive/bridge.mjs', ['deriveKey']));
     </script>
 </head>
 <body>
@@ -249,7 +247,7 @@
                 Render Canvas
                 <button class="interactive-btn" onclick="triggerIncrement()">setState Trigger</button>
             </div>
-            <div id="zenith-ui-root"><div class="zenith-column"><span class="zenith-text" style="font-weight: bold; color: cyan; ">SecureVault - Encrypted Notes</span><span class="zenith-text" style="color: green; ">Status: Locked</span><div class="zenith-card" style="display: flex; flex-direction: column; background: rgba(30, 41, 59, 0.6); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 16px; padding: 20px; margin: 10px 0; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);" style="padding: 1px; "><span class="zenith-text">1. Authenticate / Unlock:</span><div class="zenith-row"><span class="zenith-text">Password:</span><input type="text" class="zenith-input" placeholder="" /><button class="interactive-btn">Unlock</button></div></div><div class="zenith-card" style="display: flex; flex-direction: column; background: rgba(30, 41, 59, 0.6); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 16px; padding: 20px; margin: 10px 0; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);" style="padding: 1px; "><span class="zenith-text">2. Secure Notes Editor:</span><div class="zenith-row"><span class="zenith-text">Note text:</span><input type="text" class="zenith-input" placeholder="" /></div><div class="zenith-row"><button class="interactive-btn">Save Encrypted</button><button class="interactive-btn">Decrypt Note</button><button class="interactive-btn">Summarize (AI)</button></div></div><div class="zenith-card" style="display: flex; flex-direction: column; background: rgba(30, 41, 59, 0.6); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 16px; padding: 20px; margin: 10px 0; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);" style="padding: 1px; "><span class="zenith-text">Encrypted Payload:</span><span class="zenith-text" style="color: yellow; "></span><span class="zenith-text">Decrypted Note:</span><span class="zenith-text" style="color: green; "></span><span class="zenith-text">AI Summary:</span><span class="zenith-text" style="color: magenta; "></span></div></div></div>
+            <div id="zenith-ui-root"><div class="zenith-column"><span class="zenith-text" style="font-weight: bold; color: cyan; ">ZENITH WIDGET VERIFICATION DEMO</span><div class="zenith-card" style="display: flex; flex-direction: column; background: rgba(30, 41, 59, 0.6); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 16px; padding: 20px; margin: 10px 0; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);" style="padding: 1px; "><span class="zenith-text" style="color: yellow; ">1. Checkbox State: false</span><label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin: 5px; color: rgb(226, 232, 240);"><input type="checkbox" style="width: 18px; height: 18px; accent-color: rgb(0, 242, 254); cursor: pointer;" /><span>Accept Terms & Conditions</span></label></div><div class="zenith-card" style="display: flex; flex-direction: column; background: rgba(30, 41, 59, 0.6); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 16px; padding: 20px; margin: 10px 0; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);" style="padding: 1px; "><span class="zenith-text" style="color: green; ">2. Slider Value: 50</span><input type="range" class="zenith-input" min="0" max="100" value="50" style="accent-color: rgb(0, 242, 254); cursor: pointer;" /></div><div class="zenith-card" style="display: flex; flex-direction: column; background: rgba(30, 41, 59, 0.6); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 16px; padding: 20px; margin: 10px 0; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);" style="padding: 1px; "><span class="zenith-text" style="color: magenta; ">3. Toggle Switch State: false</span><label style="display: flex; align-items: center; gap: 10px; cursor: pointer; margin: 5px;"><div style="position: relative; width: 44px; height: 24px; background-color: rgb(71, 85, 105); border-radius: 12px; transition: background-color 0.2s;"><div style="position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; border-radius: 50%; background-color: rgb(255, 255, 255); transition: transform 0.2s; "></div></div><span style="color: rgb(226, 232, 240);">Toggle Feature Alpha</span></label></div><div class="zenith-card" style="display: flex; flex-direction: column; background: rgba(30, 41, 59, 0.6); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 16px; padding: 20px; margin: 10px 0; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);" style="padding: 1px; "><span class="zenith-text" style="color: cyan; ">4. Dropdown Chosen: Option 1</span><select class="zenith-input" style="background: rgba(15, 23, 42, 0.8); color: rgb(248, 250, 252); cursor: pointer;"><option value="Option 1" selected>Option 1</option><option value="Option 2">Option 2</option><option value="Option 3">Option 3</option></select></div></div></div>
         </div>
         <div class="panel terminal-panel">
             <div class="panel-title" style="color: #10b981;">Output Console</div>
@@ -729,75 +727,35 @@
         };
     </script>
     <script>
-class VaultService {
+class WidgetDemoApp {
     constructor() {
-        this.masterKey = "";
-    }
-    unlock(password) {
-        let salt = "zenith_securevault_salt";
-        this.masterKey = deriveKey(password, salt);
-    }
-    save(noteText) {
-        return encrypt(noteText, this.masterKey);
-    }
-    open(cipherText) {
-        return decrypt(cipherText, this.masterKey);
-    }
-    async summarize(noteText) {
-        return await zenith.llmPrompt(this.url || "http://localhost:11434", `Summarize this note in 2 sentences: ${noteText}`, true, null);
-    }
-}
-class NotesApp {
-    constructor() {
-        this.currentNote = "";
-        this.passwordInput = "";
-        this.noteInput = "";
-        this.status = "Locked";
-        this.decryptedNote = "";
-        this.aiSummary = "";
-        this.encryptedSavedNote = "";
+        this.cb_state = false;
+        this.slider_val = 50;
+        this.toggle_state = false;
+        this.selected_option = "Option 1";
         counterGlobalInstance = this;
     }
     build() {
-        return UI.Column([UI.Text(["SecureVault - Encrypted Notes"], {fontWeight: "bold", color: "cyan"}), UI.Text(["Status: " + this.status], {color: "green"}), UI.Card([UI.Text(["1. Authenticate / Unlock:"], {}), UI.Row([UI.Text(["Password:"], {}), UI.TextField([], {value: this.passwordInput, placeholder: "Enter Password", onChange: this.handlePasswordChange.bind(this)}), UI.Button(["Unlock"], {onClick: this.handleUnlock.bind(this)})], {})], {padding: 1}), UI.Card([UI.Text(["2. Secure Notes Editor:"], {}), UI.Row([UI.Text(["Note text:"], {}), UI.TextField([], {value: this.noteInput, placeholder: "Secret content...", onChange: this.handleNoteChange.bind(this)})], {}), UI.Row([UI.Button(["Save Encrypted"], {onClick: this.handleSave.bind(this)}), UI.Button(["Decrypt Note"], {onClick: this.handleDecrypt.bind(this)}), UI.Button(["Summarize (AI)"], {onClick: this.handleSummarize.bind(this)})], {})], {padding: 1}), UI.Card([UI.Text(["Encrypted Payload:"], {}), UI.Text([this.encryptedSavedNote], {color: "yellow"}), UI.Text(["Decrypted Note:"], {}), UI.Text([this.decryptedNote], {color: "green"}), UI.Text(["AI Summary:"], {}), UI.Text([this.aiSummary], {color: "magenta"})], {padding: 1})], {});
+        return UI.Column([UI.Text(["ZENITH WIDGET VERIFICATION DEMO"], {fontWeight: "bold", color: "cyan"}), UI.Card([UI.Text(["1. Checkbox State: " + this.cb_state], {color: "yellow"}), UI.Checkbox(["Accept Terms & Conditions"], {checked: this.cb_state, onChange: this.handleCheckbox.bind(this)})], {padding: 1}), UI.Card([UI.Text(["2. Slider Value: " + this.slider_val], {color: "green"}), UI.Slider([], {min: 0, max: 100, value: this.slider_val, onChange: this.handleSlider.bind(this)})], {padding: 1}), UI.Card([UI.Text(["3. Toggle Switch State: " + this.toggle_state], {color: "magenta"}), UI.Toggle(["Toggle Feature Alpha"], {isOn: this.toggle_state, onChange: this.handleToggle.bind(this)})], {padding: 1}), UI.Card([UI.Text(["4. Dropdown Chosen: " + this.selected_option], {color: "cyan"}), UI.Dropdown(["Option 1,Option 2,Option 3"], {value: this.selected_option, onChange: this.handleDropdown.bind(this)})], {padding: 1})], {});
     }
-    handlePasswordChange(val) {
-        this.passwordInput = val;
-    }
-    handleNoteChange(val) {
-        this.noteInput = val;
-    }
-    handleUnlock() {
-        let vault = new VaultService();
-        vault.unlock(this.passwordInput);
+    handleCheckbox(checked) {
         this.setState(() => {
-            this.status = "Unlocked";
+            this.cb_state = checked;
         });
     }
-    async handleSave() {
-        let vault = new VaultService();
-        vault.unlock(this.passwordInput);
-        let encrypted = vault.save(this.noteInput);
+    handleSlider(val) {
         this.setState(() => {
-            this.encryptedSavedNote = encrypted;
-            this.decryptedNote = "";
-            this.aiSummary = "";
-        });
-        println("Saved Encrypted: " + encrypted);
-    }
-    async handleDecrypt() {
-        let vault = new VaultService();
-        vault.unlock(this.passwordInput);
-        let decrypted = vault.open(this.encryptedSavedNote);
-        this.setState(() => {
-            this.decryptedNote = decrypted;
+            this.slider_val = val;
         });
     }
-    async handleSummarize() {
-        let vault = new VaultService();
-        let summary = await vault.summarize(this.noteInput);
+    handleToggle(onState) {
         this.setState(() => {
-            this.aiSummary = summary;
+            this.toggle_state = onState;
+        });
+    }
+    handleDropdown(choice) {
+        this.setState(() => {
+            this.selected_option = choice;
         });
     }
     render() {
@@ -818,8 +776,10 @@ class NotesApp {
     }
 }
 async function main() {
-    let app = new NotesApp();
+    println("--- Booting Zenith Form Widget Demo App ---");
+    let app = new WidgetDemoApp();
     app.build().render();
+    println("--- Form widgets loaded. Interactive events ready. ---");
 }
         let counterGlobalInstance = null;
         function triggerIncrement() {

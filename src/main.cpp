@@ -3427,43 +3427,72 @@ a{color:#818cf8;text-decoration:none;} a:hover{text-decoration:underline;}
         // HMR: atomic file-change generation + background watcher thread
         // ----------------------------------------------------------------
         std::atomic<uint64_t> hmr_generation{0};
-        fs::file_time_type hmr_last_mtime{};
-        try {
-            std::string watch_target_path = is_dir_mode ? pages_dir : serve_file;
-            hmr_last_mtime = fs::last_write_time(watch_target_path);
-        } catch (...) {}
+        std::unordered_map<std::string, fs::file_time_type> hmr_file_times;
+        
+        if (is_dir_mode) {
+            try {
+                if (fs::exists(pages_dir)) {
+                    for (const auto& entry : fs::recursive_directory_iterator(pages_dir)) {
+                        if (entry.is_regular_file() && entry.path().extension() == ".zen") {
+                            hmr_file_times[entry.path().string()] = fs::last_write_time(entry);
+                        }
+                    }
+                }
+            } catch (...) {}
+        } else {
+            try {
+                if (fs::exists(serve_file)) {
+                    hmr_file_times[serve_file] = fs::last_write_time(serve_file);
+                }
+            } catch (...) {}
+        }
 
         // Background thread: poll all .zen files mtime every 300ms
         std::thread hmr_watcher([&]() {
             while (true) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(300));
                 try {
+                    bool changed = false;
                     if (is_dir_mode) {
-                        // Watch entire pages/ directory modification time
-                        auto mtime = fs::last_write_time(pages_dir);
-                        if (mtime != hmr_last_mtime) {
-                            hmr_last_mtime = mtime;
-                            ++hmr_generation;
-                            std::cout << "  \033[93m\u21bb\033[0m  HMR: pages/ changed, reloading browsers...\n";
-                        }
-                        // Also scan individual files in case dir mtime didn't change
-                        for (const auto& entry : fs::recursive_directory_iterator(pages_dir)) {
-                            if (!entry.is_regular_file() || entry.path().extension() != ".zen") continue;
-                            auto fmtime = fs::last_write_time(entry);
-                            if (fmtime != hmr_last_mtime) {
-                                hmr_last_mtime = fmtime;
-                                ++hmr_generation;
-                                std::cout << "  \033[93m\u21bb\033[0m  HMR: " << entry.path().filename().string() << " changed, reloading browsers...\n";
-                                break;
+                        if (fs::exists(pages_dir)) {
+                            std::vector<std::string> current_files;
+                            for (const auto& entry : fs::recursive_directory_iterator(pages_dir)) {
+                                if (!entry.is_regular_file() || entry.path().extension() != ".zen") continue;
+                                std::string path_str = entry.path().string();
+                                current_files.push_back(path_str);
+                                auto mtime = fs::last_write_time(entry);
+                                if (hmr_file_times.find(path_str) == hmr_file_times.end()) {
+                                    hmr_file_times[path_str] = mtime;
+                                    changed = true;
+                                    std::cout << "  \033[93m\u21bb\033[0m  HMR: " << entry.path().filename().string() << " added, reloading browsers...\n";
+                                } else if (hmr_file_times[path_str] != mtime) {
+                                    hmr_file_times[path_str] = mtime;
+                                    changed = true;
+                                    std::cout << "  \033[93m\u21bb\033[0m  HMR: " << entry.path().filename().string() << " changed, reloading browsers...\n";
+                                }
+                            }
+                            for (auto it = hmr_file_times.begin(); it != hmr_file_times.end(); ) {
+                                if (std::find(current_files.begin(), current_files.end(), it->first) == current_files.end()) {
+                                    it = hmr_file_times.erase(it);
+                                    changed = true;
+                                    std::cout << "  \033[93m\u21bb\033[0m  HMR: file deleted, reloading browsers...\n";
+                                } else {
+                                    ++it;
+                                }
                             }
                         }
                     } else {
-                        auto mtime = fs::last_write_time(serve_file);
-                        if (mtime != hmr_last_mtime) {
-                            hmr_last_mtime = mtime;
-                            ++hmr_generation;
-                            std::cout << "  \033[93m\u21bb\033[0m  HMR: change detected, reloading browsers...\n";
+                        if (fs::exists(serve_file)) {
+                            auto mtime = fs::last_write_time(serve_file);
+                            if (hmr_file_times[serve_file] != mtime) {
+                                hmr_file_times[serve_file] = mtime;
+                                changed = true;
+                                std::cout << "  \033[93m\u21bb\033[0m  HMR: change detected, reloading browsers...\n";
+                            }
                         }
+                    }
+                    if (changed) {
+                        ++hmr_generation;
                     }
                 } catch (...) {}
             }

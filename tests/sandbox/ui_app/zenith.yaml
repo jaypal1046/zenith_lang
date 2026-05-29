@@ -1,0 +1,5 @@
+name: ui_app
+version: 1.0.0
+description: A new Zenith project
+
+dependencies:

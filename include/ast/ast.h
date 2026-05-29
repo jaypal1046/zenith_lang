@@ -256,6 +256,7 @@ public:
     std::unique_ptr<TypeNode> return_type;
     std::vector<std::unique_ptr<VarDeclNode>> parameters;
     std::vector<std::unique_ptr<ASTNode>> body;
+    std::vector<std::string> generic_params;  // Generic type parameters, e.g., ["T", "U"]
     bool is_async = false;
     
     // Interop fields
@@ -300,6 +301,7 @@ public:
 class ClassDeclNode : public ASTNode {
 public:
     std::string class_name;
+    std::vector<std::string> generic_params;  // Generic type parameters, e.g., ["T", "U"]
     std::vector<std::string> implemented_interfaces;
     std::vector<std::unique_ptr<VarDeclNode>> primary_constructor_args;
     std::vector<std::unique_ptr<VarDeclNode>> fields;

@@ -1,45 +1,57 @@
 ```
-# Compiled and binary files
+# Compiled and build artifacts
 *.o
 *.obj
-src/main.o
-src/zenith_cli
+*.a
+*.so
+*.dll
+*.exe
+*.out
+build/
+dist/
 
 # Dependencies
-node_modules/
 venv/
 .venv/
 __pycache__/
-.mypy_cache/
-.pytest_cache/
-target/
-.gradle/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+.venv.bak/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Logs and temp files
+*.log
+*.tmp
+*.swp
+*.swo
+
+# Environment
+.env
+.env.local
+.env.
 
 # Editors
 .vscode/
 .idea/
 *.swp
-*.swo
+*~
 
-# Logs and temp files
-*.log
-*.tmp
+# Testing
+.coverage
+coverage/
+htmlcov/
+.pytest_cache/
+.mypy_cache/
 
-# System files
+# OS
 .DS_Store
 Thumbs.db
 
-# Environment
-.env
-.env.local
-*.env.*
-
-# Coverage
-coverage/
-htmlcov/
-.coverage
-
-# Compressed files
+# Compression
 *.zip
 *.gz
 *.tar

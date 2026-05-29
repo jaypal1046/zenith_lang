@@ -483,6 +483,21 @@ std::unique_ptr<FunctionNode> Parser::parseFunction(bool is_agentic, bool is_asy
     std::string fn_name(current().value);
     expect(TokenType::ID, "Expected function name");
     
+    // Parse optional generic parameters: <T, U, ...>
+    std::vector<std::string> generic_params;
+    if (match(TokenType::OP, "<")) {
+        do {
+            if (current().type == TokenType::ID && std::isupper(static_cast<unsigned char>(current().value[0]))) {
+                generic_params.push_back(std::string(current().value));
+                advance();
+            } else {
+                std::cerr << "Parser Error: Expected generic type parameter (e.g., T, U) at line " << current().line << "\n";
+                exit(1);
+            }
+        } while (match(TokenType::PUNCT, ","));
+        expect(TokenType::OP, "Expected '>' to close generic parameters");
+    }
+    
     expect(TokenType::PUNCT, "Expected '(' for function parameters");
     
     std::vector<std::unique_ptr<VarDeclNode>> parameters;
@@ -584,6 +599,7 @@ std::unique_ptr<FunctionNode> Parser::parseFunction(bool is_agentic, bool is_asy
 
         auto agentic_fn = locate(std::make_unique<AgenticFunctionNode>(std::move(return_type), fn_name, prompt), start_tok);
         agentic_fn->parameters = std::move(parameters);
+        agentic_fn->generic_params = std::move(generic_params);
         agentic_fn->is_async = is_async;
         agentic_fn->is_streaming = streaming;
         agentic_fn->is_multimodal = multimodal;
@@ -596,6 +612,7 @@ std::unique_ptr<FunctionNode> Parser::parseFunction(bool is_agentic, bool is_asy
     } else {
         auto fn = locate(std::make_unique<FunctionNode>(std::move(return_type), fn_name), start_tok);
         fn->parameters = std::move(parameters);
+        fn->generic_params = std::move(generic_params);
         fn->is_async = is_async;
         
         fn->body = parseBlock();
@@ -611,6 +628,20 @@ std::unique_ptr<ClassDeclNode> Parser::parseClass(bool is_managed) {
     
     auto class_node = locate(std::make_unique<ClassDeclNode>(class_name), start_tok);
     class_node->is_managed = is_managed;  // Set from @managed annotation
+
+    // Parse optional generic parameters: <T, U, ...>
+    if (match(TokenType::OP, "<")) {
+        do {
+            if (current().type == TokenType::ID && std::isupper(static_cast<unsigned char>(current().value[0]))) {
+                class_node->generic_params.push_back(std::string(current().value));
+                advance();
+            } else {
+                std::cerr << "Parser Error: Expected generic type parameter (e.g., T, U) at line " << current().line << "\n";
+                exit(1);
+            }
+        } while (match(TokenType::PUNCT, ","));
+        expect(TokenType::OP, "Expected '>' to close generic parameters");
+    }
 
     if (match(TokenType::PUNCT, "(")) {
         if (current().type != TokenType::PUNCT || current().value != ")") {

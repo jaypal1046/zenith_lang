@@ -225,6 +225,11 @@ void SemanticAnalyzer::analyzeFunction(FunctionNode* node) {
     SymbolTable* previous_scope = current_scope;
     current_scope = function_scope;
     
+    // Register generic type parameters as valid placeholder types in function scope
+    for (const auto& generic_param : node->generic_params) {
+        current_scope->define(generic_param, "TypeVar:" + generic_param);
+    }
+    
     // Support return type inference
     if (node->return_type->is_inferred || node->return_type->type_name == "Auto") {
         current_fn_return_type = inferFunctionReturnType(node);
@@ -268,6 +273,11 @@ void SemanticAnalyzer::analyzeAgenticFunction(AgenticFunctionNode* node) {
     SymbolTable* function_scope = new SymbolTable(current_scope);
     SymbolTable* previous_scope = current_scope;
     current_scope = function_scope;
+    
+    // Register generic type parameters as valid placeholder types in function scope
+    for (const auto& generic_param : node->generic_params) {
+        current_scope->define(generic_param, "TypeVar:" + generic_param);
+    }
     
     current_fn_return_type = node->return_type->type_name;
     
@@ -894,6 +904,11 @@ bool SemanticAnalyzer::analyze(ProgramNode* program) {
         else if (auto* class_decl = dynamic_cast<ClassDeclNode*>(stmt.get())) {
             SymbolTable* class_scope = new SymbolTable(current_scope);
             current_scope = class_scope; // Enter class scope
+
+            // Register generic type parameters as valid placeholder types in class scope
+            for (const auto& generic_param : class_decl->generic_params) {
+                current_scope->define(generic_param, "TypeVar:" + generic_param);
+            }
 
             // Register primary constructor arguments as class properties
             for (const auto& arg : class_decl->primary_constructor_args) {

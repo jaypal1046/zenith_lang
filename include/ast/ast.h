@@ -5,6 +5,7 @@
 #include <vector>
 #include <memory>
 #include <cstdint>
+#include <unordered_map>
 
 // Type aliases for common types
 using f32 = float;
@@ -261,6 +262,9 @@ public:
     bool is_foreign = false;
     std::string foreign_abi; // "C", "js", "python"
     bool is_exported = false;
+    
+    // Attributes for FFI configuration
+    std::unordered_map<std::string, std::string> attributes;
 
     FunctionNode(std::unique_ptr<TypeNode> ret_type, std::string name)
         : return_type(std::move(ret_type)), function_name(std::move(name)) {}

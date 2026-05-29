@@ -7,6 +7,12 @@
 // Include Hybrid RC + GC Memory Management
 #include "zenith/memory/zenith_memory.h"
 
+// Include Dynamic Library Loading for FFI
+#include "zenith/ffi/zenith_ffi_dynamic_lib.h"
+
+// Include Python FFI Bridge
+#include "zenith/ffi/zenith_ffi_python.h"
+
 // Platform-Specific Dispatcher
 #if defined(__ANDROID__)
     #include "zenith/android/zenith_android.h"

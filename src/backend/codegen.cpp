@@ -45,6 +45,46 @@ std::string CodeGenerator::mapType(TypeNode* type) {
     return base;
 }
 
+std::string CodeGenerator::mapTypeForCFFI(TypeNode* type, bool is_return) {
+    if (!type) return "void";
+    std::string base = type->type_name;
+    // Map String to const char* for parameters, char* for return (C ABI compatibility)
+    if (base == "String") {
+        return is_return ? "char*" : "const char*";
+    }
+    else if (base == "Int") base = "int";
+    else if (base == "Float") base = "float";
+    else if (base == "Bool") base = "bool";
+    else if (base == "Void") base = "void";
+    else if (base == "UI") base = "zenith::UIElement";
+    else if (base == "List") base = "std::vector";
+    else if (base == "Map") base = "std::unordered_map";
+    else if (base == "Future") base = "zenith::stdlib::Future";
+    else if (base == "Promise") base = "zenith::stdlib::Promise";
+    else if (base == "Ref") base = "zenith::mem::Ref";
+    else if (base == "Weak") base = "zenith::mem::Weak";
+    else if (base == "Function") {
+        if (type->generics.empty()) return "std::function<void()>";
+        std::string ret = mapTypeForCFFI(type->generics.back().get(), true);
+        std::string args;
+        for (size_t i = 0; i < type->generics.size() - 1; ++i) {
+            args += mapTypeForCFFI(type->generics[i].get(), false);
+            if (i < type->generics.size() - 2) args += ", ";
+        }
+        return "std::function<" + ret + "(" + args + ")>";
+    }
+
+    if (!type->generics.empty()) {
+        base += "<";
+        for (size_t i = 0; i < type->generics.size(); ++i) {
+            base += mapTypeForCFFI(type->generics[i].get(), false);
+            if (i < type->generics.size() - 1) base += ", ";
+        }
+        base += ">";
+    }
+    return base;
+}
+
 std::string CodeGenerator::generateExpression(ExprNode* expr) {
     if (!expr) return "";
     
@@ -475,52 +515,52 @@ void CodeGenerator::generateFunction(FunctionNode* node) {
     if (node->is_foreign) {
         if (node->foreign_abi == "C") {
             indent();
-            output << "extern \"C\" " << mapType(node->return_type.get()) << " " << node->function_name << "(";
+            output << "extern \"C\" " << mapTypeForCFFI(node->return_type.get(), true) << " " << node->function_name << "(";
             for (size_t i = 0; i < node->parameters.size(); ++i) {
-                output << mapType(node->parameters[i]->type.get()) << " " << node->parameters[i]->var_name;
+                output << mapTypeForCFFI(node->parameters[i]->type.get(), false) << " " << node->parameters[i]->var_name;
                 if (i < node->parameters.size() - 1) output << ", ";
             }
             output << ");\n\n";
             return;
         }
         else if (node->foreign_abi == "python") {
+            // Use embedded Python runtime via PythonFFIBridge
             indent();
-            output << mapType(node->return_type.get()) << " " << node->function_name << "(";
+            output << mapTypeForCFFI(node->return_type.get(), true) << " " << node->function_name << "(";
             for (size_t i = 0; i < node->parameters.size(); ++i) {
-                output << mapType(node->parameters[i]->type.get()) << " " << node->parameters[i]->var_name;
+                output << mapTypeForCFFI(node->parameters[i]->type.get(), false) << " " << node->parameters[i]->var_name;
                 if (i < node->parameters.size() - 1) output << ", ";
             }
             output << ") {\n";
             indent_level++;
-            
-            indent(); output << "std::string cmd = \"python -c \\\"import sys; sys.path.append('.'); import bridge; print(bridge." << node->function_name << "(";
-            for (size_t i = 0; i < node->parameters.size(); ++i) {
-                std::string type_name = node->parameters[i]->type->type_name;
-                if (type_name == "String") {
-                    output << "\\\\\\'\" + " << node->parameters[i]->var_name << " + \"\\\\\\'\"";
-                } else {
-                    output << "\" + std::to_string(" << node->parameters[i]->var_name << ") + \"";
-                }
-                if (i < node->parameters.size() - 1) output << ", ";
-            }
-            output << "))\\\"\";\n";
-            
-            indent(); output << "std::string res = zenith::run_cmd(cmd);\n";
-            indent(); output << "while (!res.empty() && (res.back() == '\\n' || res.back() == '\\r')) res.pop_back();\n";
-            
+
+            // Generate typed call based on return type
             std::string ret_type = mapType(node->return_type.get());
-            if (ret_type == "int" || ret_type == "Int") {
-                indent(); output << "try { return std::stoi(res); } catch (...) { return 0; }\n";
-            } else if (ret_type == "double" || ret_type == "float" || ret_type == "Float") {
-                indent(); output << "try { return std::stod(res); } catch (...) { return 0.0; }\n";
-            } else if (ret_type == "bool" || ret_type == "Bool") {
-                indent(); output << "return (res == \"true\" || res == \"1\");\n";
-            } else if (ret_type == "std::string" || ret_type == "String") {
-                indent(); output << "return res;\n";
-            } else {
-                indent(); output << "return;\n";
+            std::string module_name = "bridge";  // Default module name
+
+            // Check for custom module in attributes
+            if (node->attributes.count("python_module")) {
+                module_name = node->attributes.at("python_module");
             }
-            
+
+            if (ret_type == "int" || ret_type == "Int") {
+                indent(); output << "return zenith::ffi::PythonFFIBridge::callInt(\"" << module_name << "\", \"" << node->function_name << "\"";
+            } else if (ret_type == "double" || ret_type == "float" || ret_type == "Float") {
+                indent(); output << "return zenith::ffi::PythonFFIBridge::callDouble(\"" << module_name << "\", \"" << node->function_name << "\"";
+            } else if (ret_type == "bool" || ret_type == "Bool") {
+                indent(); output << "return zenith::ffi::PythonFFIBridge::callBool(\"" << module_name << "\", \"" << node->function_name << "\"";
+            } else if (ret_type == "std::string" || ret_type == "String") {
+                indent(); output << "return zenith::ffi::PythonFFIBridge::callString(\"" << module_name << "\", \"" << node->function_name << "\"";
+            } else {
+                indent(); output << "zenith::ffi::PythonFFIBridge::callFunction(\"" << module_name << "\", \"" << node->function_name << "\"";
+            }
+
+            // Pass arguments
+            for (size_t i = 0; i < node->parameters.size(); ++i) {
+                output << ", " << node->parameters[i]->var_name;
+            }
+            output << ");\n";
+
             indent_level--;
             indent(); output << "}\n\n";
             return;

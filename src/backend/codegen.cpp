@@ -728,9 +728,14 @@ void CodeGenerator::generateFunction(FunctionNode* node) {
     
     indent_level++;
 
-    // For main(): inject GC lifecycle management at top
+    // For main(): inject GC lifecycle management at top and Python FFI initialization if needed
     bool is_main = (node->function_name == "main");
     if (is_main) {
+        // Initialize Python FFI bridge if Python foreign functions are used
+        if (has_python_ffi) {
+            indent(); output << "// --- Python FFI Bridge: Initialize runtime ---\n";
+            indent(); output << "zenith::ffi::PythonFFIBridge::initialize();\n\n";
+        }
         indent(); output << "// --- Zenith RC+GC Memory Manager: Start background cycle collector ---\n";
         indent(); output << "zenith::mem::GcHeap::instance().start_background_gc(5000);\n\n";
     }
@@ -808,6 +813,12 @@ void CodeGenerator::generateFunction(FunctionNode* node) {
         indent(); output << "    _ret_storage = _zenith_ret;\n";
         indent(); output << "    return const_cast<char*>(_ret_storage.c_str());\n";
     } else if (is_main) {
+        // Finalize Python FFI bridge if Python foreign functions are used
+        if (has_python_ffi) {
+            indent(); output << "\n";
+            indent(); output << "// --- Python FFI Bridge: Finalize runtime ---\n";
+            indent(); output << "zenith::ffi::PythonFFIBridge::finalize();\n";
+        }
         // For main(): inject GC epilogue — stop background thread, do final sweep, print stats
         indent(); output << "\n";
         indent(); output << "// --- Zenith RC+GC Memory Manager: Shutdown ---\n";
@@ -967,6 +978,7 @@ std::string CodeGenerator::generate(ProgramNode* program) {
     class_names.clear();
     interface_names.clear();
     function_names.clear();
+    has_python_ffi = false;
     for (const auto& stmt : program->statements) {
         if (auto* class_decl = dynamic_cast<ClassDeclNode*>(stmt.get())) {
             class_names.insert(class_decl->class_name);
@@ -974,6 +986,10 @@ std::string CodeGenerator::generate(ProgramNode* program) {
             interface_names.insert(interface_decl->interface_name);
         } else if (auto* fn_decl = dynamic_cast<FunctionNode*>(stmt.get())) {
             function_names.insert(fn_decl->function_name);
+            // Check for Python FFI foreign functions
+            if (fn_decl->is_foreign && fn_decl->foreign_abi == "python") {
+                has_python_ffi = true;
+            }
         } else if (auto* orch_decl = dynamic_cast<AgentOrchestrationNode*>(stmt.get())) {
             function_names.insert(orch_decl->orchestration_name);
         } else if (auto* imp = dynamic_cast<ImportNode*>(stmt.get())) {

@@ -503,19 +503,237 @@ void handleHover(const std::string& id_str, const std::string& uri, int line_0, 
 
 struct DefinitionLocation {
     std::string uri;
-    int line = 0;   // 0-indexed
-    int col = 0;    // 0-indexed
+    int line = -1;   // 0-indexed, -1 means not found
+    int col = -1;    // 0-indexed, -1 means not found
 };
 
-DefinitionLocation findDefinitionForSymbol(const std::string& symbol_name, ProgramNode* program) {
+class SymbolDefinitionFinder {
+private:
+    std::string target_name;
+    int target_line; // 1-indexed
+    int target_col;  // 1-indexed
+
+    // Scopes tracking
+    std::vector<std::vector<VarDeclNode*>> scopes;
+    ClassDeclNode* current_class = nullptr;
+    
+    ASTNode* resolved_decl = nullptr;
+    bool ref_found = false;
+
+    void pushScope() {
+        scopes.push_back({});
+    }
+
+    void popScope() {
+        if (!scopes.empty()) scopes.pop_back();
+    }
+
+    void addLocal(VarDeclNode* var) {
+        if (!scopes.empty()) {
+            scopes.back().push_back(var);
+        }
+    }
+
+    // Check if the node matches the target symbol name and cursor line
+    bool isTargetRef(ASTNode* node) {
+        if (!node) return false;
+        // Check if the node is on the target line and cursor is within or after start col
+        if (node->line == target_line && node->column <= target_col) {
+            return true;
+        }
+        return false;
+    }
+
+    void resolve() {
+        // 1. Search local variables & parameters (most nested to least nested)
+        for (auto it = scopes.rbegin(); it != scopes.rend(); ++it) {
+            for (auto* var : *it) {
+                if (var->var_name == target_name) {
+                    resolved_decl = var;
+                    return;
+                }
+            }
+        }
+
+        // 2. Search class fields and methods
+        if (current_class) {
+            for (const auto& f : current_class->fields) {
+                if (f->var_name == target_name) {
+                    resolved_decl = f.get();
+                    return;
+                }
+            }
+            for (const auto& m : current_class->methods) {
+                if (m->function_name == target_name) {
+                    resolved_decl = m.get();
+                    return;
+                }
+            }
+        }
+    }
+
+public:
+    SymbolDefinitionFinder(std::string name, int l, int c)
+        : target_name(std::move(name)), target_line(l), target_col(c) {}
+
+    ASTNode* getResolved() const { return resolved_decl; }
+
+    void walk(ASTNode* node) {
+        if (!node || ref_found) return;
+
+        if (isTargetRef(node)) {
+            if (auto* ident = dynamic_cast<IdentifierNode*>(node)) {
+                if (ident->name == target_name) {
+                    resolve();
+                    ref_found = true;
+                    return;
+                }
+            }
+        }
+
+        if (auto* prog = dynamic_cast<ProgramNode*>(node)) {
+            for (const auto& s : prog->statements) walk(s.get());
+        }
+        else if (auto* var = dynamic_cast<VarDeclNode*>(node)) {
+            addLocal(var);
+            walk(var->initializer.get());
+        }
+        else if (auto* class_decl = dynamic_cast<ClassDeclNode*>(node)) {
+            ClassDeclNode* prev_class = current_class;
+            current_class = class_decl;
+            pushScope();
+            
+            for (const auto& arg : class_decl->primary_constructor_args) {
+                addLocal(arg.get());
+            }
+            for (const auto& f : class_decl->fields) {
+                walk(f.get());
+            }
+            for (const auto& m : class_decl->methods) {
+                walk(m.get());
+            }
+            
+            popScope();
+            current_class = prev_class;
+        }
+        else if (auto* interface_decl = dynamic_cast<InterfaceDeclNode*>(node)) {
+            for (const auto& m : interface_decl->methods) walk(m.get());
+        }
+        else if (auto* fn = dynamic_cast<FunctionNode*>(node)) {
+            pushScope();
+            for (const auto& p : fn->parameters) {
+                addLocal(p.get());
+            }
+            for (const auto& s : fn->body) {
+                walk(s.get());
+            }
+            popScope();
+        }
+        else if (auto* if_stmt = dynamic_cast<IfStmtNode*>(node)) {
+            walk(if_stmt->condition.get());
+            pushScope();
+            for (const auto& s : if_stmt->then_branch) walk(s.get());
+            popScope();
+            pushScope();
+            for (const auto& s : if_stmt->else_branch) walk(s.get());
+            popScope();
+        }
+        else if (auto* while_stmt = dynamic_cast<WhileStmtNode*>(node)) {
+            walk(while_stmt->condition.get());
+            pushScope();
+            for (const auto& s : while_stmt->body) walk(s.get());
+            popScope();
+        }
+        else if (auto* return_stmt = dynamic_cast<ReturnStmtNode*>(node)) {
+            walk(return_stmt->expression.get());
+        }
+        else if (auto* set_state = dynamic_cast<SetStateStmtNode*>(node)) {
+            pushScope();
+            for (const auto& s : set_state->body) walk(s.get());
+            popScope();
+        }
+        else if (auto* await_expr = dynamic_cast<AwaitExprNode*>(node)) {
+            walk(await_expr->expression.get());
+        }
+        else if (auto* try_expr = dynamic_cast<TryExprNode*>(node)) {
+            walk(try_expr->expression.get());
+        }
+        else if (auto* match_expr = dynamic_cast<MatchExprNode*>(node)) {
+            walk(match_expr->subject.get());
+            for (const auto& arm : match_expr->arms) {
+                pushScope();
+                walk(arm.second.get());
+                popScope();
+            }
+        }
+        else if (auto* lambda = dynamic_cast<LambdaNode*>(node)) {
+            pushScope();
+            for (const auto& p : lambda->parameters) {
+                addLocal(p.get());
+            }
+            for (const auto& s : lambda->body) {
+                walk(s.get());
+            }
+            popScope();
+        }
+        else if (auto* ui = dynamic_cast<UIComponentNode*>(node)) {
+            for (const auto& child : ui->children) walk(child.get());
+            for (const auto& arg : ui->named_args) walk(arg.second.get());
+        }
+        else if (auto* binary = dynamic_cast<BinaryExprNode*>(node)) {
+            walk(binary->left.get());
+            walk(binary->right.get());
+        }
+        else if (auto* opt = dynamic_cast<OptionExprNode*>(node)) {
+            walk(opt->value.get());
+        }
+        else if (auto* res = dynamic_cast<ResultExprNode*>(node)) {
+            walk(res->value.get());
+        }
+        else if (auto* list_lit = dynamic_cast<ListLiteralNode*>(node)) {
+            for (const auto& elem : list_lit->elements) walk(elem.get());
+        }
+        else if (auto* map_lit = dynamic_cast<MapLiteralNode*>(node)) {
+            for (const auto& entry : map_lit->entries) {
+                walk(entry.first.get());
+                walk(entry.second.get());
+            }
+        }
+        else if (auto* prop = dynamic_cast<PropertyAccessNode*>(node)) {
+            walk(prop->object.get());
+        }
+        else if (auto* call = dynamic_cast<FunctionCallNode*>(node)) {
+            for (const auto& arg : call->arguments) walk(arg.get());
+        }
+        else if (auto* call = dynamic_cast<MethodCallNode*>(node)) {
+            walk(call->object.get());
+            for (const auto& arg : call->arguments) walk(arg.get());
+        }
+    }
+};
+
+DefinitionLocation findDefinitionForSymbol(const std::string& symbol_name, ProgramNode* program, int target_line, int target_col) {
     DefinitionLocation result;
     
-    // Search through all statements to find where this symbol is defined
+    // 1. Recursive scope check (identifies local variables, parameters, fields, and methods)
+    SymbolDefinitionFinder finder(symbol_name, target_line, target_col);
+    finder.walk(program);
+    ASTNode* resolved = finder.getResolved();
+    
+    if (resolved) {
+        result.line = resolved->line - 1;  // Convert to 0-indexed
+        result.col = resolved->column;
+        result.uri = "current";
+        return result;
+    }
+    
+    // 2. Fallback to top-level statements (global classes, functions, interfaces, variables)
     for (const auto& stmt : program->statements) {
         if (auto* var_decl = dynamic_cast<VarDeclNode*>(stmt.get())) {
             if (var_decl->var_name == symbol_name) {
-                result.line = var_decl->line - 1;  // Convert to 0-indexed
+                result.line = var_decl->line - 1;
                 result.col = var_decl->column;
+                result.uri = "current";
                 return result;
             }
         }
@@ -523,6 +741,7 @@ DefinitionLocation findDefinitionForSymbol(const std::string& symbol_name, Progr
             if (fn->function_name == symbol_name) {
                 result.line = fn->line - 1;
                 result.col = fn->column;
+                result.uri = "current";
                 return result;
             }
         }
@@ -530,6 +749,7 @@ DefinitionLocation findDefinitionForSymbol(const std::string& symbol_name, Progr
             if (class_decl->class_name == symbol_name) {
                 result.line = class_decl->line - 1;
                 result.col = class_decl->column;
+                result.uri = "current";
                 return result;
             }
         }
@@ -537,6 +757,7 @@ DefinitionLocation findDefinitionForSymbol(const std::string& symbol_name, Progr
             if (interface_decl->interface_name == symbol_name) {
                 result.line = interface_decl->line - 1;
                 result.col = interface_decl->column;
+                result.uri = "current";
                 return result;
             }
         }
@@ -570,10 +791,10 @@ void handleDefinition(const std::string& id_str, const std::string& uri, int lin
         return;
     }
     
-    DefinitionLocation def_loc = findDefinitionForSymbol(symbol_name, it->second.get());
+    DefinitionLocation def_loc = findDefinitionForSymbol(symbol_name, it->second.get(), target_line, target_col);
     
     std::string resp;
-    if (def_loc.uri.empty() && def_loc.line == 0 && def_loc.col == 0) {
+    if (def_loc.line == -1 || def_loc.col == -1 || def_loc.uri.empty()) {
         // No definition found in current file - could be builtin or external
         resp = "{\"jsonrpc\":\"2.0\",\"id\":" + id_str + ",\"result\":null}";
     } else {

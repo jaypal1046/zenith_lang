@@ -1,5 +1,0 @@
-import cdn "lib/key_derive/bridge.wasm" for "web";
-
-foreign "js" {
-    String deriveKey(String password, String salt);
-}

@@ -28,7 +28,7 @@ echo.
     src/backend/wasm_codegen.cpp ^
     -I include ^
     -o zenith.exe ^
-    -lws2_32 -lpthread
+    -lws2_32 -lwinhttp -lpthread
 
 if %errorlevel% neq 0 (
     echo [ERROR] Zenith compiler build failed.

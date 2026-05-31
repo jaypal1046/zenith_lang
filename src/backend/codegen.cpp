@@ -664,16 +664,6 @@ void CodeGenerator::generateFunction(FunctionNode* node) {
         }
     }
 
-    if (!node->generic_params.empty()) {
-        indent();
-        output << "template <";
-        for (size_t i = 0; i < node->generic_params.size(); ++i) {
-            output << "typename " << node->generic_params[i];
-            if (i < node->generic_params.size() - 1) output << ", ";
-        }
-        output << ">\n";
-    }
-
     indent();
     if (node->is_exported) {
         output << "#ifdef _WIN32\n";
@@ -843,15 +833,6 @@ void CodeGenerator::generateFunction(FunctionNode* node) {
 }
 
 void CodeGenerator::generateClass(ClassDeclNode* node) {
-    if (!node->generic_params.empty()) {
-        indent();
-        output << "template <";
-        for (size_t i = 0; i < node->generic_params.size(); ++i) {
-            output << "typename " << node->generic_params[i];
-            if (i < node->generic_params.size() - 1) output << ", ";
-        }
-        output << ">\n";
-    }
     indent();
     output << "class " << node->class_name;
 

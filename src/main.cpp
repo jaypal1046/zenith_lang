@@ -40,6 +40,7 @@
   #endif
   #include <winsock2.h>
   #include <windows.h>
+  #include <winhttp.h>
   #pragma comment(lib, "ws2_32.lib")
   #pragma comment(lib, "winhttp.lib")
 #else
@@ -79,7 +80,7 @@ std::string httpGet(const std::string& url) {
     if (!hRequest) { WinHttpCloseHandle(hConnect); WinHttpCloseHandle(hSession); return ""; }
     
     if (WinHttpSendRequest(hRequest, WINHTTP_NO_ADDITIONAL_HEADERS, 0, WINHTTP_NO_REQUEST_DATA, 0, 0, 0) &&
-        WinHttpReceiveResponse(hRequest)) {
+        WinHttpReceiveResponse(hRequest, NULL)) {
         
         DWORD bytesAvailable = 0;
         DWORD bytesRead = 0;

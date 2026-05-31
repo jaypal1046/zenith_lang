@@ -1068,9 +1068,9 @@ std::string JSCodeGenerator::generate(ProgramNode* program) {
     output << "                        return callWasmStringToString(instance, fnName, ...args);\n";
     output << "                    };\n";
     output << "                }\n";
-    output << "                zenith.println('[WASM] Raw WASM module loaded from ' + url);\n";
+    output << "                console.log('[WASM] Raw WASM module loaded from ' + url);\n";
     output << "            } catch (err) {\n";
-    output << "                zenith.println('[WASM Error] Failed to load ' + url + ': ' + err);\n";
+    output << "                console.error('[WASM Error] Failed to load ' + url + ': ' + err);\n";
     output << "            }\n";
     output << "        }\n\n";
     output << "        async function loadDartWasm(wasmUrl, mjsUrl, exportsToGlobal) {\n";
@@ -1086,9 +1086,9 @@ std::string JSCodeGenerator::generate(ProgramNode* program) {
     output << "                        window[fnName] = dartInstance[fnName];\n";
     output << "                    }\n";
     output << "                }\n";
-    output << "                zenith.println('[WASM] Dart WASM module loaded from ' + wasmUrl);\n";
+    output << "                console.log('[WASM] Dart WASM module loaded from ' + wasmUrl);\n";
     output << "            } catch (err) {\n";
-    output << "                zenith.println('[WASM Warning] Failed to load Dart WASM via JS module, trying raw loader: ' + err);\n";
+    output << "                console.warn('[WASM Warning] Failed to load Dart WASM via JS module, trying raw loader: ' + err);\n";
     output << "                await loadRawWasm(wasmUrl, exportsToGlobal);\n";
     output << "            }\n";
     output << "        }\n\n";

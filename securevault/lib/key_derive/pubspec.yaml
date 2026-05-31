@@ -1,7 +1,0 @@
-name: dart_key_derive_bridge
-environment:
-  sdk: '>=2.15.0 <3.0.0'
-
-dependencies:
-  crypto: ^3.0.3
-  pointycastle: ^3.7.3

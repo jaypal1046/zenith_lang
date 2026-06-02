@@ -1,0 +1,5 @@
+class AppWindows() {
+    String getPlatformName() {
+        return "Windows Native Application";
+    }
+}

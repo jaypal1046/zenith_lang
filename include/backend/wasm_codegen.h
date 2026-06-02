@@ -33,6 +33,11 @@ private:
     std::unordered_map<std::string, std::vector<std::string>> interface_implementations;
     std::unordered_map<std::string, std::unordered_set<std::string>> class_methods;
     std::string pre_rendered_html;
+    
+    // Loop control tracking
+    std::vector<int> loop_exit_ids;
+    std::vector<bool> loop_is_for;
+    int next_loop_id = 0;
 
     void indent();
     std::string mapTypeToWASM(TypeNode* type);

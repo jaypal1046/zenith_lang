@@ -32,6 +32,7 @@ private:
     std::vector<std::unique_ptr<ASTNode>> parseBlock();
     std::unique_ptr<IfStmtNode> parseIfStatement();
     std::unique_ptr<WhileStmtNode> parseWhileStatement();
+    std::unique_ptr<ForStmtNode> parseForStatement();
 
     std::unique_ptr<FunctionNode> parseFunction(bool is_agentic, bool is_async, std::unique_ptr<TypeNode> return_type);
     std::unique_ptr<ClassDeclNode> parseClass(bool is_managed = false);

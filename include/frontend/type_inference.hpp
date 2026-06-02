@@ -116,7 +116,13 @@ private:
         // Both are concrete types - check compatibility
         if (isPrimitiveType(t1) && isPrimitiveType(t2)) {
             // Allow Int ↔ i32, Float ↔ f64, etc.
-            return normalizeType(t1) == normalizeType(t2);
+            std::string normalized_t1 = normalizeType(t1);
+            std::string normalized_t2 = normalizeType(t2);
+            if ((normalized_t1 == "Int" && normalized_t2 == "Float") ||
+                (normalized_t1 == "Float" && normalized_t2 == "Int")) {
+                return true;
+            }
+            return normalized_t1 == normalized_t2;
         }
         
         // Handle generic types
@@ -215,7 +221,10 @@ public:
             for (size_t i = 1; i < list->elements.size(); i++) {
                 std::string other_type = inferType(list->elements[i].get());
                 if (elem_type != other_type) {
-                    // Could add error reporting here
+                    if ((elem_type == "Int" && other_type == "Float") ||
+                        (elem_type == "Float" && other_type == "Int")) {
+                        elem_type = "Float";
+                    }
                 }
             }
             

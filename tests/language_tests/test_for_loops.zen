@@ -1,0 +1,33 @@
+import std.io;
+
+Void main() {
+    println("Testing For Loops control statements...");
+
+    // 1. Basic C-style for loop
+    println("Basic for loop:");
+    for (let i = 0; i < 5; i += 1) {
+        println("i = " + i);
+    }
+
+    // 2. Loop with continue and break
+    println("For loop with continue and break:");
+    for (let j = 0; j < 5; j += 1) {
+        if (j == 2) {
+            println("Skipping 2");
+            continue;
+        }
+        if (j == 4) {
+            println("Breaking at 4");
+            break;
+        }
+        println("j = " + j);
+    }
+
+    // 3. Nested for loops
+    println("Nested for loops:");
+    for (let x = 0; x < 3; x += 1) {
+        for (let y = 0; y < 2; y += 1) {
+            println("x = " + x + ", y = " + y);
+        }
+    }
+}

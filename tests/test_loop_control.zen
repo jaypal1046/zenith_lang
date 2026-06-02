@@ -1,0 +1,45 @@
+import std.io;
+
+Void main() {
+    println("Testing loop control statements...");
+    
+    // Test break in simple loop
+    let i = 0;
+    println("Testing break:");
+    while (i < 10) {
+        if (i == 5) {
+            println("Breaking at 5");
+            break;
+        }
+        println("i = " + i);
+        i = i + 1;
+    }
+    
+    // Test continue in simple loop
+    let j = 0;
+    println("Testing continue:");
+    while (j < 5) {
+        j = j + 1;
+        if (j == 3) {
+            println("Skipping 3");
+            continue;
+        }
+        println("j = " + j);
+    }
+    
+    // Test nested loops with break and continue
+    let x = 0;
+    println("Testing nested loops:");
+    while (x < 3) {
+        let y = 0;
+        while (y < 3) {
+            if (y == 1) {
+                y = y + 1;
+                continue;
+            }
+            println("x=" + x + ", y=" + y);
+            y = y + 1;
+        }
+        x = x + 1;
+    }
+}

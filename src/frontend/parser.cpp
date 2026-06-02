@@ -216,6 +216,14 @@ std::unique_ptr<ExprNode> Parser::parseExpression() {
         auto expr = parseExpression();
         return locate(std::make_unique<AwaitExprNode>(std::move(expr)), await_tok);
     }
+    // If it's a unary expression (e.g. !x, -5)
+    if (current().type == TokenType::OP && (current().value == "!" || current().value == "-")) {
+        const Token& op_tok = current();
+        std::string op(current().value);
+        advance(); // consume "!" or "-"
+        auto expr = parseExpression();
+        return locate(std::make_unique<UnaryExprNode>(op, std::move(expr)), op_tok);
+    }
     // If it's a list literal
     if (current().type == TokenType::PUNCT && current().value == "[") {
         return parseListLiteral();
@@ -266,7 +274,11 @@ std::unique_ptr<ExprNode> Parser::parseExpression() {
 
     std::unique_ptr<ExprNode> left_node;
     const Token& start_tok = current();
-    if (current().type == TokenType::STRING) {
+    if (current().type == TokenType::PUNCT && current().value == "(") {
+        advance();
+        left_node = parseExpression();
+        expect(TokenType::PUNCT, "Expected ')' after grouped expression");
+    } else if (current().type == TokenType::STRING) {
         left_node = locate(std::make_unique<StringLiteralNode>(std::string(current().value)), start_tok);
         advance();
     } else if (current().type == TokenType::INT) {
@@ -328,10 +340,20 @@ std::vector<std::unique_ptr<ASTNode>> Parser::parseBlock() {
             statements.push_back(parseIfStatement());
         } else if (match(TokenType::KEYWORD, "while")) {
             statements.push_back(parseWhileStatement());
+        } else if (match(TokenType::KEYWORD, "for")) {
+            statements.push_back(parseForStatement());
         } else if (match(TokenType::KEYWORD, "setState")) {
             const Token& start_tok = prev();
             auto body = parseBlock();
             statements.push_back(locate(std::make_unique<SetStateStmtNode>(std::move(body)), start_tok));
+        } else if (match(TokenType::KEYWORD, "break")) {
+            const Token& start_tok = prev();
+            expect(TokenType::PUNCT, "Expected ';'");
+            statements.push_back(locate(std::make_unique<BreakStmtNode>(), start_tok));
+        } else if (match(TokenType::KEYWORD, "continue")) {
+            const Token& start_tok = prev();
+            expect(TokenType::PUNCT, "Expected ';'");
+            statements.push_back(locate(std::make_unique<ContinueStmtNode>(), start_tok));
         } else if (match(TokenType::KEYWORD, "return")) {
             const Token& start_tok = prev();
             auto expr = parseExpression();
@@ -359,6 +381,11 @@ std::vector<std::unique_ptr<ASTNode>> Parser::parseBlock() {
             }
             
             statements.push_back(locate(std::make_unique<VarDeclNode>(std::move(type), var_name, std::move(init)), start_tok));
+        } else if (current().type == TokenType::TYPE &&
+                   peek().type == TokenType::ID &&
+                   peek(2).type == TokenType::PUNCT && peek(2).value == "(") {
+            auto return_type = parseType();
+            statements.push_back(parseFunction(false, false, std::move(return_type)));
         } else if (current().type == TokenType::TYPE ||
                    (current().type == TokenType::ID && std::isupper(static_cast<unsigned char>(current().value[0])) &&
                     peek().value != "." && peek().value != "(")) {
@@ -416,7 +443,11 @@ std::unique_ptr<IfStmtNode> Parser::parseIfStatement() {
     if_node->then_branch = parseBlock();
 
     if (match(TokenType::KEYWORD, "else")) {
-        if_node->else_branch = parseBlock();
+        if (match(TokenType::KEYWORD, "if")) {
+            if_node->else_branch.push_back(parseIfStatement());
+        } else {
+            if_node->else_branch = parseBlock();
+        }
     }
     return if_node;
 }
@@ -430,6 +461,52 @@ std::unique_ptr<WhileStmtNode> Parser::parseWhileStatement() {
     auto while_node = locate(std::make_unique<WhileStmtNode>(std::move(condition)), start_tok);
     while_node->body = parseBlock();
     return while_node;
+}
+
+std::unique_ptr<ForStmtNode> Parser::parseForStatement() {
+    const Token& start_tok = prev();
+    expect(TokenType::PUNCT, "Expected '(' after 'for'");
+
+    std::unique_ptr<ASTNode> initializer = nullptr;
+    if (current().type != TokenType::PUNCT || current().value != ";") {
+        if (match(TokenType::KEYWORD, "let")) {
+            const Token& let_tok = prev();
+            std::string var_name(current().value);
+            expect(TokenType::ID, "Expected variable name");
+            std::unique_ptr<TypeNode> type = nullptr;
+            if (match(TokenType::PUNCT, ":")) {
+                type = parseType();
+            }
+            std::unique_ptr<ExprNode> init = nullptr;
+            if (match(TokenType::OP, "=")) {
+                init = parseExpression();
+            }
+            if (!type) {
+                type = locate(std::make_unique<TypeNode>("Auto"), let_tok);
+                type->is_inferred = true;
+            }
+            initializer = locate(std::make_unique<VarDeclNode>(std::move(type), var_name, std::move(init)), let_tok);
+        } else {
+            initializer = parseExpression();
+        }
+    }
+    expect(TokenType::PUNCT, "Expected ';' after initializer");
+
+    std::unique_ptr<ExprNode> condition = nullptr;
+    if (current().type != TokenType::PUNCT || current().value != ";") {
+        condition = parseExpression();
+    }
+    expect(TokenType::PUNCT, "Expected ';' after condition");
+
+    std::unique_ptr<ExprNode> update = nullptr;
+    if (current().type != TokenType::PUNCT || current().value != ")") {
+        update = parseExpression();
+    }
+    expect(TokenType::PUNCT, "Expected ')' after update");
+
+    auto for_node = locate(std::make_unique<ForStmtNode>(std::move(initializer), std::move(condition), std::move(update)), start_tok);
+    for_node->body = parseBlock();
+    return for_node;
 }
 
 std::unique_ptr<VarDeclNode> Parser::parseParameter() {
@@ -897,6 +974,28 @@ std::unique_ptr<ProgramNode> Parser::parseProgram() {
                 program->statements.push_back(std::move(fn));
             }
             expect(TokenType::PUNCT, "Expected '}' to close foreign block");
+        }
+        else if (match(TokenType::KEYWORD, "let")) {
+            const Token& let_tok = prev();
+            std::string var_name(current().value);
+            expect(TokenType::ID, "Expected variable name");
+
+            std::unique_ptr<TypeNode> type = nullptr;
+            if (match(TokenType::PUNCT, ":")) {
+                type = parseType();
+            }
+
+            expect(TokenType::OP, "=");
+            auto init = parseExpression();
+            expect(TokenType::PUNCT, "Expected ';'");
+
+            if (!type) {
+                type = locate(std::make_unique<TypeNode>("Auto"), let_tok);
+                type->is_inferred = true;
+            }
+
+            program->statements.push_back(
+                locate(std::make_unique<VarDeclNode>(std::move(type), var_name, std::move(init)), let_tok));
         }
         else if ((current().type == TokenType::KEYWORD && (current().value == "agentic" || current().value == "async")) ||
                  current().type == TokenType::TYPE ||

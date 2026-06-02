@@ -219,6 +219,18 @@ int WASMCodeGenerator::countUINodes(ASTNode* node) {
         count += countUINodes(ret->expression.get());
     } else if (auto* call = dynamic_cast<MethodCallNode*>(node)) {
         for (const auto& arg : call->arguments) count += countUINodes(arg.get());
+    } else if (auto* if_stmt = dynamic_cast<IfStmtNode*>(node)) {
+        count += countUINodes(if_stmt->condition.get());
+        for (const auto& s : if_stmt->then_branch) count += countUINodes(s.get());
+        for (const auto& s : if_stmt->else_branch) count += countUINodes(s.get());
+    } else if (auto* while_stmt = dynamic_cast<WhileStmtNode*>(node)) {
+        count += countUINodes(while_stmt->condition.get());
+        for (const auto& s : while_stmt->body) count += countUINodes(s.get());
+    } else if (auto* for_stmt = dynamic_cast<ForStmtNode*>(node)) {
+        count += countUINodes(for_stmt->initializer.get());
+        count += countUINodes(for_stmt->condition.get());
+        count += countUINodes(for_stmt->update.get());
+        for (const auto& s : for_stmt->body) count += countUINodes(s.get());
     }
     return count;
 }
@@ -234,7 +246,24 @@ std::string WASMCodeGenerator::mapTypeToWASM(TypeNode* type) {
 void WASMCodeGenerator::generateExpression(ExprNode* expr) {
     if (!expr) return;
     
-    if (auto* str = dynamic_cast<StringLiteralNode*>(expr)) {
+    if (auto* unary = dynamic_cast<UnaryExprNode*>(expr)) {
+        if (unary->op == "!") {
+            generateExpression(unary->expression.get());
+            indent(); output << "i32.eqz\n";
+        }
+        else if (unary->op == "-") {
+            bool is_float = isFloatExpression(unary->expression.get());
+            if (is_float) {
+                generateExpression(unary->expression.get());
+                indent(); output << "f64.neg\n";
+            } else {
+                indent(); output << "i32.const 0\n";
+                generateExpression(unary->expression.get());
+                indent(); output << "i32.sub\n";
+            }
+        }
+    }
+    else if (auto* str = dynamic_cast<StringLiteralNode*>(expr)) {
         indent();
         if (string_literals.find(str->value) == string_literals.end()) {
             string_literals[str->value] = next_string_offset;
@@ -297,21 +326,63 @@ void WASMCodeGenerator::generateExpression(ExprNode* expr) {
         }
     }
     else if (auto* binary = dynamic_cast<BinaryExprNode*>(expr)) {
-        if (binary->op == "=") {
-            // Assignment expression
+        if (binary->op == "=" || binary->op == "+=" || binary->op == "-=" || binary->op == "*=" || binary->op == "/=") {
+            // Assignment / Compound assignment expression
             if (auto* id = dynamic_cast<IdentifierNode*>(binary->left.get())) {
-                if (!current_class_name.empty() && class_field_offsets[current_class_name].find(id->name) != class_field_offsets[current_class_name].end()) {
-                    indent(); output << "local.get $this\n";
-                    generateExpression(binary->right.get());
-                    indent();
-                    if (class_field_types[current_class_name][id->name] == "Float") {
-                        output << "f64.store offset=" << class_field_offsets[current_class_name][id->name] << "\n";
+                bool is_field = !current_class_name.empty() && class_field_offsets[current_class_name].find(id->name) != class_field_offsets[current_class_name].end();
+                bool is_float = is_field ? (class_field_types[current_class_name][id->name] == "Float") : isFloatExpression(id);
+
+                if (binary->op == "=") {
+                    if (is_field) {
+                        indent(); output << "local.get $this\n";
+                        generateExpression(binary->right.get());
+                        indent();
+                        if (is_float) {
+                            output << "f64.store offset=" << class_field_offsets[current_class_name][id->name] << "\n";
+                        } else {
+                            output << "i32.store offset=" << class_field_offsets[current_class_name][id->name] << "\n";
+                        }
                     } else {
-                        output << "i32.store offset=" << class_field_offsets[current_class_name][id->name] << "\n";
+                        generateExpression(binary->right.get());
+                        indent(); output << "local.set $" << id->name << "\n";
                     }
                 } else {
-                    generateExpression(binary->right.get());
-                    indent(); output << "local.set $" << id->name << "\n";
+                    // Compound assignments: +=, -=, *=, /=
+                    std::string op = binary->op.substr(0, 1);
+                    if (is_field) {
+                        indent(); output << "local.get $this\n";
+                        indent(); output << "local.get $this\n";
+                        indent();
+                        if (is_float) {
+                            output << "f64.load offset=" << class_field_offsets[current_class_name][id->name] << "\n";
+                        } else {
+                            output << "i32.load offset=" << class_field_offsets[current_class_name][id->name] << "\n";
+                        }
+                        generateExpression(binary->right.get());
+                        indent();
+                        if (op == "+") output << (is_float ? "f64.add\n" : "i32.add\n");
+                        else if (op == "-") output << (is_float ? "f64.sub\n" : "i32.sub\n");
+                        else if (op == "*") output << (is_float ? "f64.mul\n" : "i32.mul\n");
+                        else if (op == "/") output << (is_float ? "f64.div\n" : "i32.div_s\n");
+                        
+                        indent();
+                        if (is_float) {
+                            output << "f64.store offset=" << class_field_offsets[current_class_name][id->name] << "\n";
+                        } else {
+                            output << "i32.store offset=" << class_field_offsets[current_class_name][id->name] << "\n";
+                        }
+                    } else {
+                        // Local variable
+                        indent(); output << "local.get $" << id->name << "\n";
+                        generateExpression(binary->right.get());
+                        indent();
+                        if (op == "+") output << (is_float ? "f64.add\n" : "i32.add\n");
+                        else if (op == "-") output << (is_float ? "f64.sub\n" : "i32.sub\n");
+                        else if (op == "*") output << (is_float ? "f64.mul\n" : "i32.mul\n");
+                        else if (op == "/") output << (is_float ? "f64.div\n" : "i32.div_s\n");
+                        
+                        indent(); output << "local.set $" << id->name << "\n";
+                    }
                 }
             }
             return;
@@ -695,25 +766,29 @@ void WASMCodeGenerator::generateStatement(ASTNode* stmt) {
         output << ")\n";
     }
     else if (auto* while_stmt = dynamic_cast<WhileStmtNode*>(stmt)) {
+        int loop_id = next_loop_id++;
+        loop_exit_ids.push_back(loop_id);
+        loop_is_for.push_back(false);
+        
         indent();
-        output << "(block $exit_loop\n";
+        output << "(block $exit_loop_" << loop_id << "\n";
         indent_level++;
         indent();
-        output << "(loop $start_loop\n";
+        output << "(loop $start_loop_" << loop_id << "\n";
         indent_level++;
         
         generateExpression(while_stmt->condition.get());
         indent();
         output << "i32.eqz\n";
         indent();
-        output << "br_if $exit_loop\n";
+        output << "br_if $exit_loop_" << loop_id << "\n";
         
         for (const auto& s : while_stmt->body) {
             generateStatement(s.get());
         }
         
         indent();
-        output << "br $start_loop\n";
+        output << "br $start_loop_" << loop_id << "\n";
         
         indent_level--;
         indent();
@@ -721,6 +796,80 @@ void WASMCodeGenerator::generateStatement(ASTNode* stmt) {
         indent_level--;
         indent();
         output << ")\n";
+        
+        loop_exit_ids.pop_back();
+        loop_is_for.pop_back();
+    }
+    else if (auto* for_stmt = dynamic_cast<ForStmtNode*>(stmt)) {
+        int loop_id = next_loop_id++;
+        loop_exit_ids.push_back(loop_id);
+        loop_is_for.push_back(true);
+
+        if (for_stmt->initializer) {
+            generateStatement(for_stmt->initializer.get());
+        }
+
+        indent();
+        output << "(block $exit_loop_" << loop_id << "\n";
+        indent_level++;
+        indent();
+        output << "(loop $start_loop_" << loop_id << "\n";
+        indent_level++;
+
+        if (for_stmt->condition) {
+            generateExpression(for_stmt->condition.get());
+            indent();
+            output << "i32.eqz\n";
+            indent();
+            output << "br_if $exit_loop_" << loop_id << "\n";
+        }
+
+        indent();
+        output << "(block $continue_loop_" << loop_id << "\n";
+        indent_level++;
+
+        for (const auto& s : for_stmt->body) {
+            generateStatement(s.get());
+        }
+
+        indent_level--;
+        indent();
+        output << ")\n";
+
+        if (for_stmt->update) {
+            generateExpression(for_stmt->update.get());
+            indent();
+            output << "drop\n";
+        }
+
+        indent();
+        output << "br $start_loop_" << loop_id << "\n";
+
+        indent_level--;
+        indent();
+        output << ")\n";
+        indent_level--;
+        indent();
+        output << ")\n";
+
+        loop_exit_ids.pop_back();
+        loop_is_for.pop_back();
+    }
+    else if (dynamic_cast<BreakStmtNode*>(stmt)) {
+        if (!loop_exit_ids.empty()) {
+            indent();
+            output << "br $exit_loop_" << loop_exit_ids.back() << "\n";
+        }
+    }
+    else if (dynamic_cast<ContinueStmtNode*>(stmt)) {
+        if (!loop_exit_ids.empty()) {
+            indent();
+            if (loop_is_for.back()) {
+                output << "br $continue_loop_" << loop_exit_ids.back() << "\n";
+            } else {
+                output << "br $start_loop_" << loop_exit_ids.back() << "\n";
+            }
+        }
     }
     else if (auto* set_state = dynamic_cast<SetStateStmtNode*>(stmt)) {
         for (const auto& s : set_state->body) {
@@ -736,6 +885,27 @@ void WASMCodeGenerator::generateStatement(ASTNode* stmt) {
     }
     else if (auto* expr = dynamic_cast<ExprNode*>(stmt)) {
         generateExpression(expr);
+    }
+}
+
+static void collectLocals(ASTNode* node, std::vector<VarDeclNode*>& locals) {
+    if (!node) return;
+    if (auto* var_decl = dynamic_cast<VarDeclNode*>(node)) {
+        locals.push_back(var_decl);
+    } else if (auto* if_stmt = dynamic_cast<IfStmtNode*>(node)) {
+        collectLocals(if_stmt->condition.get(), locals);
+        for (const auto& s : if_stmt->then_branch) collectLocals(s.get(), locals);
+        for (const auto& s : if_stmt->else_branch) collectLocals(s.get(), locals);
+    } else if (auto* while_stmt = dynamic_cast<WhileStmtNode*>(node)) {
+        collectLocals(while_stmt->condition.get(), locals);
+        for (const auto& s : while_stmt->body) collectLocals(s.get(), locals);
+    } else if (auto* for_stmt = dynamic_cast<ForStmtNode*>(node)) {
+        collectLocals(for_stmt->initializer.get(), locals);
+        collectLocals(for_stmt->condition.get(), locals);
+        collectLocals(for_stmt->update.get(), locals);
+        for (const auto& s : for_stmt->body) collectLocals(s.get(), locals);
+    } else if (auto* set_state = dynamic_cast<SetStateStmtNode*>(node)) {
+        for (const auto& s : set_state->body) collectLocals(s.get(), locals);
     }
 }
 
@@ -790,15 +960,23 @@ void WASMCodeGenerator::generateFunction(FunctionNode* node) {
     
     // We must declare all locals at the top in WASM
     int total_ui_nodes = 0;
+    std::vector<VarDeclNode*> all_locals;
     for (const auto& stmt : node->body) {
-        if (auto* var_decl = dynamic_cast<VarDeclNode*>(stmt.get())) {
+        collectLocals(stmt.get(), all_locals);
+        total_ui_nodes += countUINodes(stmt.get());
+    }
+    
+    // De-duplicate locals by variable name to prevent double-declaration
+    std::unordered_set<std::string> declared_names;
+    for (auto* var_decl : all_locals) {
+        if (declared_names.count(var_decl->var_name) == 0) {
+            declared_names.insert(var_decl->var_name);
             indent();
             output << "(local $" << var_decl->var_name << " " << mapTypeToWASM(var_decl->type.get()) << ")\n";
             if (var_decl->type) {
                 local_types[var_decl->var_name] = var_decl->type->type_name;
             }
         }
-        total_ui_nodes += countUINodes(stmt.get());
     }
     
     // Declare temporary locals for UI building

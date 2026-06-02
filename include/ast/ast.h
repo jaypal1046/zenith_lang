@@ -75,6 +75,14 @@ public:
         : left(std::move(l)), op(std::move(o)), right(std::move(r)) {}
 };
 
+class UnaryExprNode : public ExprNode {
+public:
+    std::string op;
+    std::unique_ptr<ExprNode> expression;
+    UnaryExprNode(std::string o, std::unique_ptr<ExprNode> expr)
+        : op(std::move(o)), expression(std::move(expr)) {}
+};
+
 class IdentifierNode : public ExprNode {
 public:
     std::string name;
@@ -205,10 +213,32 @@ public:
     WhileStmtNode(std::unique_ptr<ExprNode> cond) : condition(std::move(cond)) {}
 };
 
+class ForStmtNode : public ASTNode {
+public:
+    std::unique_ptr<ASTNode> initializer;
+    std::unique_ptr<ExprNode> condition;
+    std::unique_ptr<ExprNode> update;
+    std::vector<std::unique_ptr<ASTNode>> body;
+
+    ForStmtNode(std::unique_ptr<ASTNode> init, std::unique_ptr<ExprNode> cond, std::unique_ptr<ExprNode> upd)
+        : initializer(std::move(init)), condition(std::move(cond)), update(std::move(upd)) {}
+};
+
+
 class ReturnStmtNode : public ASTNode {
 public:
     std::unique_ptr<ExprNode> expression;
     ReturnStmtNode(std::unique_ptr<ExprNode> expr) : expression(std::move(expr)) {}
+};
+
+class BreakStmtNode : public ASTNode {
+public:
+    BreakStmtNode() = default;
+};
+
+class ContinueStmtNode : public ASTNode {
+public:
+    ContinueStmtNode() = default;
 };
 
 class SetStateStmtNode : public ASTNode {

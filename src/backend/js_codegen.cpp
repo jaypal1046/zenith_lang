@@ -1,193 +1,488 @@
 #include "../../include/backend/js_codegen.h"
+#include <cctype>
+#include <cmath>
+#include <cstdlib>
 #include <iostream>
 #include <regex>
 #include <unordered_map>
 
-static std::string preRenderUIComponent(ASTNode* node, const std::unordered_map<std::string, std::string>& fields) {
-    if (!node) return "";
-    
-    if (auto* id = dynamic_cast<IdentifierNode*>(node)) {
-        if (fields.count(id->name)) {
-            return fields.at(id->name);
+struct PreRenderValue {
+    enum class Kind { Scalar, Html, HtmlList };
+
+    Kind kind = Kind::Scalar;
+    std::string text;
+    std::vector<std::string> html_items;
+
+    static PreRenderValue scalar(std::string value) {
+        PreRenderValue result;
+        result.kind = Kind::Scalar;
+        result.text = std::move(value);
+        return result;
+    }
+
+    static PreRenderValue html(std::string value) {
+        PreRenderValue result;
+        result.kind = Kind::Html;
+        result.text = std::move(value);
+        return result;
+    }
+
+    static PreRenderValue list(std::vector<std::string> items = {}) {
+        PreRenderValue result;
+        result.kind = Kind::HtmlList;
+        result.html_items = std::move(items);
+        return result;
+    }
+};
+
+struct PreRenderContext {
+    std::unordered_map<std::string, PreRenderValue> values;
+};
+
+static std::string escapeHtml(const std::string& value) {
+    std::string escaped;
+    escaped.reserve(value.size());
+    for (char c : value) {
+        switch (c) {
+            case '&': escaped += "&amp;"; break;
+            case '<': escaped += "&lt;"; break;
+            case '>': escaped += "&gt;"; break;
+            case '"': escaped += "&quot;"; break;
+            case '\'': escaped += "&#39;"; break;
+            default: escaped += c; break;
         }
-        return "";
     }
-    
-    if (auto* str = dynamic_cast<StringLiteralNode*>(node)) {
-        return str->value;
+    return escaped;
+}
+
+static std::string escapeAttribute(const std::string& value) {
+    return escapeHtml(value);
+}
+
+static std::string trimCopy(std::string value) {
+    const char* whitespace = " \t\r\n";
+    size_t start = value.find_first_not_of(whitespace);
+    if (start == std::string::npos) return "";
+    size_t end = value.find_last_not_of(whitespace);
+    return value.substr(start, end - start + 1);
+}
+
+static bool parseNumber(const std::string& value, double& out) {
+    char* end = nullptr;
+    out = std::strtod(value.c_str(), &end);
+    return end != value.c_str() && *end == '\0';
+}
+
+static std::string formatNumber(double value) {
+    double rounded = std::round(value);
+    if (std::fabs(value - rounded) < 0.0000001) {
+        return std::to_string(static_cast<long long>(rounded));
     }
-    
-    if (auto* num = dynamic_cast<NumberLiteralNode*>(node)) {
-        return num->value;
+
+    std::ostringstream ss;
+    ss << value;
+    return ss.str();
+}
+
+static std::string valueToText(const PreRenderValue& value) {
+    if (value.kind == PreRenderValue::Kind::HtmlList) {
+        std::string joined;
+        for (const auto& item : value.html_items) joined += item;
+        return joined;
     }
-    
-    if (auto* b = dynamic_cast<BoolLiteralNode*>(node)) {
-        return b->value ? "true" : "false";
+    return value.text;
+}
+
+static std::string valueToHtml(const PreRenderValue& value) {
+    if (value.kind == PreRenderValue::Kind::HtmlList) {
+        std::string joined;
+        for (const auto& item : value.html_items) joined += item;
+        return joined;
     }
-    
-    if (auto* binary = dynamic_cast<BinaryExprNode*>(node)) {
-        return preRenderUIComponent(binary->left.get(), fields) + preRenderUIComponent(binary->right.get(), fields);
+    if (value.kind == PreRenderValue::Kind::Html) {
+        return value.text;
     }
-    
-    if (auto* ui = dynamic_cast<UIComponentNode*>(node)) {
-        std::string tag = "div";
-        std::string css_class = "";
-        std::string attrs = "";
-        std::string text_content = "";
-        
-        if (ui->component_type == "Column") {
-            css_class = "zenith-column";
-        } else if (ui->component_type == "Row") {
-            css_class = "zenith-row";
-        } else if (ui->component_type == "Text") {
-            tag = "span";
-            css_class = "zenith-text";
-            if (!ui->children.empty()) {
-                text_content = preRenderUIComponent(ui->children[0].get(), fields);
+    return escapeHtml(value.text);
+}
+
+static bool valueToBool(const PreRenderValue& value) {
+    std::string text = valueToText(value);
+    if (text == "true") return true;
+    if (text == "false" || text.empty()) return false;
+
+    double number = 0.0;
+    if (parseNumber(text, number)) return number != 0.0;
+    return true;
+}
+
+static bool isNumericText(const std::string& value) {
+    double ignored = 0.0;
+    return parseNumber(value, ignored);
+}
+
+static PreRenderValue preRenderExpression(ExprNode* expr, PreRenderContext& context);
+
+static std::string getNamedArgText(UIComponentNode* ui, const std::string& name, PreRenderContext& context, const std::string& fallback = "") {
+    for (const auto& arg : ui->named_args) {
+        if (arg.first == name) {
+            return valueToText(preRenderExpression(arg.second.get(), context));
+        }
+    }
+    return fallback;
+}
+
+static std::string styleValueWithUnit(const std::string& value) {
+    if (value.empty()) return value;
+    char last = value.back();
+    if (last >= '0' && last <= '9') return value + "px";
+    return value;
+}
+
+static std::string preRenderInlineStyles(UIComponentNode* ui, PreRenderContext& context) {
+    std::string style;
+    for (const auto& arg : ui->named_args) {
+        std::string key = arg.first;
+        std::string value = valueToText(preRenderExpression(arg.second.get(), context));
+        if (value.empty()) continue;
+
+        if (key == "color") style += "color: " + value + "; ";
+        else if (key == "backgroundColor") style += "background-color: " + value + "; ";
+        else if (key == "padding") style += "padding: " + styleValueWithUnit(value) + "; ";
+        else if (key == "margin") style += "margin: " + styleValueWithUnit(value) + "; ";
+        else if (key == "width") style += "width: " + styleValueWithUnit(value) + "; ";
+        else if (key == "height") style += "height: " + styleValueWithUnit(value) + "; ";
+        else if (key == "fontWeight") style += "font-weight: " + value + "; ";
+        else if (key == "gap") style += "gap: " + styleValueWithUnit(value) + "; ";
+        else if (key == "flexGrow") style += "flex-grow: " + value + "; ";
+        else if (key == "justifyContent") style += "justify-content: " + value + "; ";
+        else if (key == "alignItems") style += "align-items: " + value + "; ";
+        else if (key == "flexDirection") style += "flex-direction: " + value + "; ";
+    }
+    return style;
+}
+
+static std::string renderStyleAttribute(const std::string& base_style, const std::string& inline_style) {
+    std::string style = base_style + inline_style;
+    return style.empty() ? "" : " style=\"" + escapeAttribute(style) + "\"";
+}
+
+static std::string preRenderUIComponent(UIComponentNode* ui, PreRenderContext& context) {
+    if (!ui) return "";
+
+    std::string tag = "div";
+    std::string css_class;
+    std::string attrs;
+    std::string base_style;
+    std::string text_content;
+    std::string children_html;
+
+    if (ui->component_type == "Column") {
+        css_class = "zenith-column";
+    } else if (ui->component_type == "Row") {
+        css_class = "zenith-row";
+    } else if (ui->component_type == "Text") {
+        tag = "span";
+        css_class = "zenith-text";
+        if (!ui->children.empty()) {
+            text_content = escapeHtml(valueToText(preRenderExpression(ui->children[0].get(), context)));
+        }
+    } else if (ui->component_type == "Button") {
+        tag = "button";
+        css_class = "interactive-btn";
+        if (!ui->children.empty()) {
+            text_content = escapeHtml(valueToText(preRenderExpression(ui->children[0].get(), context)));
+        }
+    } else if (ui->component_type == "Card") {
+        css_class = "zenith-card";
+        base_style = "display: flex; flex-direction: column; background: rgba(30, 41, 59, 0.6); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 16px; padding: 20px; margin: 10px 0; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4); ";
+    } else if (ui->component_type == "Container") {
+        base_style = "display: flex; flex-direction: column; border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 12px; padding: 16px; background: rgba(255, 255, 255, 0.02); ";
+    } else if (ui->component_type == "Scrolling") {
+        base_style = "display: flex; flex-direction: column; overflow-y: auto; max-height: 300px; border: 1px solid rgba(255, 255, 255, 0.1); padding: 12px; border-radius: 12px; background: rgba(0, 0, 0, 0.3); ";
+    } else if (ui->component_type == "TextField") {
+        tag = "input";
+        css_class = "zenith-input";
+        std::string placeholder = ui->children.empty() ? "" : valueToText(preRenderExpression(ui->children[0].get(), context));
+        std::string value = getNamedArgText(ui, "value", context);
+        attrs += " type=\"text\" placeholder=\"" + escapeAttribute(placeholder) + "\"";
+        if (!value.empty()) attrs += " value=\"" + escapeAttribute(value) + "\"";
+    } else if (ui->component_type == "Checkbox") {
+        std::string label = ui->children.empty() ? "" : valueToText(preRenderExpression(ui->children[0].get(), context));
+        bool is_checked = valueToBool(PreRenderValue::scalar(getNamedArgText(ui, "checked", context, "false")));
+        std::string checked_attr = is_checked ? " checked" : "";
+        return "<label style=\"display: flex; align-items: center; gap: 8px; cursor: pointer; margin: 5px; color: rgb(226, 232, 240);\"><input type=\"checkbox\" style=\"width: 18px; height: 18px; accent-color: rgb(0, 242, 254); cursor: pointer;\"" + checked_attr + " /><span>" + escapeHtml(label) + "</span></label>";
+    } else if (ui->component_type == "Slider") {
+        tag = "input";
+        css_class = "zenith-input";
+        attrs += " type=\"range\" min=\"" + escapeAttribute(getNamedArgText(ui, "min", context, "0")) + "\"";
+        attrs += " max=\"" + escapeAttribute(getNamedArgText(ui, "max", context, "100")) + "\"";
+        attrs += " value=\"" + escapeAttribute(getNamedArgText(ui, "value", context, "50")) + "\"";
+        base_style = "accent-color: rgb(0, 242, 254); cursor: pointer; ";
+    } else if (ui->component_type == "Toggle") {
+        std::string label = ui->children.empty() ? "" : valueToText(preRenderExpression(ui->children[0].get(), context));
+        bool is_on = valueToBool(PreRenderValue::scalar(getNamedArgText(ui, "isOn", context, "false")));
+        std::string bg_color = is_on ? "rgb(16, 185, 129)" : "rgb(71, 85, 105)";
+        std::string transform = is_on ? "transform: translateX(20px);" : "";
+        return "<label style=\"display: flex; align-items: center; gap: 10px; cursor: pointer; margin: 5px;\"><div style=\"position: relative; width: 44px; height: 24px; background-color: " + bg_color + "; border-radius: 12px; transition: background-color 0.2s;\"><div style=\"position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; border-radius: 50%; background-color: rgb(255, 255, 255); transition: transform 0.2s; " + transform + "\"></div></div><span style=\"color: rgb(226, 232, 240);\">" + escapeHtml(label) + "</span></label>";
+    } else if (ui->component_type == "Dropdown") {
+        tag = "select";
+        css_class = "zenith-input";
+        base_style = "background: rgba(15, 23, 42, 0.8); color: rgb(248, 250, 252); cursor: pointer; ";
+        std::string options = ui->children.empty() ? "" : valueToText(preRenderExpression(ui->children[0].get(), context));
+        std::string current = getNamedArgText(ui, "value", context);
+        size_t pos = 0;
+        while (pos < options.length()) {
+            size_t comma = options.find(',', pos);
+            std::string option = trimCopy(options.substr(pos, comma == std::string::npos ? std::string::npos : comma - pos));
+            if (!option.empty()) {
+                std::string selected = (option == current) ? " selected" : "";
+                text_content += "<option value=\"" + escapeAttribute(option) + "\"" + selected + ">" + escapeHtml(option) + "</option>";
             }
-        } else if (ui->component_type == "Button") {
-            tag = "button";
-            css_class = "interactive-btn";
-            if (!ui->children.empty()) {
-                text_content = preRenderUIComponent(ui->children[0].get(), fields);
+            if (comma == std::string::npos) break;
+            pos = comma + 1;
+        }
+    } else if (ui->component_type == "Image" || ui->component_type == "Video") {
+        tag = ui->component_type == "Image" ? "img" : "video";
+        std::string url = ui->children.empty() ? "" : valueToText(preRenderExpression(ui->children[0].get(), context));
+        attrs += " src=\"" + escapeAttribute(url) + "\"";
+        if (ui->component_type == "Video") attrs += " controls";
+        base_style = "max-width: 100%; border-radius: 12px; box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5); border: 1px solid rgba(255, 255, 255, 0.1); ";
+    }
+
+    if (ui->component_type == "Column" || ui->component_type == "Row" ||
+        ui->component_type == "Card" || ui->component_type == "Container" ||
+        ui->component_type == "Scrolling") {
+        for (const auto& child : ui->children) {
+            children_html += valueToHtml(preRenderExpression(child.get(), context));
+        }
+    }
+
+    std::string class_attr = css_class.empty() ? "" : " class=\"" + escapeAttribute(css_class) + "\"";
+    std::string style_attr = renderStyleAttribute(base_style, preRenderInlineStyles(ui, context));
+    
+    if (tag == "img" || tag == "input") {
+        return "<" + tag + class_attr + attrs + style_attr + " />";
+    }
+    
+    return "<" + tag + class_attr + attrs + style_attr + ">" + text_content + children_html + "</" + tag + ">";
+}
+
+static PreRenderValue preRenderExpression(ExprNode* expr, PreRenderContext& context) {
+    if (!expr) return PreRenderValue::scalar("");
+
+    if (auto* id = dynamic_cast<IdentifierNode*>(expr)) {
+        auto found = context.values.find(id->name);
+        return found == context.values.end() ? PreRenderValue::scalar("") : found->second;
+    }
+    if (auto* str = dynamic_cast<StringLiteralNode*>(expr)) {
+        return PreRenderValue::scalar(str->value);
+    }
+    if (auto* num = dynamic_cast<NumberLiteralNode*>(expr)) {
+        return PreRenderValue::scalar(num->value);
+    }
+    if (auto* b = dynamic_cast<BoolLiteralNode*>(expr)) {
+        return PreRenderValue::scalar(b->value ? "true" : "false");
+    }
+    if (auto* list = dynamic_cast<ListLiteralNode*>(expr)) {
+        std::vector<std::string> items;
+        for (const auto& element : list->elements) {
+            items.push_back(valueToHtml(preRenderExpression(element.get(), context)));
+        }
+        return PreRenderValue::list(items);
+    }
+    if (auto* unary = dynamic_cast<UnaryExprNode*>(expr)) {
+        PreRenderValue inner = preRenderExpression(unary->expression.get(), context);
+        if (unary->op == "!") return PreRenderValue::scalar(valueToBool(inner) ? "false" : "true");
+        if (unary->op == "-") {
+            double number = 0.0;
+            if (parseNumber(valueToText(inner), number)) return PreRenderValue::scalar(formatNumber(-number));
+        }
+        return inner;
+    }
+    if (auto* binary = dynamic_cast<BinaryExprNode*>(expr)) {
+        if (binary->op == "=") {
+            PreRenderValue right = preRenderExpression(binary->right.get(), context);
+            if (auto* left_id = dynamic_cast<IdentifierNode*>(binary->left.get())) {
+                context.values[left_id->name] = right;
             }
-        } else if (ui->component_type == "Card") {
-            css_class = "zenith-card";
-            attrs += " style=\"display: flex; flex-direction: column; background: rgba(30, 41, 59, 0.6); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 16px; padding: 20px; margin: 10px 0; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);\"";
-        } else if (ui->component_type == "Container") {
-            attrs += " style=\"display: flex; flex-direction: column; border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 12px; padding: 16px; background: rgba(255, 255, 255, 0.02);\"";
-        } else if (ui->component_type == "Scrolling") {
-            attrs += " style=\"display: flex; flex-direction: column; overflow-y: auto; max-height: 300px; border: 1px solid rgba(255, 255, 255, 0.1); padding: 12px; border-radius: 12px; background: rgba(0, 0, 0, 0.3);\"";
-        } else if (ui->component_type == "TextField") {
-            tag = "input";
-            std::string placeholder = "";
-            if (!ui->children.empty()) {
-                placeholder = preRenderUIComponent(ui->children[0].get(), fields);
+            return right;
+        }
+
+        PreRenderValue left = preRenderExpression(binary->left.get(), context);
+        PreRenderValue right = preRenderExpression(binary->right.get(), context);
+        std::string left_text = valueToText(left);
+        std::string right_text = valueToText(right);
+
+        if (binary->op == "==" || binary->op == "!=") {
+            bool equal = left_text == right_text;
+            return PreRenderValue::scalar((binary->op == "==" ? equal : !equal) ? "true" : "false");
+        }
+        if (binary->op == "&&") return PreRenderValue::scalar((valueToBool(left) && valueToBool(right)) ? "true" : "false");
+        if (binary->op == "||") return PreRenderValue::scalar((valueToBool(left) || valueToBool(right)) ? "true" : "false");
+
+        double left_num = 0.0;
+        double right_num = 0.0;
+        bool left_is_num = parseNumber(left_text, left_num);
+        bool right_is_num = parseNumber(right_text, right_num);
+
+        if (binary->op == "+") {
+            if (binary->is_string_concat || !left_is_num || !right_is_num) {
+                return PreRenderValue::scalar(left_text + right_text);
             }
-            std::string val_val = "";
-            for (const auto& arg : ui->named_args) {
-                if (arg.first == "value") {
-                    val_val = preRenderUIComponent(arg.second.get(), fields);
+            return PreRenderValue::scalar(formatNumber(left_num + right_num));
+        }
+        if (left_is_num && right_is_num) {
+            if (binary->op == "-") return PreRenderValue::scalar(formatNumber(left_num - right_num));
+            if (binary->op == "*") return PreRenderValue::scalar(formatNumber(left_num * right_num));
+            if (binary->op == "/") return PreRenderValue::scalar(right_num == 0.0 ? "0" : formatNumber(left_num / right_num));
+            if (binary->op == "<") return PreRenderValue::scalar(left_num < right_num ? "true" : "false");
+            if (binary->op == ">") return PreRenderValue::scalar(left_num > right_num ? "true" : "false");
+            if (binary->op == "<=") return PreRenderValue::scalar(left_num <= right_num ? "true" : "false");
+            if (binary->op == ">=") return PreRenderValue::scalar(left_num >= right_num ? "true" : "false");
+        }
+        return PreRenderValue::scalar("");
+    }
+    if (auto* call = dynamic_cast<MethodCallNode*>(expr)) {
+        if (call->method_name == "push" && call->arguments.size() == 1) {
+            if (auto* object_id = dynamic_cast<IdentifierNode*>(call->object.get())) {
+                PreRenderValue& target = context.values[object_id->name];
+                if (target.kind != PreRenderValue::Kind::HtmlList) {
+                    target = PreRenderValue::list();
                 }
-            }
-            std::string val_attr = val_val.empty() ? "" : " value=\"" + val_val + "\"";
-            attrs += " type=\"text\" class=\"zenith-input\" placeholder=\"" + placeholder + "\"" + val_attr;
-        } else if (ui->component_type == "Checkbox") {
-            std::string label = "";
-            if (!ui->children.empty()) {
-                label = preRenderUIComponent(ui->children[0].get(), fields);
-            }
-            std::string is_checked_val = "false";
-            for (const auto& arg : ui->named_args) {
-                if (arg.first == "checked") {
-                    is_checked_val = preRenderUIComponent(arg.second.get(), fields);
-                }
-            }
-            std::string checked_attr = (is_checked_val == "true") ? " checked" : "";
-            return "<label style=\"display: flex; align-items: center; gap: 8px; cursor: pointer; margin: 5px; color: rgb(226, 232, 240);\"><input type=\"checkbox\" style=\"width: 18px; height: 18px; accent-color: rgb(0, 242, 254); cursor: pointer;\"" + checked_attr + " /><span>" + label + "</span></label>";
-        } else if (ui->component_type == "Slider") {
-            tag = "input";
-            std::string min_val = "0";
-            std::string max_val = "100";
-            std::string cur_val = "50";
-            for (const auto& arg : ui->named_args) {
-                std::string key = arg.first;
-                std::string val = preRenderUIComponent(arg.second.get(), fields);
-                if (key == "min") min_val = val;
-                else if (key == "max") max_val = val;
-                else if (key == "value") cur_val = val;
-            }
-            attrs += " type=\"range\" class=\"zenith-input\" min=\"" + min_val + "\" max=\"" + max_val + "\" value=\"" + cur_val + "\" style=\"accent-color: rgb(0, 242, 254); cursor: pointer;\"";
-        } else if (ui->component_type == "Toggle") {
-            std::string label = "";
-            if (!ui->children.empty()) {
-                label = preRenderUIComponent(ui->children[0].get(), fields);
-            }
-            std::string is_on_val = "false";
-            for (const auto& arg : ui->named_args) {
-                if (arg.first == "isOn") {
-                    is_on_val = preRenderUIComponent(arg.second.get(), fields);
-                }
-            }
-            bool is_on = (is_on_val == "true");
-            std::string bg_color = is_on ? "rgb(16, 185, 129)" : "rgb(71, 85, 105)";
-            std::string transform = is_on ? "transform: translateX(20px);" : "";
-            return "<label style=\"display: flex; align-items: center; gap: 10px; cursor: pointer; margin: 5px;\"><div style=\"position: relative; width: 44px; height: 24px; background-color: " + bg_color + "; border-radius: 12px; transition: background-color 0.2s;\"><div style=\"position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; border-radius: 50%; background-color: rgb(255, 255, 255); transition: transform 0.2s; " + transform + "\"></div></div><span style=\"color: rgb(226, 232, 240);\">" + label + "</span></label>";
-        } else if (ui->component_type == "Dropdown") {
-            tag = "select";
-            css_class = "zenith-input";
-            attrs += " style=\"background: rgba(15, 23, 42, 0.8); color: rgb(248, 250, 252); cursor: pointer;\"";
-            std::string options_str = "";
-            if (!ui->children.empty()) {
-                options_str = preRenderUIComponent(ui->children[0].get(), fields);
-            }
-            std::string current_val = "";
-            for (const auto& arg : ui->named_args) {
-                if (arg.first == "value") {
-                    current_val = preRenderUIComponent(arg.second.get(), fields);
-                }
-            }
-            std::string opts_html = "";
-            size_t pos = 0;
-            while (pos < options_str.length()) {
-                size_t comma = options_str.find(',', pos);
-                std::string opt = options_str.substr(pos, comma - pos);
-                opt.erase(0, opt.find_first_not_of(" \t\r\n"));
-                opt.erase(opt.find_last_not_of(" \t\r\n") + 1);
-                if (!opt.empty()) {
-                    std::string selected = (opt == current_val) ? " selected" : "";
-                    opts_html += "<option value=\"" + opt + "\"" + selected + ">" + opt + "</option>";
-                }
-                if (comma == std::string::npos) break;
-                pos = comma + 1;
-            }
-            text_content = opts_html;
-        } else if (ui->component_type == "Image") {
-            tag = "img";
-            std::string url = "";
-            if (!ui->children.empty()) {
-                url = preRenderUIComponent(ui->children[0].get(), fields);
-            }
-            attrs += " src=\"" + url + "\" style=\"max-width: 100%; border-radius: 12px; box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5); border: 1px solid rgba(255, 255, 255, 0.1);\"";
-        }
-        
-        // Render inline styling named arguments if present
-        std::string inline_style = "";
-        for (const auto& arg : ui->named_args) {
-            std::string key = arg.first;
-            std::string val_str = preRenderUIComponent(arg.second.get(), fields);
-            if (val_str.empty()) continue;
-            
-            bool is_digit = (val_str.back() >= '0' && val_str.back() <= '9');
-            if (key == "color") inline_style += "color: " + val_str + "; ";
-            else if (key == "backgroundColor") inline_style += "background-color: " + val_str + "; ";
-            else if (key == "padding") inline_style += "padding: " + val_str + (is_digit ? "px" : "") + "; ";
-            else if (key == "margin") inline_style += "margin: " + val_str + (is_digit ? "px" : "") + "; ";
-            else if (key == "width") inline_style += "width: " + val_str + (is_digit ? "px" : "") + "; ";
-            else if (key == "height") inline_style += "height: " + val_str + (is_digit ? "px" : "") + "; ";
-            else if (key == "fontWeight") inline_style += "font-weight: " + val_str + "; ";
-            else if (key == "gap") inline_style += "gap: " + val_str + (is_digit ? "px" : "") + "; ";
-        }
-        if (!inline_style.empty()) {
-            attrs += " style=\"" + inline_style + "\"";
-        }
-        
-        std::string class_attr = css_class.empty() ? "" : " class=\"" + css_class + "\"";
-        
-        std::string children_html = "";
-        if (ui->component_type == "Column" || ui->component_type == "Row" || ui->component_type == "Card" || ui->component_type == "Container" || ui->component_type == "Scrolling") {
-            for (const auto& child : ui->children) {
-                children_html += preRenderUIComponent(child.get(), fields);
+                target.html_items.push_back(valueToHtml(preRenderExpression(call->arguments[0].get(), context)));
             }
         }
-        
-        if (tag == "img" || tag == "input") {
-            return "<" + tag + class_attr + attrs + " />";
-        }
-        
-        return "<" + tag + class_attr + attrs + ">" + text_content + children_html + "</" + tag + ">";
+        return PreRenderValue::scalar("");
     }
-    
+    if (auto* ui = dynamic_cast<UIComponentNode*>(expr)) {
+        return PreRenderValue::html(preRenderUIComponent(ui, context));
+    }
+
+    return PreRenderValue::scalar("");
+}
+
+static bool preRenderStatement(ASTNode* stmt, PreRenderContext& context, std::string& returned_html);
+
+static bool preRenderStatements(const std::vector<std::unique_ptr<ASTNode>>& statements, PreRenderContext& context, std::string& returned_html) {
+    for (const auto& statement : statements) {
+        if (preRenderStatement(statement.get(), context, returned_html)) return true;
+    }
+    return false;
+}
+
+static bool preRenderStatement(ASTNode* stmt, PreRenderContext& context, std::string& returned_html) {
+    if (!stmt) return false;
+
+    if (auto* var_decl = dynamic_cast<VarDeclNode*>(stmt)) {
+        context.values[var_decl->var_name] = var_decl->initializer
+            ? preRenderExpression(var_decl->initializer.get(), context)
+            : PreRenderValue::scalar("");
+        return false;
+    }
+    if (auto* if_stmt = dynamic_cast<IfStmtNode*>(stmt)) {
+        if (valueToBool(preRenderExpression(if_stmt->condition.get(), context))) {
+            return preRenderStatements(if_stmt->then_branch, context, returned_html);
+        }
+        return preRenderStatements(if_stmt->else_branch, context, returned_html);
+    }
+    if (auto* return_stmt = dynamic_cast<ReturnStmtNode*>(stmt)) {
+        returned_html = valueToHtml(preRenderExpression(return_stmt->expression.get(), context));
+        return true;
+    }
+    if (auto* expr = dynamic_cast<ExprNode*>(stmt)) {
+        preRenderExpression(expr, context);
+    }
+    return false;
+}
+
+static std::string stripHtmlTags(const std::string& html) {
+    std::string text;
+    bool in_tag = false;
+    for (char c : html) {
+        if (c == '<') {
+            in_tag = true;
+            text += ' ';
+        } else if (c == '>') {
+            in_tag = false;
+        } else if (!in_tag) {
+            text += c;
+        }
+    }
+    return text;
+}
+
+static std::string decodeBasicHtmlEntities(std::string value) {
+    const std::vector<std::pair<std::string, std::string>> entities = {
+        {"&amp;", "&"},
+        {"&lt;", "<"},
+        {"&gt;", ">"},
+        {"&quot;", "\""},
+        {"&#39;", "'"}
+    };
+
+    for (const auto& entity : entities) {
+        size_t pos = 0;
+        while ((pos = value.find(entity.first, pos)) != std::string::npos) {
+            value.replace(pos, entity.first.size(), entity.second);
+            pos += entity.second.size();
+        }
+    }
+    return value;
+}
+
+static std::string collapseWhitespace(const std::string& value) {
+    std::string result;
+    bool last_space = true;
+    for (char c : value) {
+        if (std::isspace(static_cast<unsigned char>(c))) {
+            if (!last_space) result += ' ';
+            last_space = true;
+        } else {
+            result += c;
+            last_space = false;
+        }
+    }
+    return trimCopy(result);
+}
+
+static std::string computePreRenderedApp(ProgramNode* program, std::string& page_title, std::string& page_description) {
+    for (const auto& stmt : program->statements) {
+        auto* class_decl = dynamic_cast<ClassDeclNode*>(stmt.get());
+        if (!class_decl) continue;
+
+        FunctionNode* build_method = nullptr;
+        for (const auto& method : class_decl->methods) {
+            if (method->function_name == "build") {
+                build_method = method.get();
+                break;
+            }
+        }
+        if (!build_method) continue;
+
+        PreRenderContext context;
+        for (const auto& field : class_decl->fields) {
+            context.values[field->var_name] = field->initializer
+                ? preRenderExpression(field->initializer.get(), context)
+                : PreRenderValue::scalar("");
+        }
+
+        auto title = context.values.find("title");
+        if (title != context.values.end() && !valueToText(title->second).empty()) {
+            page_title = valueToText(title->second);
+        } else {
+            page_title = class_decl->class_name;
+        }
+
+        std::string html;
+        preRenderStatements(build_method->body, context, html);
+        std::string description = collapseWhitespace(decodeBasicHtmlEntities(stripHtmlTags(html)));
+        if (!description.empty()) {
+            if (description.size() > 160) description = description.substr(0, 157) + "...";
+            page_description = description;
+        }
+        return html;
+    }
+
     return "";
 }
 
@@ -244,6 +539,14 @@ bool JSCodeGenerator::containsAsyncCall(ASTNode* node, const std::unordered_set<
             if (containsAsyncCall(s.get(), async_fns)) return true;
         }
     }
+    if (auto* for_stmt = dynamic_cast<ForStmtNode*>(node)) {
+        if (containsAsyncCall(for_stmt->initializer.get(), async_fns)) return true;
+        if (containsAsyncCall(for_stmt->condition.get(), async_fns)) return true;
+        if (containsAsyncCall(for_stmt->update.get(), async_fns)) return true;
+        for (const auto& s : for_stmt->body) {
+            if (containsAsyncCall(s.get(), async_fns)) return true;
+        }
+    }
     if (auto* set_state = dynamic_cast<SetStateStmtNode*>(node)) {
         for (const auto& s : set_state->body) {
             if (containsAsyncCall(s.get(), async_fns)) return true;
@@ -251,6 +554,9 @@ bool JSCodeGenerator::containsAsyncCall(ASTNode* node, const std::unordered_set<
     }
     if (auto* binary = dynamic_cast<BinaryExprNode*>(node)) {
         return containsAsyncCall(binary->left.get(), async_fns) || containsAsyncCall(binary->right.get(), async_fns);
+    }
+    if (auto* unary = dynamic_cast<UnaryExprNode*>(node)) {
+        return containsAsyncCall(unary->expression.get(), async_fns);
     }
     return false;
 }
@@ -308,6 +614,9 @@ std::string JSCodeGenerator::generateExpression(ExprNode* expr) {
     if (auto* binary = dynamic_cast<BinaryExprNode*>(expr)) {
         return generateExpression(binary->left.get()) + " " + binary->op + " " + generateExpression(binary->right.get());
     }
+    if (auto* unary = dynamic_cast<UnaryExprNode*>(expr)) {
+        return unary->op + generateExpression(unary->expression.get());
+    }
     if (auto* list_lit = dynamic_cast<ListLiteralNode*>(expr)) {
         std::string res = "[";
         for (size_t i = 0; i < list_lit->elements.size(); ++i) {
@@ -330,6 +639,9 @@ std::string JSCodeGenerator::generateExpression(ExprNode* expr) {
         return generateExpression(prop->object.get()) + "." + prop->property_name;
     }
     if (auto* call = dynamic_cast<MethodCallNode*>(expr)) {
+        if (call->method_name == "length" && call->arguments.empty()) {
+            return generateExpression(call->object.get()) + ".length";
+        }
         bool is_async_call = async_functions.count(call->method_name) > 0;
         std::string res = (is_async_call ? "await " : "") + generateExpression(call->object.get()) + "." + call->method_name + "(";
         for (size_t i = 0; i < call->arguments.size(); ++i) {
@@ -437,6 +749,38 @@ void JSCodeGenerator::generateStatement(ASTNode* stmt) {
         for (const auto& s : while_stmt->body) generateStatement(s.get());
         indent_level--;
         indent(); output << "}\n";
+    } else if (auto* for_stmt = dynamic_cast<ForStmtNode*>(stmt)) {
+        indent();
+        output << "for (";
+        if (for_stmt->initializer) {
+            if (auto* var_decl = dynamic_cast<VarDeclNode*>(for_stmt->initializer.get())) {
+                output << "let " << var_decl->var_name;
+                if (var_decl->initializer) {
+                    output << " = " << generateExpression(var_decl->initializer.get());
+                }
+            } else if (auto* expr = dynamic_cast<ExprNode*>(for_stmt->initializer.get())) {
+                output << generateExpression(expr);
+            }
+        }
+        output << "; ";
+        if (for_stmt->condition) {
+            output << generateExpression(for_stmt->condition.get());
+        }
+        output << "; ";
+        if (for_stmt->update) {
+            output << generateExpression(for_stmt->update.get());
+        }
+        output << ") {\n";
+        indent_level++;
+        for (const auto& s : for_stmt->body) generateStatement(s.get());
+        indent_level--;
+        indent(); output << "}\n";
+    } else if (dynamic_cast<BreakStmtNode*>(stmt)) {
+        indent();
+        output << "break;\n";
+    } else if (dynamic_cast<ContinueStmtNode*>(stmt)) {
+        indent();
+        output << "continue;\n";
     } else if (auto* set_state = dynamic_cast<SetStateStmtNode*>(stmt)) {
         indent();
         output << "this.setState(() => {\n";
@@ -843,10 +1187,17 @@ std::string JSCodeGenerator::generate(ProgramNode* program) {
             }
         }
     }
+
+    std::string page_title = "Zenith Web Application";
+    std::string page_description = "Statically rendered Zenith web application.";
+    std::string pre_rendered_html = computePreRenderedApp(program, page_title, page_description);
     
     // HTML Wrapper Shell
     output << "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n";
-    output << "    <meta charset=\"UTF-8\">\n    <title>Zenith Web Application</title>\n";
+    output << "    <meta charset=\"UTF-8\">\n";
+    output << "    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n";
+    output << "    <title>" << escapeHtml(page_title) << "</title>\n";
+    output << "    <meta name=\"description\" content=\"" << escapeAttribute(page_description) << "\">\n";
     output << "    <link href=\"https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Fira+Code:wght@400;500&display=swap\" rel=\"stylesheet\">\n";
     output << "    <style>\n";
     output << "        body {\n";
@@ -859,6 +1210,7 @@ std::string JSCodeGenerator::generate(ProgramNode* program) {
     output << "            flex-direction: column;\n";
     output << "            align-items: center;\n";
     output << "            min-height: 100vh;\n";
+    output << "            box-sizing: border-box;\n";
     output << "        }\n";
     output << "        .app-header {\n";
     output << "            margin-bottom: 24px;\n";
@@ -894,6 +1246,7 @@ std::string JSCodeGenerator::generate(ProgramNode* program) {
     output << "            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);\n";
     output << "            display: flex;\n";
     output << "            flex-direction: column;\n";
+    output << "            box-sizing: border-box;\n";
     output << "        }\n";
     output << "        .panel-title {\n";
     output << "            font-size: 1.25rem;\n";
@@ -918,10 +1271,7 @@ std::string JSCodeGenerator::generate(ProgramNode* program) {
     output << "            flex-direction: column;\n";
     output << "            gap: 16px;\n";
     output << "            width: 100%;\n";
-    output << "            padding: 16px;\n";
-    output << "            border: 1px solid rgba(0, 242, 254, 0.3);\n";
-    output << "            border-radius: 12px;\n";
-    output << "            background: rgba(0, 242, 254, 0.05);\n";
+    output << "            box-sizing: border-box;\n";
     output << "        }\n";
     output << "        .zenith-row {\n";
     output << "            display: flex;\n";
@@ -929,10 +1279,8 @@ std::string JSCodeGenerator::generate(ProgramNode* program) {
     output << "            gap: 16px;\n";
     output << "            align-items: center;\n";
     output << "            width: 100%;\n";
-    output << "            padding: 12px;\n";
-    output << "            border: 1px solid rgba(240, 70, 250, 0.3);\n";
-    output << "            border-radius: 8px;\n";
-    output << "            background: rgba(240, 70, 250, 0.05);\n";
+    output << "            flex-wrap: wrap;\n";
+    output << "            box-sizing: border-box;\n";
     output << "        }\n";
     output << "        .zenith-text {\n";
     output << "            font-size: 1rem;\n";
@@ -962,6 +1310,7 @@ std::string JSCodeGenerator::generate(ProgramNode* program) {
     output << "            color: #f8fafc;\n";
     output << "            font-family: inherit;\n";
     output << "            font-size: 0.95rem;\n";
+    output << "            min-width: 0;\n";
     output << "            outline: none;\n";
     output << "            transition: all 0.3s ease;\n";
     output << "            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);\n";
@@ -1121,62 +1470,7 @@ std::string JSCodeGenerator::generate(ProgramNode* program) {
     output << "    </script>\n";
 
     output << "</head>\n<body>\n";
-
-    output << "    <div class=\"app-header\">\n";
-    output << "        <h1>Zenith Live Web Target</h1>\n";
-    output << "        <p>Statically compiled Zenith layout engine & LLM bindings running live in browser</p>\n";
-    output << "    </div>\n";
-    output << "    <div class=\"main-container\">\n";
-    output << "        <div class=\"panel\">\n";
-    output << "            <div class=\"panel-title\">\n";
-    output << "                Render Canvas\n";
-    output << "                <button class=\"interactive-btn\" onclick=\"triggerIncrement()\">setState Trigger</button>\n";
-    output << "            </div>\n";
-    std::string pre_rendered_html = "";
-    for (const auto& stmt : program->statements) {
-        if (auto* class_decl = dynamic_cast<ClassDeclNode*>(stmt.get())) {
-            FunctionNode* build_method = nullptr;
-            for (const auto& method : class_decl->methods) {
-                if (method->function_name == "build") {
-                    build_method = method.get();
-                    break;
-                }
-            }
-            if (build_method) {
-                std::unordered_map<std::string, std::string> fields;
-                for (const auto& field : class_decl->fields) {
-                    if (field->initializer) {
-                        if (auto* str = dynamic_cast<StringLiteralNode*>(field->initializer.get())) {
-                            fields[field->var_name] = str->value;
-                        } else if (auto* num = dynamic_cast<NumberLiteralNode*>(field->initializer.get())) {
-                            fields[field->var_name] = num->value;
-                        } else if (auto* b = dynamic_cast<BoolLiteralNode*>(field->initializer.get())) {
-                            fields[field->var_name] = b->value ? "true" : "false";
-                        }
-                    }
-                }
-                ExprNode* return_expr = nullptr;
-                for (const auto& body_stmt : build_method->body) {
-                    if (auto* ret_stmt = dynamic_cast<ReturnStmtNode*>(body_stmt.get())) {
-                        return_expr = ret_stmt->expression.get();
-                        break;
-                    }
-                }
-                if (return_expr) {
-                    pre_rendered_html = preRenderUIComponent(return_expr, fields);
-                }
-                break;
-            }
-        }
-    }
-
-    output << "            <div id=\"zenith-ui-root\">" << pre_rendered_html << "</div>\n";
-    output << "        </div>\n";
-    output << "        <div class=\"panel terminal-panel\">\n";
-    output << "            <div class=\"panel-title\" style=\"color: #10b981;\">Output Console</div>\n";
-    output << "            <div class=\"terminal-body\" id=\"zenith-console\"></div>\n";
-    output << "        </div>\n";
-    output << "    </div>\n\n";
+    output << "    <div id=\"zenith-ui-root\">" << pre_rendered_html << "</div>\n\n";
     
     output << "    <script>\n";
     output << "        // Platform Detection Constants\n";
@@ -1190,8 +1484,11 @@ std::string JSCodeGenerator::generate(ProgramNode* program) {
     output << "            consoleElement: null,\n";
     output << "            print: function(msg) {\n";
     output << "                if (!this.consoleElement) this.consoleElement = document.getElementById('zenith-console');\n";
-    output << "                this.consoleElement.textContent += msg;\n";
-    output << "                this.consoleElement.scrollTop = this.consoleElement.scrollHeight;\n";
+    output << "                if (this.consoleElement) {\n";
+    output << "                    this.consoleElement.textContent += msg;\n";
+    output << "                    this.consoleElement.scrollTop = this.consoleElement.scrollHeight;\n";
+    output << "                }\n";
+    output << "                console.log(msg);\n";
     output << "            },\n";
     output << "            println: function(msg) {\n";
     output << "                this.print(msg + '\\n');\n";

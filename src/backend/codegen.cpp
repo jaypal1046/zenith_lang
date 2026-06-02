@@ -2,6 +2,24 @@
 #include <iostream>
 #include <regex>
 
+static std::string cppIdentifier(const std::string& identifier) {
+    static const std::unordered_set<std::string> reserved = {
+        "alignas", "alignof", "and", "and_eq", "asm", "auto", "bitand", "bitor",
+        "bool", "break", "case", "catch", "char", "char16_t", "char32_t", "class",
+        "compl", "concept", "const", "constexpr", "const_cast", "continue", "co_await",
+        "co_return", "co_yield", "decltype", "default", "delete", "do", "double",
+        "dynamic_cast", "else", "enum", "explicit", "export", "extern", "false",
+        "float", "for", "friend", "goto", "if", "inline", "int", "long", "mutable",
+        "namespace", "new", "noexcept", "not", "not_eq", "nullptr", "operator", "or",
+        "or_eq", "private", "protected", "public", "register", "reinterpret_cast",
+        "requires", "return", "short", "signed", "sizeof", "static", "static_assert",
+        "static_cast", "struct", "switch", "template", "this", "thread_local", "throw",
+        "true", "try", "typedef", "typeid", "typename", "union", "unsigned", "using",
+        "virtual", "void", "volatile", "wchar_t", "while", "xor", "xor_eq"
+    };
+    return reserved.count(identifier) ? identifier + "_zen" : identifier;
+}
+
 void CodeGenerator::indent() {
     for (int i = 0; i < indent_level * 4; ++i) {
         output << " ";
@@ -91,8 +109,11 @@ std::string CodeGenerator::generateExpression(ExprNode* expr) {
     if (auto* await_expr = dynamic_cast<AwaitExprNode*>(expr)) {
         return "zenith::await_val(" + generateExpression(await_expr->expression.get()) + ")";
     }
+    if (auto* unary = dynamic_cast<UnaryExprNode*>(expr)) {
+        return unary->op + generateExpression(unary->expression.get());
+    }
     if (auto* id = dynamic_cast<IdentifierNode*>(expr)) {
-        return id->name;
+        return cppIdentifier(id->name);
     }
     if (auto* str = dynamic_cast<StringLiteralNode*>(expr)) {
         return "\"" + str->value + "\"";
@@ -128,10 +149,10 @@ std::string CodeGenerator::generateExpression(ExprNode* expr) {
         return res;
     }
     if (auto* prop = dynamic_cast<PropertyAccessNode*>(expr)) {
-        if (prop->property_name == "size") {
+        if (prop->property_name == "size" || prop->property_name == "length") {
             return generateExpression(prop->object.get()) + ".size()";
         }
-        return generateExpression(prop->object.get()) + "." + prop->property_name;
+        return generateExpression(prop->object.get()) + "." + cppIdentifier(prop->property_name);
     }
     if (auto* call = dynamic_cast<MethodCallNode*>(expr)) {
         if (call->method_name == "render") {
@@ -155,6 +176,7 @@ std::string CodeGenerator::generateExpression(ExprNode* expr) {
         }
         std::string m_name = call->method_name;
         if (m_name == "push") m_name = "push_back";
+        if (m_name == "length") m_name = "size";
         
         std::string res = generateExpression(call->object.get()) + "." + m_name + "(";
         for (size_t i = 0; i < call->arguments.size(); ++i) {
@@ -166,6 +188,10 @@ std::string CodeGenerator::generateExpression(ExprNode* expr) {
     }
     if (auto* fcall = dynamic_cast<FunctionCallNode*>(expr)) {
         std::string fname = fcall->function_name;
+        if (fname == "String") {
+            if (fcall->arguments.empty()) return "std::string()";
+            return "zenith::toString(" + generateExpression(fcall->arguments[0].get()) + ")";
+        }
         // Map Ref<T>(...) constructor to zenith::mem::make_ref<T>(...)
         // The actual type was stored as just "Ref" in function_name
         if (fname == "Ref") {
@@ -185,7 +211,7 @@ std::string CodeGenerator::generateExpression(ExprNode* expr) {
             return res;
         }
         // Generic FunctionCallNode — emit as regular C++ function call
-        std::string res = fname + "(";
+        std::string res = cppIdentifier(fname) + "(";
         for (size_t i = 0; i < fcall->arguments.size(); ++i) {
             res += generateExpression(fcall->arguments[i].get());
             if (i < fcall->arguments.size() - 1) res += ", ";
@@ -321,26 +347,28 @@ void CodeGenerator::generateStatement(ASTNode* stmt) {
     } else if (auto* var_decl = dynamic_cast<VarDeclNode*>(stmt)) {
         indent();
         std::string type_name = var_decl->type->type_name;
+        std::string var_name = cppIdentifier(var_decl->var_name);
         
         // Handle type inference - use 'auto' for inferred types
-        bool use_auto = var_decl->type->is_inferred && var_decl->initializer != nullptr;
+        bool use_auto = var_decl->type->is_inferred && var_decl->initializer != nullptr &&
+                        var_decl->type->type_name != "List" && var_decl->type->type_name != "Map";
         
         if (interface_names.count(type_name)) {
             if (var_decl->initializer) {
                 if (auto* id = dynamic_cast<IdentifierNode*>(var_decl->initializer.get())) {
-                    output << type_name << "& " << var_decl->var_name << " = " << id->name << ";\n";
+                    output << type_name << "& " << var_name << " = " << cppIdentifier(id->name) << ";\n";
                 } else {
-                    output << "auto temp_" << var_decl->var_name << " = " << generateExpression(var_decl->initializer.get()) << ";\n";
+                    output << "auto temp_" << var_name << " = " << generateExpression(var_decl->initializer.get()) << ";\n";
                     indent();
-                    output << type_name << "& " << var_decl->var_name << " = temp_" << var_decl->var_name << ";\n";
+                    output << type_name << "& " << var_name << " = temp_" << var_name << ";\n";
                 }
             } else {
-                output << type_name << "* " << var_decl->var_name << " = nullptr;\n";
+                output << type_name << "* " << var_name << " = nullptr;\n";
             }
         } else {
             if (use_auto) {
                 // Use C++ auto keyword for type inference
-                output << "auto " << var_decl->var_name;
+                output << "auto " << var_name;
                 if (var_decl->initializer) {
                     output << " = " << generateExpression(var_decl->initializer.get());
                 }
@@ -350,7 +378,7 @@ void CodeGenerator::generateStatement(ASTNode* stmt) {
                 // RC/GC smart pointer variable declaration
                 std::string inner_type = mapType(var_decl->type->generics[0].get());
                 std::string cpp_type   = mapType(var_decl->type.get());
-                output << cpp_type << " " << var_decl->var_name;
+                output << cpp_type << " " << var_name;
                 if (var_decl->initializer) {
                     if (var_decl->type->type_name == "Ref") {
                         // Ref<T> varname = Ref<T>(args...) → make_ref<T>(args...)
@@ -375,7 +403,7 @@ void CodeGenerator::generateStatement(ASTNode* stmt) {
                 }
                 output << ";\n";
             } else {
-                output << mapType(var_decl->type.get()) << " " << var_decl->var_name;
+                output << mapType(var_decl->type.get()) << " " << var_name;
                 if (var_decl->initializer) {
                     output << " = " << generateExpression(var_decl->initializer.get());
                 }
@@ -405,6 +433,38 @@ void CodeGenerator::generateStatement(ASTNode* stmt) {
         for (const auto& s : while_stmt->body) generateStatement(s.get());
         indent_level--;
         indent(); output << "}\n";
+    } else if (auto* for_stmt = dynamic_cast<ForStmtNode*>(stmt)) {
+        indent();
+        output << "for (";
+        if (for_stmt->initializer) {
+            if (auto* var_decl = dynamic_cast<VarDeclNode*>(for_stmt->initializer.get())) {
+                output << mapType(var_decl->type.get()) << " " << cppIdentifier(var_decl->var_name);
+                if (var_decl->initializer) {
+                    output << " = " << generateExpression(var_decl->initializer.get());
+                }
+            } else if (auto* expr = dynamic_cast<ExprNode*>(for_stmt->initializer.get())) {
+                output << generateExpression(expr);
+            }
+        }
+        output << "; ";
+        if (for_stmt->condition) {
+            output << generateExpression(for_stmt->condition.get());
+        }
+        output << "; ";
+        if (for_stmt->update) {
+            output << generateExpression(for_stmt->update.get());
+        }
+        output << ") {\n";
+        indent_level++;
+        for (const auto& s : for_stmt->body) generateStatement(s.get());
+        indent_level--;
+        indent(); output << "}\n";
+    } else if (dynamic_cast<BreakStmtNode*>(stmt)) {
+        indent();
+        output << "break;\n";
+    } else if (dynamic_cast<ContinueStmtNode*>(stmt)) {
+        indent();
+        output << "continue;\n";
     } else if (auto* set_state = dynamic_cast<SetStateStmtNode*>(stmt)) {
         indent();
         output << "{\n";
@@ -421,6 +481,25 @@ void CodeGenerator::generateStatement(ASTNode* stmt) {
         indent_level--;
         indent();
         output << "}\n";
+    } else if (auto* local_function = dynamic_cast<FunctionNode*>(stmt)) {
+        indent();
+        output << "auto " << cppIdentifier(local_function->function_name) << " = [&](";
+        for (size_t i = 0; i < local_function->parameters.size(); ++i) {
+            auto& param = local_function->parameters[i];
+            output << mapType(param->type.get()) << " " << cppIdentifier(param->var_name);
+            if (param->initializer) {
+                output << " = " << generateExpression(param->initializer.get());
+            }
+            if (i < local_function->parameters.size() - 1) output << ", ";
+        }
+        output << ") {\n";
+        indent_level++;
+        for (const auto& local_stmt : local_function->body) {
+            generateStatement(local_stmt.get());
+        }
+        indent_level--;
+        indent();
+        output << "};\n";
     } else if (auto* expr = dynamic_cast<ExprNode*>(stmt)) {
         indent();
         output << generateExpression(expr) << ";\n";
@@ -856,7 +935,7 @@ void CodeGenerator::generateClass(ClassDeclNode* node) {
     
     indent_level++;
     for (const auto& arg : node->primary_constructor_args) {
-        indent(); output << mapType(arg->type.get()) << " " << arg->var_name << ";\n";
+        indent(); output << mapType(arg->type.get()) << " " << cppIdentifier(arg->var_name) << ";\n";
     }
     indent_level--;
 
@@ -865,7 +944,7 @@ void CodeGenerator::generateClass(ClassDeclNode* node) {
     
     // Custom fields
     for (const auto& field : node->fields) {
-        indent(); output << mapType(field->type.get()) << " " << field->var_name;
+        indent(); output << mapType(field->type.get()) << " " << cppIdentifier(field->var_name);
         if (field->initializer) {
             output << " = " << generateExpression(field->initializer.get());
         }
@@ -875,7 +954,7 @@ void CodeGenerator::generateClass(ClassDeclNode* node) {
     
     indent(); output << node->class_name << "(";
     for (size_t i = 0; i < node->primary_constructor_args.size(); ++i) {
-        output << mapType(node->primary_constructor_args[i]->type.get()) << " " << node->primary_constructor_args[i]->var_name;
+        output << mapType(node->primary_constructor_args[i]->type.get()) << " " << cppIdentifier(node->primary_constructor_args[i]->var_name);
         if (i < node->primary_constructor_args.size() - 1) output << ", ";
     }
     output << ") ";
@@ -883,11 +962,25 @@ void CodeGenerator::generateClass(ClassDeclNode* node) {
     if (!node->primary_constructor_args.empty()) {
         output << ": ";
         for (size_t i = 0; i < node->primary_constructor_args.size(); ++i) {
-            output << node->primary_constructor_args[i]->var_name << "(" << node->primary_constructor_args[i]->var_name << ")";
+            output << cppIdentifier(node->primary_constructor_args[i]->var_name) << "(" << cppIdentifier(node->primary_constructor_args[i]->var_name) << ")";
             if (i < node->primary_constructor_args.size() - 1) output << ", ";
         }
     }
     output << " {}\n";
+
+    if (node->primary_constructor_args.empty() && !node->fields.empty()) {
+        indent(); output << node->class_name << "(";
+        for (size_t i = 0; i < node->fields.size(); ++i) {
+            output << mapType(node->fields[i]->type.get()) << " " << cppIdentifier(node->fields[i]->var_name);
+            if (i < node->fields.size() - 1) output << ", ";
+        }
+        output << ") : ";
+        for (size_t i = 0; i < node->fields.size(); ++i) {
+            output << cppIdentifier(node->fields[i]->var_name) << "(" << cppIdentifier(node->fields[i]->var_name) << ")";
+            if (i < node->fields.size() - 1) output << ", ";
+        }
+        output << " {}\n";
+    }
 
     // @managed: generate GC child enumeration override
     if (node->is_managed) {
@@ -1009,6 +1102,9 @@ std::string CodeGenerator::generate(ProgramNode* program) {
     output << "#include <future>\n";
     output << "#include <iostream>\n";
     output << "#include <functional>\n";
+    if (has_python_ffi) {
+        output << "#define ZENITH_ENABLE_PYTHON_FFI\n";
+    }
     output << "#include \"zenith_runtime.h\"\n";
     output << "#include \"zenith/std/concurrency.hpp\"\n\n";
 
@@ -1092,9 +1188,12 @@ std::string CodeGenerator::generate(ProgramNode* program) {
         }
     }
 
+    output << "template <typename T>\n";
+    output << "inline void print(const T& msg) { std::cout << msg; }\n";
+    output << "template <typename T>\n";
+    output << "inline void println(const T& msg) { std::cout << msg << std::endl; }\n";
+
     if (has_std_io) {
-        output << "inline void print(std::string msg) { std::cout << msg; }\n";
-        output << "inline void println(std::string msg) { std::cout << msg << std::endl; }\n";
         output << "inline std::string httpGet(std::string url) { return zenith::httpGet(url); }\n";
         output << "inline std::string httpPost(std::string url, std::string json_body) { return zenith::httpPost(url, json_body); }\n";
         output << "inline std::string gcStats() { return zenith::mem::gcStatsString(); }\n\n";
@@ -1103,7 +1202,9 @@ std::string CodeGenerator::generate(ProgramNode* program) {
     }
 
     for (const auto& stmt : program->statements) {
-        if (auto* class_decl = dynamic_cast<ClassDeclNode*>(stmt.get())) {
+        if (auto* var_decl = dynamic_cast<VarDeclNode*>(stmt.get())) {
+            generateStatement(var_decl);
+        } else if (auto* class_decl = dynamic_cast<ClassDeclNode*>(stmt.get())) {
             generateClass(class_decl);
         } else if (auto* interface_decl = dynamic_cast<InterfaceDeclNode*>(stmt.get())) {
             generateInterface(interface_decl);

@@ -74,6 +74,7 @@ private:
     
     std::string current_fn_return_type;
     std::vector<std::unique_ptr<FunctionNode>> builtin_fns;
+    int loop_depth = 0;
     bool isAssignable(const std::string& source, const std::string& target);
 
 public:

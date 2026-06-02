@@ -1,0 +1,5 @@
+class AppDesktop() {
+    String getPlatformName() {
+        return "Desktop Native Application";
+    }
+}

@@ -1,0 +1,204 @@
+import std.io;
+
+class MyApp() {
+    String title = "Zenith Todo App - Reactive Tasks";
+    String newTaskText = "";
+    String filter = "All";
+    
+    // Slots for tasks
+    String task1 = "Design Zenith Architecture";
+    Bool done1 = true;
+    String task2 = "Transpile to Web Target";
+    Bool done2 = true;
+    String task3 = "Enable Live Reactivity";
+    Bool done3 = false;
+    String task4 = "Deploy to Production";
+    Bool done4 = false;
+
+    UI build() {
+        // Calculate statistics
+        let total = 0;
+        let doneCount = 0;
+        if (task1 != "") { total = total + 1; if (done1) { doneCount = doneCount + 1; } }
+        if (task2 != "") { total = total + 1; if (done2) { doneCount = doneCount + 1; } }
+        if (task3 != "") { total = total + 1; if (done3) { doneCount = doneCount + 1; } }
+        if (task4 != "") { total = total + 1; if (done4) { doneCount = doneCount + 1; } }
+        
+        let progress = 0;
+        if (total > 0) {
+            progress = doneCount * 100 / total;
+        }
+        let statsText = "Completion: " + progress + "% Done (" + doneCount + "/" + total + ")";
+
+        // Render Todo items based on filter
+        let items: List<UI> = [];
+        
+        if (task1 != "") {
+            let show = false;
+            if (filter == "All") { show = true; }
+            if (filter == "Active") { if (done1 == false) { show = true; } }
+            if (filter == "Completed") { if (done1) { show = true; } }
+            
+            if (show) {
+                items.push(Row(
+                    Checkbox(task1, checked: done1, onChange: handleToggle1)
+                ));
+            }
+        }
+        
+        if (task2 != "") {
+            let show = false;
+            if (filter == "All") { show = true; }
+            if (filter == "Active") { if (done2 == false) { show = true; } }
+            if (filter == "Completed") { if (done2) { show = true; } }
+            
+            if (show) {
+                items.push(Row(
+                    Checkbox(task2, checked: done2, onChange: handleToggle2)
+                ));
+            }
+        }
+        
+        if (task3 != "") {
+            let show = false;
+            if (filter == "All") { show = true; }
+            if (filter == "Active") { if (done3 == false) { show = true; } }
+            if (filter == "Completed") { if (done3) { show = true; } }
+            
+            if (show) {
+                items.push(Row(
+                    Checkbox(task3, checked: done3, onChange: handleToggle3)
+                ));
+            }
+        }
+
+        if (task4 != "") {
+            let show = false;
+            if (filter == "All") { show = true; }
+            if (filter == "Active") { if (done4 == false) { show = true; } }
+            if (filter == "Completed") { if (done4) { show = true; } }
+            
+            if (show) {
+                items.push(Row(
+                    Checkbox(task4, checked: done4, onChange: handleToggle4)
+                ));
+            }
+        }
+
+        return Column(
+            // Header card
+            Card(
+                Text(title, fontWeight: "bold", color: "cyan"),
+                Text(statsText, color: "green"),
+                padding: 1
+            ),
+            
+            // New Task Form card
+            Card(
+                Row(
+                    TextField("Enter new task...", value: newTaskText, onChange: handleNewTaskChange),
+                    Button("Add Task", onClick: addTask)
+                ),
+                padding: 1
+            ),
+            
+            // Filter Controls card
+            Card(
+                Row(
+                    Button("All", onClick: setFilterAll),
+                    Button("Active", onClick: setFilterActive),
+                    Button("Completed", onClick: setFilterCompleted),
+                    Button("Clear Completed", onClick: clearCompleted)
+                ),
+                padding: 1
+            ),
+            
+            // Task List card
+            Card(
+                items,
+                padding: 1
+            )
+        );
+    }
+
+    Void handleToggle1(Bool checked) {
+        setState {
+            done1 = checked;
+        }
+    }
+
+    Void handleToggle2(Bool checked) {
+        setState {
+            done2 = checked;
+        }
+    }
+
+    Void handleToggle3(Bool checked) {
+        setState {
+            done3 = checked;
+        }
+    }
+
+    Void handleToggle4(Bool checked) {
+        setState {
+            done4 = checked;
+        }
+    }
+
+    Void handleNewTaskChange(String val) {
+        setState {
+            newTaskText = val;
+        }
+    }
+
+    Void addTask() {
+        if (newTaskText != "") {
+            setState {
+                if (task1 == "") { task1 = newTaskText; done1 = false; newTaskText = ""; }
+                else {
+                    if (task2 == "") { task2 = newTaskText; done2 = false; newTaskText = ""; }
+                    else {
+                        if (task3 == "") { task3 = newTaskText; done3 = false; newTaskText = ""; }
+                        else {
+                            if (task4 == "") { task4 = newTaskText; done4 = false; newTaskText = ""; }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Void clearCompleted() {
+        setState {
+            if (done1) { task1 = ""; done1 = false; }
+            if (done2) { task2 = ""; done2 = false; }
+            if (done3) { task3 = ""; done3 = false; }
+            if (done4) { task4 = ""; done4 = false; }
+        }
+    }
+
+    Void setFilterAll() {
+        setState {
+            filter = "All";
+        }
+    }
+
+    Void setFilterActive() {
+        setState {
+            filter = "Active";
+        }
+    }
+
+    Void setFilterCompleted() {
+        setState {
+            filter = "Completed";
+        }
+    }
+}
+
+Void main() {
+    println("Initializing Reorganized Zenith Application...");
+    MyApp app = MyApp();
+    app.build().render();
+    println("Zenith Application Shutdown.");
+}

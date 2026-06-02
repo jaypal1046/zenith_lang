@@ -20,11 +20,8 @@ std::string SemanticAnalyzer::inferAndValidateVarDecl(VarDeclNode* var_decl) {
         } else {
             // Infer type from initializer expression
             std::string init_type = type_inferencer.inferType(var_decl->initializer.get());
-            
-            if (init_type.empty()) {
-                // Fall back to type checking if inference fails
-                init_type = typeCheckExpression(var_decl->initializer.get());
-            }
+            std::string checked_type = typeCheckExpression(var_decl->initializer.get(), init_type);
+            if (!checked_type.empty()) init_type = checked_type;
             
             if (init_type.empty()) {
                 error("Type Inference Error: Cannot infer type for variable '" + 
@@ -178,6 +175,18 @@ static bool parseFunctionType(const std::string& type_str, std::vector<std::stri
     return true;
 }
 
+static size_t requiredParameterCount(const std::vector<std::unique_ptr<VarDeclNode>>& parameters) {
+    size_t count = 0;
+    for (const auto& parameter : parameters) {
+        if (!parameter->initializer) count++;
+    }
+    return count;
+}
+
+static bool acceptsArgumentCount(const std::vector<std::unique_ptr<VarDeclNode>>& parameters, size_t count) {
+    return count >= requiredParameterCount(parameters) && count <= parameters.size();
+}
+
 static void populateTypeNode(TypeNode* type_node, const std::string& type_str) {
     size_t angle_pos = type_str.find('<');
     if (angle_pos == std::string::npos) {
@@ -223,6 +232,7 @@ void SemanticAnalyzer::analyzeFunction(FunctionNode* node) {
     }
     SymbolTable* function_scope = new SymbolTable(current_scope);
     SymbolTable* previous_scope = current_scope;
+    std::string previous_return_type = current_fn_return_type;
     current_scope = function_scope;
     
     // Register generic type parameters as valid placeholder types in function scope
@@ -245,9 +255,8 @@ void SemanticAnalyzer::analyzeFunction(FunctionNode* node) {
         // Handle type inference for parameters with default values
         if (param->type->is_inferred && param->initializer) {
             std::string init_type = type_inferencer.inferType(param->initializer.get());
-            if (init_type.empty()) {
-                init_type = typeCheckExpression(param->initializer.get());
-            }
+            std::string checked_type = typeCheckExpression(param->initializer.get(), init_type);
+            if (!checked_type.empty()) init_type = checked_type;
             if (!init_type.empty()) {
                 populateTypeNode(param->type.get(), init_type);
                 param->type->is_inferred = true;
@@ -266,6 +275,7 @@ void SemanticAnalyzer::analyzeFunction(FunctionNode* node) {
     analyzeBlock(node->body);
     
     current_scope = previous_scope;
+    current_fn_return_type = previous_return_type;
     delete function_scope;
 }
 
@@ -358,7 +368,44 @@ void SemanticAnalyzer::analyzeStatement(ASTNode* stmt) {
         if (cond_type != "Bool") {
             error("Type Mismatch: While loop condition must be of type 'Bool', got '" + cond_type + "'", while_stmt);
         }
+        loop_depth++;
         analyzeBlock(while_stmt->body);
+        loop_depth--;
+    }
+    else if (auto* for_stmt = dynamic_cast<ForStmtNode*>(stmt)) {
+        SymbolTable* loop_scope = new SymbolTable(current_scope);
+        SymbolTable* previous_scope = current_scope;
+        current_scope = loop_scope;
+
+        if (for_stmt->initializer) {
+            analyzeStatement(for_stmt->initializer.get());
+        }
+        if (for_stmt->condition) {
+            std::string cond_type = typeCheckExpression(for_stmt->condition.get(), "Bool");
+            if (cond_type != "Bool") {
+                error("Type Mismatch: For loop condition must be of type 'Bool', got '" + cond_type + "'", for_stmt);
+            }
+        }
+        if (for_stmt->update) {
+            typeCheckExpression(for_stmt->update.get());
+        }
+
+        loop_depth++;
+        analyzeBlock(for_stmt->body);
+        loop_depth--;
+
+        current_scope = previous_scope;
+        delete loop_scope;
+    }
+    else if (auto* break_stmt = dynamic_cast<BreakStmtNode*>(stmt)) {
+        if (loop_depth <= 0) {
+            error("Syntax Error: 'break' statement must be inside a loop.", break_stmt);
+        }
+    }
+    else if (auto* continue_stmt = dynamic_cast<ContinueStmtNode*>(stmt)) {
+        if (loop_depth <= 0) {
+            error("Syntax Error: 'continue' statement must be inside a loop.", continue_stmt);
+        }
     }
     else if (auto* return_stmt = dynamic_cast<ReturnStmtNode*>(stmt)) {
         std::string ret_type = "Void";
@@ -374,12 +421,34 @@ void SemanticAnalyzer::analyzeStatement(ASTNode* stmt) {
             analyzeStatement(s.get());
         }
     }
+    else if (auto* local_function = dynamic_cast<FunctionNode*>(stmt)) {
+        functions[local_function->function_name] = local_function;
+        current_scope->define(local_function->function_name, "Function");
+        analyzeFunction(local_function);
+    }
     else if (auto* expr = dynamic_cast<ExprNode*>(stmt)) {
         typeCheckExpression(expr);
     }
 }
 
 std::string SemanticAnalyzer::typeCheckExpression(ExprNode* expr, const std::string& expected_type) {
+    if (auto* unary = dynamic_cast<UnaryExprNode*>(expr)) {
+        if (unary->op == "!") {
+            std::string inner_type = typeCheckExpression(unary->expression.get(), "Bool");
+            if (inner_type != "Bool") {
+                error("Type Error: Logical NOT operator '!' requires operand of type 'Bool', got '" + inner_type + "'", unary);
+            }
+            return "Bool";
+        }
+        if (unary->op == "-") {
+            std::string inner_type = typeCheckExpression(unary->expression.get());
+            if (inner_type != "Int" && inner_type != "Float") {
+                error("Type Error: Unary negation operator '-' requires operand of numeric type (Int or Float), got '" + inner_type + "'", unary);
+            }
+            return inner_type;
+        }
+        return "";
+    }
     if (auto* await_expr = dynamic_cast<AwaitExprNode*>(expr)) {
         std::string awaited_expected = expected_type.empty() ? "" : "Future<" + expected_type + ">";
         std::string inner_type = typeCheckExpression(await_expr->expression.get(), awaited_expected);
@@ -559,6 +628,8 @@ std::string SemanticAnalyzer::typeCheckExpression(ExprNode* expr, const std::str
             if (t != elem_type) {
                 if (!type_inferencer.unifyTypes(elem_type, t, list_lit)) {
                     error("Type Mismatch: elements in List have mismatched types '" + elem_type + "' and '" + t + "'", list_lit);
+                } else if ((elem_type == "Int" && t == "Float") || (elem_type == "Float" && t == "Int")) {
+                    elem_type = "Float";
                 }
             }
         }
@@ -585,9 +656,14 @@ std::string SemanticAnalyzer::typeCheckExpression(ExprNode* expr, const std::str
         return "Map<" + key_type + "," + val_type + ">";
     }
     if (auto* binary = dynamic_cast<BinaryExprNode*>(expr)) {
-        if (binary->op == "=") {
+        if (binary->op == "=" || binary->op == "+=" || binary->op == "-=" || binary->op == "*=" || binary->op == "/=") {
             std::string type_l = typeCheckExpression(binary->left.get());
             std::string type_r = typeCheckExpression(binary->right.get(), type_l);
+            if (binary->op != "=") {
+                if ((type_l != "Int" && type_l != "Float") || (type_r != "Int" && type_r != "Float")) {
+                    error("Type Error: Compound assignment operators require numeric types, got '" + type_l + "' and '" + type_r + "'", binary);
+                }
+            }
             if (!isAssignable(type_r, type_l)) {
                 error("Type Mismatch: Cannot assign '" + type_r + "' to '" + type_l + "'", binary);
             }
@@ -646,7 +722,7 @@ std::string SemanticAnalyzer::typeCheckExpression(ExprNode* expr, const std::str
 
         if (classes.count(ui->component_type)) {
             ClassDeclNode* class_decl = classes[ui->component_type];
-            if (ui->children.size() != class_decl->primary_constructor_args.size()) {
+            if (!acceptsArgumentCount(class_decl->primary_constructor_args, ui->children.size())) {
                 error("Constructor Error: Class '" + ui->component_type + "' expects " + 
                       std::to_string(class_decl->primary_constructor_args.size()) + " arguments, got " + 
                       std::to_string(ui->children.size()), ui);
@@ -663,7 +739,7 @@ std::string SemanticAnalyzer::typeCheckExpression(ExprNode* expr, const std::str
         }
         if (functions.count(ui->component_type)) {
             FunctionNode* fn = functions[ui->component_type];
-            if (ui->children.size() != fn->parameters.size()) {
+            if (!acceptsArgumentCount(fn->parameters, ui->children.size())) {
                 error("Call Error: Function '" + ui->component_type + "' expects " + 
                       std::to_string(fn->parameters.size()) + " arguments, got " + 
                       std::to_string(ui->children.size()), ui);
@@ -720,7 +796,7 @@ std::string SemanticAnalyzer::typeCheckExpression(ExprNode* expr, const std::str
             return "";
         }
         if (obj_type.rfind("List<", 0) == 0 || obj_type.rfind("Map<", 0) == 0) {
-            if (prop->property_name == "size") {
+            if (prop->property_name == "size" || prop->property_name == "length") {
                 return "Int";
             }
         }
@@ -733,7 +809,7 @@ std::string SemanticAnalyzer::typeCheckExpression(ExprNode* expr, const std::str
             ClassDeclNode* class_decl = classes[obj_type];
             for (const auto& method : class_decl->methods) {
                 if (method->function_name == call->method_name) {
-                    if (call->arguments.size() != method->parameters.size()) {
+                    if (!acceptsArgumentCount(method->parameters, call->arguments.size())) {
                         error("Method Call Error: Method '" + call->method_name + "' expects " + 
                               std::to_string(method->parameters.size()) + " arguments, got " + 
                               std::to_string(call->arguments.size()), call);
@@ -759,7 +835,7 @@ std::string SemanticAnalyzer::typeCheckExpression(ExprNode* expr, const std::str
             InterfaceDeclNode* iface_decl = interfaces[obj_type];
             for (const auto& method : iface_decl->methods) {
                 if (method->function_name == call->method_name) {
-                    if (call->arguments.size() != method->parameters.size()) {
+                    if (!acceptsArgumentCount(method->parameters, call->arguments.size())) {
                         error("Method Call Error: Method '" + call->method_name + "' expects " + 
                               std::to_string(method->parameters.size()) + " arguments, got " + 
                               std::to_string(call->arguments.size()), call);
@@ -782,6 +858,9 @@ std::string SemanticAnalyzer::typeCheckExpression(ExprNode* expr, const std::str
             return "";
         }
         if (obj_type.rfind("List<", 0) == 0) {
+            if (call->method_name == "length" && call->arguments.empty()) {
+                return "Int";
+            }
             if (call->method_name == "push" || call->method_name == "push_back") {
                 if (call->arguments.size() != 1) {
                     error("Method Call Error: push expects 1 argument, got " + std::to_string(call->arguments.size()), call);

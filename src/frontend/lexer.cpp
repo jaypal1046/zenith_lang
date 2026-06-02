@@ -41,7 +41,7 @@ void Lexer::skipWhitespaceAndComments() {
 
 bool Lexer::isKeyword(std::string_view text) const {
     static const std::vector<std::string_view> keywords = {
-        "agentic", "async", "if", "else", "return", "class", "while", "for", "struct", "import", "await", "setState", "interface", "implements", "let", "orchestration", "foreign"
+        "agentic", "async", "if", "else", "return", "class", "while", "for", "struct", "import", "await", "setState", "interface", "implements", "let", "orchestration", "foreign", "break", "continue"
     };
     for (auto k : keywords) if (text == k) return true;
     return false;
@@ -104,6 +104,16 @@ std::vector<Token> Lexer::tokenize() {
                 if (peek() == '.') isFloat = true;
                 advance();
             }
+            if (peek() == 'e' || peek() == 'E') {
+                isFloat = true;
+                advance();
+                if (peek() == '+' || peek() == '-') {
+                    advance();
+                }
+                while (std::isdigit(peek())) {
+                    advance();
+                }
+            }
             tokens.push_back({isFloat ? TokenType::FLOAT : TokenType::INT, 
                               source.substr(start_pos, pos - start_pos), start_line, start_col});
             continue;
@@ -124,7 +134,13 @@ std::vector<Token> Lexer::tokenize() {
 
         if (std::string("+-*/=<>!&|").find(c) != std::string::npos) {
             advance();
-            if ((c == '=' || c == '!' || c == '<' || c == '>') && peek() == '=') advance();
+            if ((c == '=' || c == '!' || c == '<' || c == '>') && peek() == '=') {
+                advance();
+            } else if ((c == '+' || c == '-' || c == '*' || c == '/') && peek() == '=') {
+                advance();
+            } else if ((c == '&' || c == '|') && peek() == c) {
+                advance();
+            }
             tokens.push_back({TokenType::OP, source.substr(start_pos, pos - start_pos), start_line, start_col});
             continue;
         }

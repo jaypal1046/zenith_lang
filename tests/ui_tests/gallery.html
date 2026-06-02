@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Zenith Web Application</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        body {
+            background: radial-gradient(circle at top right, #1a1a2e, #0a0a0f);
+            color: #e2e8f0;
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .app-header {
+            margin-bottom: 24px;
+            text-align: center;
+        }
+        .app-header h1 {
+            margin: 0;
+            font-size: 2.5rem;
+            background: linear-gradient(135deg, #00f2fe, #4facfe);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-weight: 700;
+        }
+        .app-header p {
+            color: #94a3b8;
+            margin-top: 8px;
+        }
+        .main-container {
+            display: flex;
+            width: 100%;
+            max-width: 1200px;
+            gap: 24px;
+            flex-wrap: wrap;
+        }
+        .panel {
+            flex: 1;
+            min-width: 300px;
+            background: rgba(30, 41, 59, 0.4);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+            display: flex;
+            flex-direction: column;
+        }
+        .panel-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 16px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding-bottom: 8px;
+            color: #38bdf8;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        #zenith-ui-root {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 250px;
+            width: 100%;
+        }
+        .zenith-column {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            width: 100%;
+            padding: 16px;
+            border: 1px solid rgba(0, 242, 254, 0.3);
+            border-radius: 12px;
+            background: rgba(0, 242, 254, 0.05);
+        }
+        .zenith-row {
+            display: flex;
+            flex-direction: row;
+            gap: 16px;
+            align-items: center;
+            width: 100%;
+            padding: 12px;
+            border: 1px solid rgba(240, 70, 250, 0.3);
+            border-radius: 8px;
+            background: rgba(240, 70, 250, 0.05);
+        }
+        .zenith-text {
+            font-size: 1rem;
+            line-height: 1.5;
+        }
+        .terminal-panel {
+            background: #090d16;
+            border: 1px solid #1e293b;
+        }
+        .terminal-body {
+            font-family: 'Fira Code', monospace;
+            font-size: 0.9rem;
+            color: #10b981;
+            white-space: pre-wrap;
+            overflow-y: auto;
+            height: 350px;
+            padding: 12px;
+            background: #020617;
+            border-radius: 8px;
+            box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.8);
+        }
+        .zenith-input {
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid rgba(0, 242, 254, 0.3);
+            border-radius: 8px;
+            padding: 8px 12px;
+            color: #f8fafc;
+            font-family: inherit;
+            font-size: 0.95rem;
+            outline: none;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        .zenith-input:focus {
+            border-color: #00f2fe;
+            box-shadow: 0 0 10px rgba(0, 242, 254, 0.4);
+            background: rgba(15, 23, 42, 0.8);
+        }
+        .interactive-btn {
+            background: linear-gradient(135deg, #059669, #10b981);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .interactive-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+        }
+    </style>
+</head>
+<body>
+    <div class="app-header">
+        <h1>Zenith Live Web Target</h1>
+        <p>Statically compiled Zenith layout engine & LLM bindings running live in browser</p>
+    </div>
+    <div class="main-container">
+        <div class="panel">
+            <div class="panel-title">
+                Render Canvas
+                <button class="interactive-btn" onclick="triggerIncrement()">setState Trigger</button>
+            </div>
+            <div id="zenith-ui-root"><div class="zenith-column"><span class="zenith-text" style="font-weight: bold; color: cyan; ">ZENITH PLATFORM GALLERY</span><div style="display: flex; flex-direction: column; border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 12px; padding: 16px; background: rgba(255, 255, 255, 0.02);" style="padding: 1px; "><span class="zenith-text" style="font-weight: bold; color: yellow; ">1. Widget Grid & Flow Layouts</span><div class="zenith-row"><span class="zenith-text" style="color: green; ">Flow item 1</span><span class="zenith-text" style="color: magenta; ">Flow item 2</span></div></div><div class="zenith-card" style="display: flex; flex-direction: column; background: rgba(30, 41, 59, 0.6); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 16px; padding: 20px; margin: 10px 0; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);" style="padding: 1px; "><span class="zenith-text" style="font-weight: bold; color: cyan; ">2. Reactive Component States</span><div class="zenith-row"><span class="zenith-text" style="color: green; ">Interactive clicks: 0</span><button class="interactive-btn">Click Me!</button></div></div><div class="zenith-row"><img src="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe" style="max-width: 100%; border-radius: 12px; box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5); border: 1px solid rgba(255, 255, 255, 0.1);" style="width: 35px; height: 4px; " /><div style="width: 35px; height: 4px; "></div></div><div style="display: flex; flex-direction: column; overflow-y: auto; max-height: 300px; border: 1px solid rgba(255, 255, 255, 0.1); padding: 12px; border-radius: 12px; background: rgba(0, 0, 0, 0.3);" style="height: 4px; "><span class="zenith-text">Line 1: Infinite Scrolling Row</span><span class="zenith-text">Line 2: GPU Accelerated Layouts</span><span class="zenith-text">Line 3: Reactive State Binding</span><span class="zenith-text">Line 4: Native Platform Primitives</span><span class="zenith-text">Line 5: Dynamic CSS Variables</span><span class="zenith-text">Line 6: Single-Thread WASM Event Loop</span></div><div class="zenith-card" style="display: flex; flex-direction: column; background: rgba(30, 41, 59, 0.6); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 16px; padding: 20px; margin: 10px 0; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);" style="padding: 1px; "><span class="zenith-text" style="font-weight: bold; color: yellow; ">3. REST API / Network Client Integration</span><div class="zenith-row"><span class="zenith-text">Response: No API data fetched yet.</span><button class="interactive-btn">Fetch JSON</button></div></div><div class="zenith-card" style="display: flex; flex-direction: column; background: rgba(30, 41, 59, 0.6); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 16px; padding: 20px; margin: 10px 0; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);" style="padding: 1px; "><span class="zenith-text" style="font-weight: bold; color: magenta; ">4. CSS Flexbox Layout Demonstration</span><div class="zenith-row" style="gap: 1px; width: 35px; "><span class="zenith-text" style="color: red; ">[Grow 1]</span><span class="zenith-text" style="color: green; ">[Grow 2]</span><span class="zenith-text" style="color: blue; ">[Grow 1]</span></div></div></div></div>
+        </div>
+        <div class="panel terminal-panel">
+            <div class="panel-title" style="color: #10b981;">Output Console</div>
+            <div class="terminal-body" id="zenith-console"></div>
+        </div>
+    </div>
+
+    <script>
+        const zenith = {
+            consoleElement: null,
+            print: function(msg) {
+                if (!this.consoleElement) this.consoleElement = document.getElementById('zenith-console');
+                this.consoleElement.textContent += msg;
+                this.consoleElement.scrollTop = this.consoleElement.scrollHeight;
+            },
+            println: function(msg) {
+                this.print(msg + '\n');
+            },
+            encodeImageToBase64: async function(pathOrUrl) {
+                if (!pathOrUrl) return "";
+                if (pathOrUrl.startsWith("data:")) return pathOrUrl.split(",")[1];
+                try {
+                    const response = await fetch(pathOrUrl);
+                    const blob = await response.blob();
+                    return new Promise((resolve) => {
+                        const reader = new FileReader();
+                        reader.onloadend = () => {
+                            const base64String = reader.result.split(',')[1];
+                            resolve(base64String);
+                        };
+                        reader.readAsDataURL(blob);
+                    });
+                } catch (e) {
+                    return "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+                }
+            },
+            llmPrompt: async function(url, promptStr, isStreaming, imagePath) {
+                let imageBase64 = "";
+                if (imagePath) {
+                    this.println('[Runtime] Loading and encoding image: ' + imagePath);
+                    imageBase64 = await this.encodeImageToBase64(imagePath);
+                }
+                this.println('\n[Runtime] LLMClient sending prompt to local backend (' + url + '): "' + promptStr + '"');
+                if (imageBase64) {
+                    this.println('[Runtime] Image attached (Base64 length: ' + imageBase64.length + ' chars)');
+                }
+                try {
+                    const response = await fetch(url + '/api/generate', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            model: 'llama3',
+                            prompt: promptStr,
+                            stream: !!isStreaming,
+                            images: imageBase64 ? [imageBase64] : undefined
+                        })
+                    });
+                    if (response.ok) {
+                        if (isStreaming) {
+                            const reader = response.body.getReader();
+                            const decoder = new TextDecoder("utf-8");
+                            let buffer = "";
+                            let fullResponse = "";
+                            while (true) {
+                                const { value, done } = await reader.read();
+                                if (done) break;
+                                buffer += decoder.decode(value, { stream: true });
+                                const lines = buffer.split("\n");
+                                buffer = lines.pop();
+                                for (const line of lines) {
+                                    if (line.trim() === "") continue;
+                                    try {
+                                        const json = JSON.parse(line);
+                                        if (json.response) {
+                                            fullResponse += json.response;
+                                            this.print(json.response);
+                                        }
+                                    } catch (err) {}
+                                }
+                            }
+                            if (buffer.trim() !== "") {
+                                try {
+                                    const json = JSON.parse(buffer);
+                                    if (json.response) {
+                                        fullResponse += json.response;
+                                        this.print(json.response);
+                                    }
+                                } catch (err) {}
+                            }
+                            this.println("");
+                            return fullResponse;
+                        } else {
+                            const json = await response.json();
+                            return json.response;
+                        }
+                    }
+                } catch(e) {}
+                this.println('[Runtime Warning] Ollama backend not reachable. Falling back to simulated completion.');
+                let simulated = "Simulated response for prompt: '" + promptStr + "'";
+                if (imageBase64) {
+                    simulated += " with image '" + imagePath + "'";
+                }
+                if (isStreaming) {
+                    const tokens = simulated.split(" ");
+                    let fullText = "";
+                    for (const tok of tokens) {
+                        this.print(tok + " ");
+                        await new Promise(r => setTimeout(r, 50));
+                        fullText += tok + " ";
+                    }
+                    this.println("");
+                    return fullText;
+                } else {
+                    return simulated;
+                }
+            }
+        };
+
+        async function httpGet(url) {
+            zenith.println('[Network] httpGet: Fetching ' + url + '...');
+            try {
+                const response = await fetch(url);
+                if (response.ok) {
+                    return await response.text();
+                }
+            } catch(e) {}
+            zenith.println('[Network Error/CORS] Using mock response for ' + url);
+            if (url.includes('users')) {
+                return JSON.stringify({users: ["Sam", "Jay", "Alex"], status: "active"});
+            }
+            return JSON.stringify({message: "Hello from Zenith JS mock endpoint!", status: "success"});
+        }
+
+        async function httpPost(url, body) {
+            zenith.println('[Network] httpPost: Posting to ' + url + '...');
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: body
+                });
+                if (response.ok) {
+                    return await response.text();
+                }
+            } catch(e) {}
+            zenith.println('[Network Error/CORS] Using mock response for POST ' + url);
+            return JSON.stringify({status: "posted", received: JSON.parse(body)});
+        }
+
+        const UI = {
+            print: function(msg) { zenith.print(Array.isArray(msg) ? msg.join('') : msg); },
+            println: function(msg) { zenith.println(Array.isArray(msg) ? msg.join('') : msg); },
+            applyStyles: function(el, attrs = {}) {
+                if (!attrs) return;
+                if (attrs.color) el.style.color = attrs.color;
+                if (attrs.backgroundColor) el.style.backgroundColor = attrs.backgroundColor;
+                if (attrs.padding) el.style.padding = typeof attrs.padding === 'number' ? attrs.padding + 'px' : attrs.padding;
+                if (attrs.margin) el.style.margin = typeof attrs.margin === 'number' ? attrs.margin + 'px' : attrs.margin;
+                if (attrs.width) el.style.width = typeof attrs.width === 'number' ? attrs.width + 'px' : attrs.width;
+                if (attrs.height) el.style.height = typeof attrs.height === 'number' ? attrs.height + 'px' : attrs.height;
+                if (attrs.fontWeight) el.style.fontWeight = attrs.fontWeight;
+                if (attrs.flexDirection) el.style.flexDirection = attrs.flexDirection;
+                if (attrs.justifyContent) el.style.justifyContent = attrs.justifyContent;
+                if (attrs.alignItems) el.style.alignItems = attrs.alignItems;
+                if (attrs.flexGrow !== undefined) el.style.flexGrow = attrs.flexGrow;
+                if (attrs.gap) el.style.gap = typeof attrs.gap === 'number' ? attrs.gap + 'px' : attrs.gap;
+                if (attrs.onClick && typeof attrs.onClick === 'function') {
+                    el.onclick = attrs.onClick;
+                }
+                if (attrs.onChange && typeof attrs.onChange === 'function') {
+                    el.oninput = function() { attrs.onChange(el.value); };
+                }
+            },
+            Column: function(children, attrs = {}) {
+                const el = document.createElement('div');
+                el.className = 'zenith-column';
+                const flatChildren = Array.isArray(children) ? children.flat() : [];
+                for (const child of flatChildren) {
+                    if (child) el.appendChild(child);
+                }
+                UI.applyStyles(el, attrs);
+                el.render = function() {
+                    UI.render(el);
+                    return el;
+                };
+                return el;
+            },
+            Row: function(children, attrs = {}) {
+                const el = document.createElement('div');
+                el.className = 'zenith-row';
+                const flatChildren = Array.isArray(children) ? children.flat() : [];
+                for (const child of flatChildren) {
+                    if (child) el.appendChild(child);
+                }
+                UI.applyStyles(el, attrs);
+                el.render = function() {
+                    UI.render(el);
+                    return el;
+                };
+                return el;
+            },
+            Text: function(text, attrs = {}) {
+                const el = document.createElement('span');
+                el.className = 'zenith-text';
+                el.textContent = Array.isArray(text) ? text.join('') : text;
+                UI.applyStyles(el, attrs);
+                el.render = function() {
+                    UI.render(el);
+                    return el;
+                };
+                return el;
+            },
+            Button: function(label, attrs = {}) {
+                const el = document.createElement('button');
+                el.className = 'interactive-btn';
+                el.textContent = Array.isArray(label) ? label.join('') : label;
+                UI.applyStyles(el, attrs);
+                el.render = function() {
+                    UI.render(el);
+                    return el;
+                };
+                return el;
+            },
+            TextField: function(placeholder, attrs = {}) {
+                const el = document.createElement('input');
+                el.type = 'text';
+                el.placeholder = Array.isArray(placeholder) ? placeholder.join('') : placeholder;
+                el.className = 'zenith-input';
+                if (attrs.value) el.value = attrs.value;
+                UI.applyStyles(el, attrs);
+                el.render = function() {
+                    UI.render(el);
+                    return el;
+                };
+                return el;
+            },
+            Checkbox: function(label, attrs = {}) {
+                const wrapper = document.createElement('label');
+                wrapper.style.display = 'flex';
+                wrapper.style.alignItems = 'center';
+                wrapper.style.gap = '8px';
+                wrapper.style.cursor = 'pointer';
+                wrapper.style.margin = '5px';
+                wrapper.style.color = '#e2e8f0';
+                const el = document.createElement('input');
+                el.type = 'checkbox';
+                el.style.width = '18px';
+                el.style.height = '18px';
+                el.style.accentColor = '#00f2fe';
+                el.style.cursor = 'pointer';
+                if (attrs.checked) el.checked = !!attrs.checked;
+                wrapper.appendChild(el);
+                const textSpan = document.createElement('span');
+                textSpan.textContent = Array.isArray(label) ? label.join('') : label;
+                wrapper.appendChild(textSpan);
+                UI.applyStyles(wrapper, attrs);
+                if (attrs.onChange && typeof attrs.onChange === 'function') {
+                    el.onchange = function() { attrs.onChange(el.checked); };
+                }
+                wrapper.render = function() {
+                    UI.render(wrapper);
+                    return wrapper;
+                };
+                return wrapper;
+            },
+            Slider: function(attrs = {}) {
+                const el = document.createElement('input');
+                el.type = 'range';
+                el.className = 'zenith-input';
+                el.style.accentColor = '#00f2fe';
+                el.style.cursor = 'pointer';
+                if (attrs.min !== undefined) el.min = attrs.min;
+                if (attrs.max !== undefined) el.max = attrs.max;
+                if (attrs.value !== undefined) el.value = attrs.value;
+                UI.applyStyles(el, attrs);
+                if (attrs.onChange && typeof attrs.onChange === 'function') {
+                    el.oninput = function() { attrs.onChange(parseInt(el.value, 10)); };
+                }
+                el.render = function() {
+                    UI.render(el);
+                    return el;
+                };
+                return el;
+            },
+            Toggle: function(label, attrs = {}) {
+                const wrapper = document.createElement('label');
+                wrapper.style.display = 'flex';
+                wrapper.style.alignItems = 'center';
+                wrapper.style.gap = '10px';
+                wrapper.style.cursor = 'pointer';
+                wrapper.style.margin = '5px';
+                const switchDiv = document.createElement('div');
+                switchDiv.style.position = 'relative';
+                switchDiv.style.width = '44px';
+                switchDiv.style.height = '24px';
+                switchDiv.style.backgroundColor = '#475569';
+                switchDiv.style.borderRadius = '12px';
+                switchDiv.style.transition = 'background-color 0.2s';
+                const knob = document.createElement('div');
+                knob.style.position = 'absolute';
+                knob.style.top = '2px';
+                knob.style.left = '2px';
+                knob.style.width = '20px';
+                knob.style.height = '20px';
+                knob.style.borderRadius = '50%';
+                knob.style.backgroundColor = '#ffffff';
+                knob.style.transition = 'transform 0.2s';
+                switchDiv.appendChild(knob);
+                let isOn = !!attrs.isOn;
+                const updateToggleUI = (state) => {
+                    isOn = state;
+                    if (isOn) {
+                        switchDiv.style.backgroundColor = '#10b981';
+                        knob.style.transform = 'translateX(20px)';
+                    } else {
+                        switchDiv.style.backgroundColor = '#475569';
+                        knob.style.transform = 'translateX(0)';
+                    }
+                };
+                updateToggleUI(isOn);
+                wrapper.onclick = (e) => {
+                    e.preventDefault();
+                    updateToggleUI(!isOn);
+                    if (attrs.onChange && typeof attrs.onChange === 'function') {
+                        attrs.onChange(isOn);
+                    }
+                };
+                wrapper.appendChild(switchDiv);
+                if (label) {
+                    const textSpan = document.createElement('span');
+                    textSpan.textContent = Array.isArray(label) ? label.join('') : label;
+                    textSpan.style.color = '#e2e8f0';
+                    wrapper.appendChild(textSpan);
+                }
+                UI.applyStyles(wrapper, attrs);
+                wrapper.render = function() {
+                    UI.render(wrapper);
+                    return wrapper;
+                };
+                return wrapper;
+            },
+            Dropdown: function(options, attrs = {}) {
+                const el = document.createElement('select');
+                el.className = 'zenith-input';
+                el.style.background = 'rgba(15, 23, 42, 0.8)';
+                el.style.color = '#f8fafc';
+                el.style.cursor = 'pointer';
+                const populateOptions = (str) => {
+                    el.innerHTML = '';
+                    const opts = str.split(',');
+                    for (const opt of opts) {
+                        const trimmed = opt.trim();
+                        if (!trimmed) continue;
+                        const optionEl = document.createElement('option');
+                        optionEl.value = trimmed;
+                        optionEl.textContent = trimmed;
+                        el.appendChild(optionEl);
+                    }
+                };
+                const optsStr = Array.isArray(options) ? options.join(',') : (options || attrs.options || "");
+                populateOptions(optsStr);
+                if (attrs.value) el.value = attrs.value;
+                UI.applyStyles(el, attrs);
+                if (attrs.onChange && typeof attrs.onChange === 'function') {
+                    el.onchange = function() { attrs.onChange(el.value); };
+                }
+                el.render = function() {
+                    UI.render(el);
+                    return el;
+                };
+                return el;
+            },
+            Image: function(url, attrs = {}) {
+                const el = document.createElement('img');
+                el.src = Array.isArray(url) ? url.join('') : url;
+                el.style.maxWidth = '100%';
+                el.style.borderRadius = '12px';
+                el.style.boxShadow = '0 8px 30px rgba(0, 0, 0, 0.5)';
+                el.style.border = '1px solid rgba(255, 255, 255, 0.1)';
+                UI.applyStyles(el, attrs);
+                el.render = function() {
+                    UI.render(el);
+                    return el;
+                };
+                return el;
+            },
+            Video: function(url, attrs = {}) {
+                const el = document.createElement('video');
+                el.src = Array.isArray(url) ? url.join('') : url;
+                el.controls = true;
+                el.style.maxWidth = '100%';
+                el.style.borderRadius = '12px';
+                el.style.boxShadow = '0 8px 30px rgba(0, 0, 0, 0.5)';
+                el.style.border = '1px solid rgba(255, 255, 255, 0.1)';
+                UI.applyStyles(el, attrs);
+                el.render = function() {
+                    UI.render(el);
+                    return el;
+                };
+                return el;
+            },
+            Scrolling: function(children, attrs = {}) {
+                const el = document.createElement('div');
+                el.style.display = 'flex';
+                el.style.flexDirection = 'column';
+                el.style.overflowY = 'auto';
+                el.style.maxHeight = '300px';
+                el.style.border = '1px solid rgba(255, 255, 255, 0.1)';
+                el.style.padding = '12px';
+                el.style.borderRadius = '12px';
+                el.style.background = 'rgba(0, 0, 0, 0.3)';
+                const flatChildren = Array.isArray(children) ? children.flat() : [];
+                for (const child of flatChildren) {
+                    if (child) el.appendChild(child);
+                }
+                UI.applyStyles(el, attrs);
+                el.render = function() {
+                    UI.render(el);
+                    return el;
+                };
+                return el;
+            },
+            Card: function(children, attrs = {}) {
+                const el = document.createElement('div');
+                el.style.display = 'flex';
+                el.style.flexDirection = 'column';
+                el.style.background = 'rgba(30, 41, 59, 0.6)';
+                el.style.backdropFilter = 'blur(12px)';
+                el.style.border = '1px solid rgba(255, 255, 255, 0.1)';
+                el.style.borderRadius = '16px';
+                el.style.padding = '20px';
+                el.style.margin = '10px 0';
+                el.style.boxShadow = '0 20px 40px rgba(0, 0, 0, 0.4)';
+                const flatChildren = Array.isArray(children) ? children.flat() : [];
+                for (const child of flatChildren) {
+                    if (child) el.appendChild(child);
+                }
+                UI.applyStyles(el, attrs);
+                el.render = function() {
+                    UI.render(el);
+                    return el;
+                };
+                return el;
+            },
+            Container: function(children, attrs = {}) {
+                const el = document.createElement('div');
+                el.style.display = 'flex';
+                el.style.flexDirection = 'column';
+                el.style.border = '1px solid rgba(255, 255, 255, 0.05)';
+                el.style.borderRadius = '12px';
+                el.style.padding = '16px';
+                el.style.background = 'rgba(255, 255, 255, 0.02)';
+                const flatChildren = Array.isArray(children) ? children.flat() : [];
+                for (const child of flatChildren) {
+                    if (child) el.appendChild(child);
+                }
+                UI.applyStyles(el, attrs);
+                el.render = function() {
+                    UI.render(el);
+                    return el;
+                };
+                return el;
+            },
+            render: function(element) {
+                const root = document.getElementById('zenith-ui-root');
+                root.innerHTML = '';
+                root.appendChild(element);
+            }
+        };
+    </script>
+    <script>
+class GalleryApp {
+    constructor() {
+        this.title = "ZENITH PLATFORM GALLERY";
+        this.loaded_data = "No API data fetched yet.";
+        this.clicks = 0;
+        counterGlobalInstance = this;
+    }
+    build() {
+        return UI.Column([UI.Text([this.title], {fontWeight: "bold", color: "cyan"}), UI.Container([UI.Text(["1. Widget Grid & Flow Layouts"], {fontWeight: "bold", color: "yellow"}), UI.Row([UI.Text(["Flow item 1"], {color: "green"}), UI.Text(["Flow item 2"], {color: "magenta"})], {})], {padding: 1}), UI.Card([UI.Text(["2. Reactive Component States"], {fontWeight: "bold", color: "cyan"}), UI.Row([UI.Text(["Interactive clicks: " + this.clicks], {color: "green"}), UI.Button(["Click Me!"], {onClick: this.handlePress.bind(this)})], {})], {padding: 1}), UI.Row([UI.Image(["https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe"], {width: 35, height: 4}), UI.Video(["https://assets.mixkit.co/videos/preview/mixkit-stars-in-space-background-1611-large.mp4"], {width: 35, height: 4})], {}), UI.Scrolling([UI.Text(["Line 1: Infinite Scrolling Row"], {}), UI.Text(["Line 2: GPU Accelerated Layouts"], {}), UI.Text(["Line 3: Reactive State Binding"], {}), UI.Text(["Line 4: Native Platform Primitives"], {}), UI.Text(["Line 5: Dynamic CSS Variables"], {}), UI.Text(["Line 6: Single-Thread WASM Event Loop"], {})], {height: 4}), UI.Card([UI.Text(["3. REST API / Network Client Integration"], {fontWeight: "bold", color: "yellow"}), UI.Row([UI.Text(["Response: " + this.loaded_data], {}), UI.Button(["Fetch JSON"], {onClick: this.fetchData.bind(this)})], {})], {padding: 1}), UI.Card([UI.Text(["4. CSS Flexbox Layout Demonstration"], {fontWeight: "bold", color: "magenta"}), UI.Row([UI.Text(["[Grow 1]"], {color: "red", flexGrow: 1}), UI.Text(["[Grow 2]"], {color: "green", flexGrow: 2}), UI.Text(["[Grow 1]"], {color: "blue", flexGrow: 1})], {justifyContent: "space-around", gap: 1, width: 35})], {padding: 1})], {});
+    }
+    handlePress() {
+        this.setState(() => {
+            this.clicks = this.clicks + 1;
+        });
+    }
+    async fetchData() {
+        let res = await httpGet("https://jsonplaceholder.typicode.com/users");
+        this.setState(() => {
+            this.loaded_data = res;
+        });
+    }
+    render() {
+        const newDom = this.build();
+        if (this.domElement && this.domElement.parentNode) {
+            this.domElement.parentNode.replaceChild(newDom, this.domElement);
+        } else {
+            const root = document.getElementById('zenith-ui-root');
+            root.innerHTML = '';
+            root.appendChild(newDom);
+        }
+        this.domElement = newDom;
+        return newDom;
+    }
+    setState(callback) {
+        callback();
+        this.render();
+    }
+}
+async function main() {
+    println("--- Booting Zenith Multi-Platform Gallery App ---");
+    let app = new GalleryApp();
+    app.build().render();
+    println("--- Gallery Loaded Successfully. Interactive loop started! ---");
+}
+        let counterGlobalInstance = null;
+        function triggerIncrement() {
+            if (counterGlobalInstance) {
+                if (typeof counterGlobalInstance.increment === 'function') {
+                    counterGlobalInstance.increment();
+                } else if (typeof counterGlobalInstance.handleIncrement === 'function') {
+                    counterGlobalInstance.handleIncrement();
+                }
+            }
+        }
+
+        window.onload = () => {
+            main();
+        };
+    </script>
+</body>
+</html>

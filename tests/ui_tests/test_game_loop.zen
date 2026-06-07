@@ -1,0 +1,79 @@
+import std.io;
+
+@library("builtin")
+foreign "C" {
+    Bool isKeyPressed(String key);
+    Float getMouseX();
+    Float getMouseY();
+}
+
+interface Canvas {
+    Void clear(String color);
+    Void drawRect(Float x, Float y, Float w, Float h, String color);
+    Void drawCircle(Float cx, Float cy, Float r, String color);
+    Void drawText(String text, Float x, Float y, String color);
+    Void present();
+}
+
+class BouncingBallGame() {
+    Float ball_x = 10.0;
+    Float ball_y = 5.0;
+    Float ball_dx = 15.0;
+    Float ball_dy = 10.0;
+    Float ball_r = 1.0;
+    
+    Void init() {
+        println("Game Initialized!");
+    }
+    
+    Void update(Float dt) {
+        // Steer the ball using keyboard arrow keys or WASD
+        if (isKeyPressed("ArrowLeft") || isKeyPressed("a")) {
+            ball_dx = 0.0 - 15.0;
+        }
+        if (isKeyPressed("ArrowRight") || isKeyPressed("d")) {
+            ball_dx = 15.0;
+        }
+        if (isKeyPressed("ArrowUp") || isKeyPressed("w")) {
+            ball_dy = 0.0 - 10.0;
+        }
+        if (isKeyPressed("ArrowDown") || isKeyPressed("s")) {
+            ball_dy = 10.0;
+        }
+
+        ball_x = ball_x + ball_dx * dt;
+        ball_y = ball_y + ball_dy * dt;
+        
+        if (ball_x <= ball_r) {
+            ball_x = ball_r;
+            ball_dx = 0.0 - ball_dx;
+        }
+        if (ball_x >= 80.0 - ball_r) {
+            ball_x = 80.0 - ball_r;
+            ball_dx = 0.0 - ball_dx;
+        }
+        if (ball_y <= ball_r) {
+            ball_y = ball_r;
+            ball_dy = 0.0 - ball_dy;
+        }
+        if (ball_y >= 24.0 - ball_r) {
+            ball_y = 24.0 - ball_r;
+            ball_dy = 0.0 - ball_dy;
+        }
+    }
+    
+    Void draw(Canvas canvas) {
+        canvas.clear("black");
+        canvas.drawCircle(ball_x, ball_y, ball_r, "cyan");
+        canvas.drawText("Bouncing Ball Game - Zenith Engine", 20.0, 1.0, "yellow");
+        canvas.drawText("Ball position: " + ball_x + ", " + ball_y, 2.0, 20.0, "green");
+        canvas.drawText("Mouse position: " + getMouseX() + ", " + getMouseY(), 2.0, 22.0, "magenta");
+    }
+}
+
+Void main() {
+    println("--- Launching Zenith Game ---");
+    BouncingBallGame game = BouncingBallGame();
+    game.run();
+    println("--- Game Over ---");
+}

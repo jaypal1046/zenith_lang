@@ -1,0 +1,34 @@
+// tests/ui_tests/test_router.zen
+import std.io;
+
+foreign "js" {
+    Void navigate(path: String);
+}
+
+@route("/home")
+class HomePage() {
+    UI build() {
+        return Column(
+            Text("Welcome to the Home Page!", fontWeight: "bold", fontSize: 24, color: "cyan"),
+            Button("Go to About Page", onClick: goToAbout, padding: 10, borderRadius: 8, backgroundColor: "blue")
+        );
+    }
+
+    Void goToAbout() {
+        navigate("/about");
+    }
+}
+
+@route("/about")
+class AboutPage() {
+    UI build() {
+        return Column(
+            Text("This is the About Page!", fontWeight: "bold", fontSize: 24, color: "green"),
+            Button("Go back Home", onClick: goHome, padding: 10, borderRadius: 8, backgroundColor: "orange")
+        );
+    }
+
+    Void goHome() {
+        navigate("/home");
+    }
+}

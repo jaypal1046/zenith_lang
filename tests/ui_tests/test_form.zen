@@ -1,0 +1,56 @@
+// tests/ui_tests/test_form.zen
+import std.io;
+
+class FormValidationApp() {
+    String title = "Declarative Form Validation Demo";
+    String emailValue = "";
+    String requiredValue = "";
+
+    UI build() {
+        return Column(
+            Text(title, fontSize: 28, fontWeight: "bold", fontFamily: "sans-serif", color: "white"),
+            
+            Card(
+                Text("Email Field (isEmail validator):", fontWeight: "bold"),
+                TextField("Enter email address", value: emailValue, validator: isEmail, onChange: onEmailChange, fontSize: 16, border: "1px solid gray", borderRadius: 4),
+                padding: 10,
+                boxShadow: "0 4px 6px rgba(0,0,0,0.1)",
+                transition: "all 0.3s ease"
+            ),
+            
+            Card(
+                Text("Required Field (isRequired validator):", fontWeight: "bold"),
+                TextField("Enter required text", value: requiredValue, validator: isRequired, onChange: onRequiredChange, fontSize: 16, border: "1px solid gray", borderRadius: 4),
+                padding: 10,
+                boxShadow: "0 4px 6px rgba(0,0,0,0.1)",
+                transition: "all 0.3s ease"
+            ),
+
+            Row(
+                Text("Current Email: " + emailValue, color: "gray"),
+                Text("Current Required: " + requiredValue, color: "gray"),
+                gap: 20
+            ),
+            
+            alignItems: "center",
+            display: "flex"
+        );
+    }
+
+    Void onEmailChange(val: String) {
+        setState {
+            emailValue = val;
+        }
+    }
+
+    Void onRequiredChange(val: String) {
+        setState {
+            requiredValue = val;
+        }
+    }
+}
+
+Void main() {
+    FormValidationApp app = FormValidationApp();
+    app.build().render();
+}

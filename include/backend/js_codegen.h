@@ -32,7 +32,7 @@ private:
     std::string generateExpression(ExprNode* expr);
 
 public:
-    std::string generate(ProgramNode* program);
+    std::string generate(ProgramNode* program, bool is_module_mode = false);
 };
 
 #endif // JS_CODEGEN_H

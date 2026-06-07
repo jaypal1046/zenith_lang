@@ -914,48 +914,6 @@ bool SemanticAnalyzer::analyze(ProgramNode* program) {
             classes[class_decl->class_name] = class_decl;
         } else if (auto* interface_decl = dynamic_cast<InterfaceDeclNode*>(stmt.get())) {
             interfaces[interface_decl->interface_name] = interface_decl;
-        } else if (auto* fn_decl = dynamic_cast<FunctionNode*>(stmt.get())) {
-            functions[fn_decl->function_name] = fn_decl;
-        } else if (auto* orch_decl = dynamic_cast<AgentOrchestrationNode*>(stmt.get())) {
-            orchestrations[orch_decl->orchestration_name] = orch_decl;
-        } else if (auto* imp = dynamic_cast<ImportNode*>(stmt.get())) {
-            if (imp->module_name == "std.io") {
-                auto print_fn = std::make_unique<FunctionNode>(std::make_unique<TypeNode>("Void"), "print");
-                print_fn->parameters.push_back(std::make_unique<VarDeclNode>(std::make_unique<TypeNode>("String"), "msg"));
-                
-                auto println_fn = std::make_unique<FunctionNode>(std::make_unique<TypeNode>("Void"), "println");
-                println_fn->parameters.push_back(std::make_unique<VarDeclNode>(std::make_unique<TypeNode>("String"), "msg"));
-
-                auto httpGet_fn = std::make_unique<FunctionNode>(std::make_unique<TypeNode>("String"), "httpGet");
-                httpGet_fn->parameters.push_back(std::make_unique<VarDeclNode>(std::make_unique<TypeNode>("String"), "url"));
-
-                auto httpPost_fn = std::make_unique<FunctionNode>(std::make_unique<TypeNode>("String"), "httpPost");
-                httpPost_fn->parameters.push_back(std::make_unique<VarDeclNode>(std::make_unique<TypeNode>("String"), "url"));
-                httpPost_fn->parameters.push_back(std::make_unique<VarDeclNode>(std::make_unique<TypeNode>("String"), "json_body"));
-
-                builtin_fns.push_back(std::move(print_fn));
-                builtin_fns.push_back(std::move(println_fn));
-                builtin_fns.push_back(std::move(httpGet_fn));
-                builtin_fns.push_back(std::move(httpPost_fn));
-
-                functions["print"] = builtin_fns[builtin_fns.size() - 4].get();
-                functions["println"] = builtin_fns[builtin_fns.size() - 3].get();
-                functions["httpGet"] = builtin_fns[builtin_fns.size() - 2].get();
-                functions["httpPost"] = builtin_fns[builtin_fns.size() - 1].get();
-            }
-        }
-    }
-
-    // Second pass: Analyze all entities in scope
-    for (const auto& stmt : program->statements) {
-        if (auto* var_decl = dynamic_cast<VarDeclNode*>(stmt.get())) {
-            // Handle top-level global variables with type inference
-            std::string expected_type = var_decl->type->type_name;
-            if (expected_type == "Auto") {
-                if (!var_decl->initializer) {
-                    error("Type Inference Error: Variable '" + var_decl->var_name + "' declared with 'let' must have an initializer.", var_decl);
-                    expected_type = "Void";
-                } else {
                     std::string init_type = typeCheckExpression(var_decl->initializer.get());
                     populateTypeNode(var_decl->type.get(), init_type);
                     expected_type = init_type;

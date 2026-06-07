@@ -155,6 +155,9 @@ std::string CodeGenerator::generateExpression(ExprNode* expr) {
         return generateExpression(prop->object.get()) + "." + cppIdentifier(prop->property_name);
     }
     if (auto* call = dynamic_cast<MethodCallNode*>(expr)) {
+        if (call->method_name == "run" && call->arguments.empty()) {
+            return "zenith::runGameLoop(" + generateExpression(call->object.get()) + ")";
+        }
         if (call->method_name == "render") {
             if (auto* inner_call = dynamic_cast<MethodCallNode*>(call->object.get())) {
                 if (inner_call->method_name == "build") {
@@ -177,7 +180,6 @@ std::string CodeGenerator::generateExpression(ExprNode* expr) {
         std::string m_name = call->method_name;
         if (m_name == "push") m_name = "push_back";
         if (m_name == "length") m_name = "size";
-        
         std::string res = generateExpression(call->object.get()) + "." + m_name + "(";
         for (size_t i = 0; i < call->arguments.size(); ++i) {
             res += generateExpression(call->arguments[i].get());
@@ -245,13 +247,13 @@ std::string CodeGenerator::generateExpression(ExprNode* expr) {
         res += "}";
         return res;
     }
+
     if (auto* ui = dynamic_cast<UIComponentNode*>(expr)) {
         std::string res;
         bool is_class = class_names.count(ui->component_type) > 0;
         bool is_fn = function_names.count(ui->component_type) > 0;
         bool is_variable_call = !ui->component_type.empty() && std::islower(static_cast<unsigned char>(ui->component_type[0]));
         bool is_custom = is_class || is_fn || is_variable_call;
-        // Widgets with NO first positional argument at all (attrs only — no label, no children)
         bool is_no_first_param = (!is_custom && ui->component_type == "Slider");
         
         if (is_custom) {
@@ -260,7 +262,6 @@ std::string CodeGenerator::generateExpression(ExprNode* expr) {
             res = "zenith::UI::" + ui->component_type + "(";
         }
         
-        // Children / Positional arguments
         if (!is_custom) {
             bool is_string_param = (
                 ui->component_type == "Text" ||
@@ -273,7 +274,6 @@ std::string CodeGenerator::generateExpression(ExprNode* expr) {
                 ui->component_type == "Dropdown"
             );
             if (is_no_first_param) {
-                // No leading arg — attrs follow directly with no preceding comma
             } else if (is_string_param) {
                 if (!ui->children.empty()) {
                     res += generateExpression(ui->children[0].get());
@@ -301,20 +301,21 @@ std::string CodeGenerator::generateExpression(ExprNode* expr) {
             }
         }
         
-        // Named arguments (attributes) - only for built-in UI components
         if (!is_custom) {
-            // is_no_first_param widgets have no leading positional arg, so no leading comma
             res += (is_no_first_param ? "{" : ", {");
+            bool first_arg = true;
             for (size_t i = 0; i < ui->named_args.size(); ++i) {
                 std::string key = ui->named_args[i].first;
+                if (key == "validator") continue;
                 std::string val = generateExpression(ui->named_args[i].second.get());
-                if (key.rfind("on", 0) == 0) { // starts with "on"
+                if (key.rfind("on", 0) == 0) {
                     if (val.front() != '"') {
                         val = "\"" + val + "\"";
                     }
                 }
+                if (!first_arg) res += ", ";
                 res += "{\"" + key + "\", zenith::toString(" + val + ")}";
-                if (i < ui->named_args.size() - 1) res += ", ";
+                first_arg = false;
             }
             res += "}";
         }
@@ -339,7 +340,6 @@ void CodeGenerator::generateStatement(ASTNode* stmt) {
             indent();
             output << "return;\n";
         } else if (current_function_is_exported_with_string_return) {
-            // For exported functions returning String, store in intermediate variable for ABI conversion
             output << "_zenith_ret = " << generateExpression(return_stmt->expression.get()) << ";\n";
         } else {
             output << "return " << generateExpression(return_stmt->expression.get()) << ";\n";
@@ -348,7 +348,6 @@ void CodeGenerator::generateStatement(ASTNode* stmt) {
         indent();
         std::string type_name = var_decl->type->type_name;
         std::string var_name = cppIdentifier(var_decl->var_name);
-        
         // Handle type inference - use 'auto' for inferred types
         bool use_auto = var_decl->type->is_inferred && var_decl->initializer != nullptr &&
                         var_decl->type->type_name != "List" && var_decl->type->type_name != "Map";
@@ -547,175 +546,176 @@ void CodeGenerator::generateAgenticFunction(AgenticFunctionNode* node) {
         }
     }
 
-    indent(); output << "zenith::LLMClient client(\"http://localhost:11434/api/generate\");\n";
-    if (node->is_streaming) {
-        indent(); output << "std::string response = client.promptStream(prompt, [](const std::string& chunk) { std::cout << chunk << std::flush; }";
-        if (!image_path_var.empty()) {
-            output << ", " << image_path_var;
-        }
-        output << ");\n";
-    } else {
-        indent(); output << "std::string response = client.prompt(prompt";
-        if (!image_path_var.empty()) {
-            output << ", " << image_path_var;
-        }
-        output << ");\n";
-    }
-    indent(); output << "return response;\n";
-    
-    indent_level--;
-    indent(); output << "}\n\n";
-}
-
-void CodeGenerator::generateOrchestration(AgentOrchestrationNode* node) {
     indent();
-    if (node->strategy == "sequential") {
-        output << "std::string " << node->orchestration_name << "(std::string input) {\n";
-        indent_level++;
-        indent(); output << "std::string current_val = input;\n";
-        for (const auto& agent : node->agents) {
-            indent(); output << "current_val = " << agent << "(current_val);\n";
-        }
-        indent(); output << "return current_val;\n";
+    if (is_inside_class_method) {
+        output << "zenith::LLMClient client(this->url.empty() ? \"http://localhost:11434\" : this->url);\n";
     } else {
-        output << "std::vector<std::string> " << node->orchestration_name << "(std::string input) {\n";
-        indent_level++;
-        for (size_t i = 0; i < node->agents.size(); ++i) {
-            indent(); output << "auto f" << i << " = std::async(std::launch::async, " << node->agents[i] << ", input);\n";
-        }
-        indent(); output << "std::vector<std::string> results;\n";
-        for (size_t i = 0; i < node->agents.size(); ++i) {
-            indent(); output << "results.push_back(f" << i << ".get());\n";
-        }
-        indent(); output << "return results;\n";
+        output << "zenith::LLMClient client(\"http://localhost:11434\");\n";
     }
+
+    if (node->is_streaming) {
+        indent();
+        output << "return client.promptStream(prompt, [](const std::string& chunk) {\n";
+        indent_level++;
+        indent();
+        output << "std::cout << chunk << std::flush;\n";
+        indent_level--;
+        indent();
+        output << "}, " << (image_path_var.empty() ? "\"\"" : image_path_var) << ");\n";
+    } else {
+        indent();
+        output << "return client.prompt(prompt, " << (image_path_var.empty() ? "\"\"" : image_path_var) << ");\n";
+    }
+
     indent_level--;
     indent(); output << "}\n\n";
 }
 
 void CodeGenerator::generateFunction(FunctionNode* node) {
     if (node->is_foreign) {
-        if (node->foreign_abi == "C") {
-            // Extract library path from attributes or use default
-            std::string lib_path = "bridge";  // Default library name
-            if (node->attributes.count("library")) {
-                lib_path = node->attributes.at("library");
-            } else if (node->attributes.count("lib_path")) {
-                lib_path = node->attributes.at("lib_path");
-            }
-            
-            // Determine platform-specific extension
-            std::string lib_extension = ".so";
-            #ifdef _WIN32
-            lib_extension = ".dll";
-            #elif defined(__APPLE__)
-            lib_extension = ".dylib";
-            #endif
-            
-            // Generate dynamic loading wrapper using LibraryManager
+        if (node->foreign_abi == "python") {
             indent();
-            output << mapTypeForCFFI(node->return_type.get(), true) << " " << node->function_name << "(";
+            output << mapType(node->return_type.get()) << " " << node->function_name << "(";
             for (size_t i = 0; i < node->parameters.size(); ++i) {
-                output << mapTypeForCFFI(node->parameters[i]->type.get(), false) << " " << node->parameters[i]->var_name;
+                output << mapType(node->parameters[i]->type.get()) << " " << node->parameters[i]->var_name;
                 if (i < node->parameters.size() - 1) output << ", ";
             }
             output << ") {\n";
             indent_level++;
-            
-            // Static function pointer loaded once via dlsym/GetProcAddress
-            indent();
-            output << "static zenith::ffi::DynamicLibrary::FuncPtr _func_ptr = nullptr;\n";
-            indent();
-            output << "static std::once_flag _load_flag;\n";
-            indent();
-            output << "std::call_once(_load_flag, []() {\n";
-            indent_level++;
-            indent();
-            output << "auto& lib = zenith::ffi::LibraryManager::getInstance().loadLibrary(\"" << lib_path << lib_extension << "\");\n";
-            indent();
-            output << "_func_ptr = lib.getFunction<zenith::ffi::DynamicLibrary::FuncPtr>(\"" << node->function_name << "\");\n";
-            indent();
-            output << "if (!_func_ptr) {\n";
-            indent_level++;
-            indent();
-            output << "throw std::runtime_error(\"Failed to load function '" << node->function_name << "' from library '" << lib_path << lib_extension << "\");\n";
-            indent_level--;
-            indent();
-            output << "}\n";
-            indent_level--;
-            indent();
-            output << "});\n";
-            
-            // Cast and call the function pointer
-            std::string func_type = mapTypeForCFFI(node->return_type.get(), true) + " (*)(";
-            for (size_t i = 0; i < node->parameters.size(); ++i) {
-                func_type += mapTypeForCFFI(node->parameters[i]->type.get(), false);
-                if (i < node->parameters.size() - 1) func_type += ", ";
-            }
-            func_type += ")";
-            
-            indent();
-            output << "auto _typed_func = reinterpret_cast<" << func_type << ">(_func_ptr);\n";
-            indent();
-            if (mapTypeForCFFI(node->return_type.get(), true) != "void") {
-                output << "return _typed_func(";
-            } else {
-                output << "_typed_func(";
-            }
-            for (size_t i = 0; i < node->parameters.size(); ++i) {
-                output << node->parameters[i]->var_name;
-                if (i < node->parameters.size() - 1) output << ", ";
-            }
-            output << ");\n";
-            
-            indent_level--;
-            indent();
-            output << "}\n\n";
-            return;
-        }
-        else if (node->foreign_abi == "python") {
-            // Use embedded Python runtime via PythonFFIBridge
-            indent();
-            output << mapTypeForCFFI(node->return_type.get(), true) << " " << node->function_name << "(";
-            for (size_t i = 0; i < node->parameters.size(); ++i) {
-                output << mapTypeForCFFI(node->parameters[i]->type.get(), false) << " " << node->parameters[i]->var_name;
-                if (i < node->parameters.size() - 1) output << ", ";
-            }
-            output << ") {\n";
-            indent_level++;
-
-            // Generate typed call based on return type
+            indent(); output << "// --- Python FFI Bridge: Call function ---\n";
             std::string ret_type = mapType(node->return_type.get());
-            std::string module_name = "bridge";  // Default module name
-
-            // Check for custom module in attributes
-            if (node->attributes.count("python_module")) {
-                module_name = node->attributes.at("python_module");
+            indent();
+            if (ret_type != "void") {
+                output << "return ";
             }
-
-            if (ret_type == "int" || ret_type == "Int") {
-                indent(); output << "return zenith::ffi::PythonFFIBridge::callInt(\"" << module_name << "\", \"" << node->function_name << "\"";
-            } else if (ret_type == "double" || ret_type == "float" || ret_type == "Float") {
-                indent(); output << "return zenith::ffi::PythonFFIBridge::callDouble(\"" << module_name << "\", \"" << node->function_name << "\"";
-            } else if (ret_type == "bool" || ret_type == "Bool") {
-                indent(); output << "return zenith::ffi::PythonFFIBridge::callBool(\"" << module_name << "\", \"" << node->function_name << "\"";
-            } else if (ret_type == "std::string" || ret_type == "String") {
-                indent(); output << "return zenith::ffi::PythonFFIBridge::callString(\"" << module_name << "\", \"" << node->function_name << "\"";
-            } else {
-                indent(); output << "zenith::ffi::PythonFFIBridge::callFunction(\"" << module_name << "\", \"" << node->function_name << "\"";
-            }
-
-            // Pass arguments
+            output << "zenith::ffi::PythonFFIBridge::call<" << ret_type << ">(\"" << node->function_name << "\"";
             for (size_t i = 0; i < node->parameters.size(); ++i) {
                 output << ", " << node->parameters[i]->var_name;
             }
             output << ");\n";
-
             indent_level--;
             indent(); output << "}\n\n";
             return;
-        }
-        else { // "js"
+        } else if (node->foreign_abi == "C") {
+            std::string lib_path = node->attributes.count("library") ? node->attributes.at("library") : "";
+            
+            if (lib_path == "builtin") {
+                output << "extern \"C\" " << mapTypeForCFFI(node->return_type.get(), true) 
+                       << " _zenith_builtin_" << node->function_name << "(";
+                for (size_t i = 0; i < node->parameters.size(); ++i) {
+                    output << mapTypeForCFFI(node->parameters[i]->type.get(), false);
+                    if (i < node->parameters.size() - 1) output << ", ";
+                }
+                output << ");\n\n";
+            } else if (lib_path.empty()) {
+                output << "extern \"C\" " << mapTypeForCFFI(node->return_type.get(), true) 
+                       << " " << node->function_name << "(";
+                for (size_t i = 0; i < node->parameters.size(); ++i) {
+                    output << mapTypeForCFFI(node->parameters[i]->type.get(), false);
+                    if (i < node->parameters.size() - 1) output << ", ";
+                }
+                output << ");\n\n";
+            }
+            
+            indent();
+            output << mapType(node->return_type.get()) << " " << node->function_name << "(";
+            for (size_t i = 0; i < node->parameters.size(); ++i) {
+                output << mapType(node->parameters[i]->type.get()) << " " << node->parameters[i]->var_name;
+                if (i < node->parameters.size() - 1) output << ", ";
+            }
+            output << ") {\n";
+            indent_level++;
+            
+            if (lib_path == "builtin") {
+                indent();
+                if (mapType(node->return_type.get()) != "void") {
+                    output << "return ";
+                }
+                output << "::_zenith_builtin_" << node->function_name << "(";
+                for (size_t i = 0; i < node->parameters.size(); ++i) {
+                    if (mapType(node->parameters[i]->type.get()) == "std::string") {
+                        output << node->parameters[i]->var_name << ".c_str()";
+                    } else {
+                        output << node->parameters[i]->var_name;
+                    }
+                    if (i < node->parameters.size() - 1) output << ", ";
+                }
+                output << ");\n";
+            } else if (lib_path.empty()) {
+                indent();
+                if (mapType(node->return_type.get()) != "void") {
+                    output << "return ";
+                }
+                output << "::" << node->function_name << "(";
+                for (size_t i = 0; i < node->parameters.size(); ++i) {
+                    if (mapType(node->parameters[i]->type.get()) == "std::string") {
+                        output << node->parameters[i]->var_name << ".c_str()";
+                    } else {
+                        output << node->parameters[i]->var_name;
+                    }
+                    if (i < node->parameters.size() - 1) output << ", ";
+                }
+                output << ");\n";
+            } else {
+                std::string ret_c = mapTypeForCFFI(node->return_type.get(), true);
+                indent();
+                output << "typedef " << ret_c << " (*FuncType)(";
+                for (size_t i = 0; i < node->parameters.size(); ++i) {
+                    output << mapTypeForCFFI(node->parameters[i]->type.get(), false);
+                    if (i < node->parameters.size() - 1) output << ", ";
+                }
+                output << ");\n";
+                
+                indent();
+                output << "static FuncType func = (FuncType)zenith::ffi::LibraryManager::getInstance().loadLibrary(\"" << lib_path << "\").getFunction<void*>(\"" << node->function_name << "\");\n";
+                
+                indent();
+                output << "if (!func) {\n";
+                indent_level++;
+                indent();
+                output << "std::cerr << \"[FFI Error] Failed to load function '" << node->function_name << "' from '" << lib_path << "'\" << std::endl;\n";
+                if (mapType(node->return_type.get()) == "std::string") {
+                    indent(); output << "return \"\";\n";
+                } else if (mapType(node->return_type.get()) == "bool") {
+                    indent(); output << "return false;\n";
+                } else if (mapType(node->return_type.get()) != "void") {
+                    indent(); output << "return 0;\n";
+                } else {
+                    indent(); output << "return;\n";
+                }
+                indent_level--;
+                indent(); output << "}\n";
+                
+                indent();
+                if (mapType(node->return_type.get()) != "void") {
+                    if (mapType(node->return_type.get()) == "std::string") {
+                        output << "return std::string(func(";
+                    } else {
+                        output << "return func(";
+                    }
+                } else {
+                    output << "func(";
+                }
+                
+                for (size_t i = 0; i < node->parameters.size(); ++i) {
+                    if (mapType(node->parameters[i]->type.get()) == "std::string") {
+                        output << node->parameters[i]->var_name << ".c_str()";
+                    } else {
+                        output << node->parameters[i]->var_name;
+                    }
+                    if (i < node->parameters.size() - 1) output << ", ";
+                }
+                
+                if (mapType(node->return_type.get()) == "std::string") {
+                    output << "));\n";
+                } else {
+                    output << ");\n";
+                }
+            }
+            indent_level--;
+            indent(); output << "}\n\n";
+            return;
+        } else { // "js"
             indent();
             output << mapType(node->return_type.get()) << " " << node->function_name << "(";
             for (size_t i = 0; i < node->parameters.size(); ++i) {
@@ -1031,6 +1031,54 @@ void CodeGenerator::generateClass(ClassDeclNode* node) {
                 }
             }
         }
+    if (node->is_managed) {
+        output << "\n";
+        indent(); output << "void __gc_enumerate(std::vector<zenith::mem::RcBlock*>& out) override {\n";
+        indent_level++;
+        for (const auto& field : node->fields) {
+            std::string ft = field->type ? field->type->type_name : "";
+            if (ft == "Ref" || ft == "Weak") {
+                // Access the block via the smart pointer's internal block
+                indent(); output << "// GC trace field: " << field->var_name << "\n";
+            }
+        }
+        indent_level--;
+        indent(); output << "}\n";
+    }
+    output << "\n";
+
+    for (const auto& method : node->methods) {
+        is_inside_class_method = true;
+        if (auto* agentic = dynamic_cast<AgenticFunctionNode*>(method.get())) {
+            generateAgenticFunction(agentic);
+        } else {
+            generateFunction(method.get());
+        }
+        is_inside_class_method = false;
+    }
+
+    // Generate triggerCallback dispatcher
+    indent(); output << "void triggerCallback(std::string name, std::string val = \"\") {\n";
+    indent_level++;
+    for (const auto& method : node->methods) {
+        if (method->function_name != "build") {
+            if (method->parameters.empty()) {
+                indent();
+                output << "if (name == \"" << method->function_name << "\") { this->" << method->function_name << "(); return; }\n";
+            } else if (method->parameters.size() == 1) {
+                std::string param_type = mapType(method->parameters[0]->type.get());
+                indent();
+                if (param_type == "std::string") {
+                    output << "if (name == \"" << method->function_name << "\") { this->" << method->function_name << "(val); return; }\n";
+                } else if (param_type == "bool") {
+                    output << "if (name == \"" << method->function_name << "\") { this->" << method->function_name << "(val == \"true\"); return; }\n";
+                } else if (param_type == "int") {
+                    output << "if (name == \"" << method->function_name << "\") { try { this->" << method->function_name << "(std::stoi(val)); } catch(...) {} return; }\n";
+                } else if (param_type == "float") {
+                    output << "if (name == \"" << method->function_name << "\") { try { this->" << method->function_name << "(std::stof(val)); } catch(...) {} return; }\n";
+                }
+            }
+        }
     }
     indent_level--;
     indent(); output << "}\n\n";
@@ -1062,6 +1110,39 @@ void CodeGenerator::generateInterface(InterfaceDeclNode* node) {
     }
     indent_level--;
     indent(); output << "};\n\n";
+}
+
+void CodeGenerator::generateOrchestration(AgentOrchestrationNode* node) {
+    indent();
+    if (node->strategy == "sequential") {
+        output << "std::string " << node->orchestration_name << "(std::string input) {\n";
+        indent_level++;
+        indent(); output << "std::string current_val = input;\n";
+        for (const auto& agent : node->agents) {
+            indent(); output << "current_val = " << agent << "(current_val);\n";
+        }
+        indent(); output << "return current_val;\n";
+    } else {
+        output << "std::vector<std::string> " << node->orchestration_name << "(std::string input) {\n";
+        indent_level++;
+        indent(); output << "std::vector<std::future<std::string>> futures;\n";
+        for (const auto& agent : node->agents) {
+            indent(); output << "futures.push_back(std::async(std::launch::async, [input]() {\n";
+            indent_level++;
+            indent(); output << "return " << agent << "(input);\n";
+            indent_level--;
+            indent(); output << "}));\n";
+        }
+        indent(); output << "std::vector<std::string> results;\n";
+        indent(); output << "for (auto& f : futures) {\n";
+        indent_level++;
+        indent(); output << "results.push_back(f.get());\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "return results;\n";
+    }
+    indent_level--;
+    indent(); output << "}\n\n";
 }
 
 std::string CodeGenerator::generate(ProgramNode* program) {

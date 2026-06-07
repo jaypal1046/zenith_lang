@@ -339,6 +339,8 @@ public:
     bool is_reactive = false;   // For reactive state management
     bool is_component = false;  // For UI components
     bool is_managed = false;    // For @managed RC+GC heap tracking
+    bool is_routed = false;     // For @route SPA routing annotation
+    std::string route_path;     // Path associated with @route
     
     ClassDeclNode(std::string name) : class_name(std::move(name)) {}
 };

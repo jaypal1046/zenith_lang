@@ -2157,13 +2157,21 @@ bool compileProject(const std::string& filename, const std::string& target, cons
     std::string out_filename;
 
     if (target == "web") {
-        JSCodeGenerator codegen;
-        transpiled_code = codegen.generate(ast.get());
         if (!out_filename_override.empty()) {
             out_filename = out_filename_override;
         } else {
             out_filename = filename.substr(0, filename.length() - 4) + ".html";
         }
+        
+        bool is_module_mode = false;
+        if (out_filename.length() >= 3 && out_filename.substr(out_filename.length() - 3) == ".js") {
+            is_module_mode = true;
+        } else if (out_filename.length() >= 4 && out_filename.substr(out_filename.length() - 4) == ".mjs") {
+            is_module_mode = true;
+        }
+        
+        JSCodeGenerator codegen;
+        transpiled_code = codegen.generate(ast.get(), is_module_mode);
     } else if (target == "wasm") {
         WASMCodeGenerator codegen;
         std::string wat_code = codegen.generate(ast.get());

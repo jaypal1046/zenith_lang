@@ -7,6 +7,7 @@ import glob
 def run_cmd(cmd, cwd=None):
     print(f"Running: {' '.join(cmd) if isinstance(cmd, list) else cmd}")
     env = os.environ.copy()
+    env["PATH"] = r"C:\Users\jaypr\scoop\apps\gcc\15.2.0\bin;" + env.get("PATH", "")
     env.setdefault("PYTHONIOENCODING", "utf-8")
     res = subprocess.run(cmd, shell=True, cwd=cwd, capture_output=True, text=True,
                          encoding="utf-8", errors="replace", env=env)
@@ -30,7 +31,7 @@ def main():
     os.makedirs(lang_tests_dir, exist_ok=True)
 
     # 2. Dynamic Reorganization
-    ui_files = ["gallery.zen", "main.zen", "helper.zen", "test_widgets.zen", "test_npm_chart.zen", "website.zen", "test_ssr.zen"]
+    ui_files = ["gallery.zen", "main.zen", "helper.zen", "test_widgets.zen", "test_npm_chart.zen", "website.zen", "test_ssr.zen", "test_game_loop.zen"]
     lang_files = ["simple_inference.zen", "advanced_inference.zen", "comprehensive_type_inference.zen", "type_inference_simple.zen", "type_inference_test.zen", "test_agentic_features.zen", "test_async.zen", "test_bridge_app.zen", "test_concurrency.zen", "test_interop.zen", "test_memory.zen", "test_unary_compound.zen", "test_for_loops.zen"]
 
     for f in ui_files:
@@ -81,7 +82,7 @@ def main():
         "src/main.cpp", "src/frontend/lexer.cpp", "src/frontend/parser.cpp",
         "src/frontend/semantic.cpp", "src/frontend/formatter.cpp", "src/lsp/lsp.cpp",
         "src/backend/codegen.cpp", "src/backend/js_codegen.cpp", "src/backend/wasm_codegen.cpp",
-        "-I", "include", "-o", "zenith.exe", "-lws2_32", "-lwinhttp", "-lpthread"
+        "-I", "include", "-o", "zenith.exe", "-lwinhttp", "-lws2_32", "-lpthread"
     ]
     res = run_cmd(build_cmd, cwd=root_dir)
     if res.returncode != 0:

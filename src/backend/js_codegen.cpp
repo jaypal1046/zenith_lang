@@ -157,6 +157,16 @@ static std::string preRenderInlineStyles(UIComponentNode* ui, PreRenderContext& 
         else if (key == "justifyContent") style += "justify-content: " + value + "; ";
         else if (key == "alignItems") style += "align-items: " + value + "; ";
         else if (key == "flexDirection") style += "flex-direction: " + value + "; ";
+        else if (key == "fontSize") style += "font-size: " + styleValueWithUnit(value) + "; ";
+        else if (key == "borderRadius") style += "border-radius: " + styleValueWithUnit(value) + "; ";
+        else if (key == "border") style += "border: " + value + "; ";
+        else if (key == "opacity") style += "opacity: " + value + "; ";
+        else if (key == "cursor") style += "cursor: " + value + "; ";
+        else if (key == "display") style += "display: " + value + "; ";
+        else if (key == "boxShadow") style += "box-shadow: " + value + "; ";
+        else if (key == "alignSelf") style += "align-self: " + value + "; ";
+        else if (key == "fontFamily") style += "font-family: " + value + "; ";
+        else if (key == "transition") style += "transition: " + value + "; ";
     }
     return style;
 }
@@ -639,6 +649,9 @@ std::string JSCodeGenerator::generateExpression(ExprNode* expr) {
         return generateExpression(prop->object.get()) + "." + prop->property_name;
     }
     if (auto* call = dynamic_cast<MethodCallNode*>(expr)) {
+        if (call->method_name == "run" && call->arguments.empty()) {
+            return "zenith.runGameLoop(" + generateExpression(call->object.get()) + ")";
+        }
         if (call->method_name == "length" && call->arguments.empty()) {
             return generateExpression(call->object.get()) + ".length";
         }
@@ -842,10 +855,7 @@ void JSCodeGenerator::generateClass(ClassDeclNode* node) {
         output << "this." << member->var_name << " = " 
                << (member->initializer ? generateExpression(member->initializer.get()) : "null") << ";\n";
     }
-    if (has_build) {
-        indent();
-        output << "counterGlobalInstance = this;\n";
-    }
+
     
     indent_level--;
     indent(); output << "}\n";
@@ -947,7 +957,41 @@ void JSCodeGenerator::generateClass(ClassDeclNode* node) {
         output << "if (this.domElement && this.domElement.parentNode) {\n";
         indent_level++;
         indent();
+        output << "const active = document.activeElement;\n";
+        indent();
+        output << "const hasFocus = this.domElement.contains(active);\n";
+        indent();
+        output << "const path = hasFocus ? getElementPath(this.domElement, active) : null;\n";
+        indent();
+        output << "const selStart = hasFocus ? active.selectionStart : null;\n";
+        indent();
+        output << "const selEnd = hasFocus ? active.selectionEnd : null;\n";
+        indent();
         output << "this.domElement.parentNode.replaceChild(newDom, this.domElement);\n";
+        indent();
+        output << "if (path) {\n";
+        indent_level++;
+        indent();
+        output << "const elToFocus = getElementByPath(newDom, path);\n";
+        indent();
+        output << "if (elToFocus) {\n";
+        indent_level++;
+        indent();
+        output << "elToFocus.focus();\n";
+        indent();
+        output << "if (selStart !== null && selEnd !== null) {\n";
+        indent_level++;
+        indent();
+        output << "try { elToFocus.setSelectionRange(selStart, selEnd); } catch(e) {}\n";
+        indent_level--;
+        indent();
+        output << "}\n";
+        indent_level--;
+        indent();
+        output << "}\n";
+        indent_level--;
+        indent();
+        output << "}\n";
         indent_level--;
         indent();
         output << "} else {\n";
@@ -955,9 +999,15 @@ void JSCodeGenerator::generateClass(ClassDeclNode* node) {
         indent();
         output << "const root = document.getElementById('zenith-ui-root');\n";
         indent();
+        output << "if (root) {\n";
+        indent_level++;
+        indent();
         output << "root.innerHTML = '';\n";
         indent();
         output << "root.appendChild(newDom);\n";
+        indent_level--;
+        indent();
+        output << "}\n";
         indent_level--;
         indent();
         output << "}\n";
@@ -994,6 +1044,29 @@ void JSCodeGenerator::generateInterface(InterfaceDeclNode* node) {
 
 void JSCodeGenerator::generateFunction(FunctionNode* node) {
     if (node->is_foreign) {
+        std::string lib_path = node->attributes.count("library") ? node->attributes.at("library") : "";
+        if (lib_path == "builtin") {
+            indent();
+            output << "function " << node->function_name << "(";
+            for (size_t i = 0; i < node->parameters.size(); ++i) {
+                output << node->parameters[i]->var_name;
+                if (i < node->parameters.size() - 1) output << ", ";
+            }
+            output << ") {\n";
+            indent_level++;
+            if (node->function_name == "isKeyPressed") {
+                indent(); output << "return !!window._zenith_keys[key];\n";
+            } else if (node->function_name == "getMouseX") {
+                indent(); output << "return window._zenith_mouseX || 0;\n";
+            } else if (node->function_name == "getMouseY") {
+                indent(); output << "return window._zenith_mouseY || 0;\n";
+            } else {
+                indent(); output << "console.warn('Unknown builtin foreign function: " << node->function_name << "');\n";
+                indent(); output << "return 0;\n";
+            }
+            indent_level--;
+            indent(); output << "}\n\n";
+        }
         return;
     }
     indent();
@@ -1106,7 +1179,7 @@ void JSCodeGenerator::generateOrchestration(AgentOrchestrationNode* node) {
     indent(); output << "}\n";
 }
 
-std::string JSCodeGenerator::generate(ProgramNode* program) {
+std::string JSCodeGenerator::generate(ProgramNode* program, bool is_module_mode) {
     output.str("");
     output.clear();
     
@@ -1174,6 +1247,7 @@ std::string JSCodeGenerator::generate(ProgramNode* program) {
                         bool is_async = false;
                         for (const auto& s : method->body) {
                             if (containsAsyncCall(s.get(), async_functions)) {
+                                
                                 is_async = true;
                                 break;
                             }
@@ -1190,82 +1264,45 @@ std::string JSCodeGenerator::generate(ProgramNode* program) {
 
     std::string page_title = "Zenith Web Application";
     std::string page_description = "Statically rendered Zenith web application.";
-    std::string pre_rendered_html = computePreRenderedApp(program, page_title, page_description);
+    std::string pre_rendered_html = is_module_mode ? "" : computePreRenderedApp(program, page_title, page_description);
     
-    // HTML Wrapper Shell
-    output << "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n";
-    output << "    <meta charset=\"UTF-8\">\n";
-    output << "    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n";
-    output << "    <title>" << escapeHtml(page_title) << "</title>\n";
-    output << "    <meta name=\"description\" content=\"" << escapeAttribute(page_description) << "\">\n";
-    output << "    <link href=\"https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Fira+Code:wght@400;500&display=swap\" rel=\"stylesheet\">\n";
-    output << "    <style>\n";
-    output << "        body {\n";
-    output << "            background: radial-gradient(circle at top right, #1a1a2e, #0a0a0f);\n";
-    output << "            color: #e2e8f0;\n";
-    output << "            font-family: 'Inter', sans-serif;\n";
-    output << "            margin: 0;\n";
-    output << "            padding: 24px;\n";
-    output << "            display: flex;\n";
-    output << "            flex-direction: column;\n";
-    output << "            align-items: center;\n";
-    output << "            min-height: 100vh;\n";
-    output << "            box-sizing: border-box;\n";
-    output << "        }\n";
-    output << "        .app-header {\n";
-    output << "            margin-bottom: 24px;\n";
-    output << "            text-align: center;\n";
-    output << "        }\n";
-    output << "        .app-header h1 {\n";
-    output << "            margin: 0;\n";
-    output << "            font-size: 2.5rem;\n";
-    output << "            background: linear-gradient(135deg, #00f2fe, #4facfe);\n";
-    output << "            -webkit-background-clip: text;\n";
-    output << "            -webkit-text-fill-color: transparent;\n";
-    output << "            font-weight: 700;\n";
-    output << "        }\n";
-    output << "        .app-header p {\n";
-    output << "            color: #94a3b8;\n";
-    output << "            margin-top: 8px;\n";
-    output << "        }\n";
-    output << "        .main-container {\n";
-    output << "            display: flex;\n";
-    output << "            width: 100%;\n";
-    output << "            max-width: 1200px;\n";
-    output << "            gap: 24px;\n";
-    output << "            flex-wrap: wrap;\n";
-    output << "        }\n";
-    output << "        .panel {\n";
-    output << "            flex: 1;\n";
-    output << "            min-width: 300px;\n";
-    output << "            background: rgba(30, 41, 59, 0.4);\n";
-    output << "            backdrop-filter: blur(16px);\n";
-    output << "            border: 1px solid rgba(255, 255, 255, 0.1);\n";
-    output << "            border-radius: 16px;\n";
-    output << "            padding: 24px;\n";
-    output << "            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);\n";
-    output << "            display: flex;\n";
-    output << "            flex-direction: column;\n";
-    output << "            box-sizing: border-box;\n";
-    output << "        }\n";
-    output << "        .panel-title {\n";
-    output << "            font-size: 1.25rem;\n";
-    output << "            font-weight: 600;\n";
-    output << "            margin-bottom: 16px;\n";
-    output << "            border-bottom: 1px solid rgba(255, 255, 255, 0.1);\n";
-    output << "            padding-bottom: 8px;\n";
-    output << "            color: #38bdf8;\n";
-    output << "            display: flex;\n";
-    output << "            justify-content: space-between;\n";
-    output << "            align-items: center;\n";
-    output << "        }\n";
-    output << "        #zenith-ui-root {\n";
-    output << "            display: flex;\n";
-    output << "            justify-content: center;\n";
-    output << "            align-items: center;\n";
-    output << "            min-height: 250px;\n";
-    output << "            width: 100%;\n";
-    output << "        }\n";
+    if (!is_module_mode) {
+        // HTML Wrapper Shell
+        output << "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n";
+        output << "    <meta charset=\"UTF-8\">\n";
+        output << "    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n";
+        output << "    <title>" << escapeHtml(page_title) << "</title>\n";
+        output << "    <meta name=\"description\" content=\"" << escapeAttribute(page_description) << "\">\n";
+        output << "    <link href=\"https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Fira+Code:wght@400;500&display=swap\" rel=\"stylesheet\">\n";
+        output << "    <style>\n";
+    } else {
+        output << "// Zenith ES6 Module\n";
+        output << "// Auto-generated by Zenith compiler\n\n";
+        output << "if (typeof document !== 'undefined') {\n";
+        output << "    const styleEl = document.createElement('style');\n";
+        output << "    styleEl.innerHTML = `\n";
+    }
+    if (!is_module_mode) {
+        output << "        body {\n";
+        output << "            background: radial-gradient(circle at top right, #1a1a2e, #0a0a0f);\n";
+        output << "            color: #e2e8f0;\n";
+        output << "            font-family: 'Inter', sans-serif;\n";
+        output << "            margin: 0;\n";
+        output << "            padding: 24px;\n";
+        output << "            display: flex;\n";
+        output << "            flex-direction: column;\n";
+        output << "            align-items: center;\n";
+        output << "            min-height: 100vh;\n";
+        output << "            box-sizing: border-box;\n";
+        output << "        }\n";
+        output << "        #zenith-ui-root {\n";
+        output << "            display: flex;\n";
+        output << "            justify-content: center;\n";
+        output << "            align-items: center;\n";
+        output << "            min-height: 250px;\n";
+        output << "            width: 100%;\n";
+        output << "        }\n";
+    }
     output << "        .zenith-column {\n";
     output << "            display: flex;\n";
     output << "            flex-direction: column;\n";
@@ -1285,23 +1322,7 @@ std::string JSCodeGenerator::generate(ProgramNode* program) {
     output << "        .zenith-text {\n";
     output << "            font-size: 1rem;\n";
     output << "            line-height: 1.5;\n";
-    output << "        }\n";
-    output << "        .terminal-panel {\n";
-    output << "            background: #090d16;\n";
-    output << "            border: 1px solid #1e293b;\n";
-    output << "        }\n";
-    output << "        .terminal-body {\n";
-    output << "            font-family: 'Fira Code', monospace;\n";
-    output << "            font-size: 0.9rem;\n";
-    output << "            color: #10b981;\n";
-    output << "            white-space: pre-wrap;\n";
-    output << "            overflow-y: auto;\n";
-    output << "            height: 350px;\n";
-    output << "            padding: 12px;\n";
-    output << "            background: #020617;\n";
-    output << "            border-radius: 8px;\n";
-    output << "            box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.8);\n";
-    output << "        }\n";
+    output << "        }\n";;
     output << "        .zenith-input {\n";
     output << "            background: rgba(15, 23, 42, 0.6);\n";
     output << "            border: 1px solid rgba(0, 242, 254, 0.3);\n";
@@ -1334,7 +1355,13 @@ std::string JSCodeGenerator::generate(ProgramNode* program) {
     output << "            transform: translateY(-1px);\n";
     output << "            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);\n";
     output << "        }\n";
-    output << "    </style>\n";
+    if (!is_module_mode) {
+        output << "    </style>\n";
+    } else {
+        output << "    `;\n";
+        output << "    document.head.appendChild(styleEl);\n";
+        output << "}\n\n";
+    }
 
     // ----------------------------------------------------------------
     // CDN/npm library injection — collect import cdn/npm from AST
@@ -1345,9 +1372,18 @@ std::string JSCodeGenerator::generate(ProgramNode* program) {
                 if (imp->kind == ImportNode::ImportKind::Cdn || imp->kind == ImportNode::ImportKind::Npm) {
                     std::string url = imp->cdn_url;
                     if (url.length() < 5 || url.substr(url.length() - 5) != ".wasm") {
-                        // Emit <script src="..."> in <head> before any app code runs
-                        output << "    <!-- Zenith Library: " << imp->module_name << " -->\n";
-                        output << "    <script src=\"" << imp->cdn_url << "\" crossorigin=\"anonymous\"></script>\n";
+                        if (!is_module_mode) {
+                            // Emit <script src="..."> in <head> before any app code runs
+                            output << "    <!-- Zenith Library: " << imp->module_name << " -->\n";
+                            output << "    <script src=\"" << imp->cdn_url << "\" crossorigin=\"anonymous\"></script>\n";
+                        } else {
+                            output << "if (typeof document !== 'undefined') {\n";
+                            output << "    const s = document.createElement('script');\n";
+                            output << "    s.src = \"" << imp->cdn_url << "\";\n";
+                            output << "    s.crossOrigin = 'anonymous';\n";
+                            output << "    document.head.appendChild(s);\n";
+                            output << "}\n";
+                        }
                     }
                 }
             }
@@ -1355,7 +1391,34 @@ std::string JSCodeGenerator::generate(ProgramNode* program) {
     }
 
     // WASM string/module loading runtime helper injections
-    output << "    <script>\n";
+    if (!is_module_mode) {
+        output << "    <script>\n";
+    }
+    output << "        // Helper to compute element path for focus preservation\n";
+    output << "        function getElementPath(root, el) {\n";
+    output << "            const path = [];\n";
+    output << "            let current = el;\n";
+    output << "            while (current && current !== root) {\n";
+    output << "                let parent = current.parentNode;\n";
+    output << "                if (!parent) break;\n";
+    output << "                let index = Array.prototype.indexOf.call(parent.childNodes, current);\n";
+    output << "                path.unshift(index);\n";
+    output << "                current = parent;\n";
+    output << "            }\n";
+    output << "            return current === root ? path : null;\n";
+    output << "        }\n\n";
+    output << "        // Helper to find element by path for focus preservation\n";
+    output << "        function getElementByPath(root, path) {\n";
+    output << "            if (!path) return null;\n";
+    output << "            let current = root;\n";
+    output << "            for (let index of path) {\n";
+    output << "                if (!current || !current.childNodes || index >= current.childNodes.length) {\n";
+    output << "                    return null;\n";
+    output << "                }\n";
+    output << "                current = current.childNodes[index];\n";
+    output << "            }\n";
+    output << "            return current;\n";
+    output << "        }\n\n";
     output << "        // Helper to copy JS string to WASM memory\n";
     output << "        function writeWasmString(instance, str) {\n";
     output << "            const encoder = new TextEncoder();\n";
@@ -1467,12 +1530,12 @@ std::string JSCodeGenerator::generate(ProgramNode* program) {
             }
         }
     }
-    output << "    </script>\n";
-
-    output << "</head>\n<body>\n";
-    output << "    <div id=\"zenith-ui-root\">" << pre_rendered_html << "</div>\n\n";
-    
-    output << "    <script>\n";
+    if (!is_module_mode) {
+        output << "    </script>\n";
+        output << "</head>\n<body>\n";
+        output << "    <div id=\"zenith-ui-root\">" << pre_rendered_html << "</div>\n\n";
+        output << "    <script>\n";
+    }
     output << "        // Platform Detection Constants\n";
     output << "        const isAndroid = false;\n";
     output << "        const isIos = false;\n";
@@ -1480,7 +1543,110 @@ std::string JSCodeGenerator::generate(ProgramNode* program) {
     output << "        const isLinux = false;\n";
     output << "        const isWeb = true;\n";
     output << "        const isWindows = false;\n\n";
+    output << "        // Form Validation Helpers\n";
+    output << "        function isEmail(val) {\n";
+    output << "            const re = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;\n";
+    output << "            return re.test(val) ? \"\" : \"Invalid email address\";\n";
+    output << "        }\n";
+    output << "        function isRequired(val) {\n";
+    output << "            return val && val.trim().length > 0 ? \"\" : \"This field is required\";\n";
+    output << "        }\n\n";
+    output << "        // Navigation Helper\n";
+    output << "        function navigate(path) {\n";
+    output << "            if (typeof window !== 'undefined' && window.zenithRouter) {\n";
+    output << "                window.zenithRouter.navigate(path);\n";
+    output << "            }\n";
+    output << "        }\n\n";
+    output << "        // SPA Client-Side Router\n";
+    output << "        class ZenithRouter {\n";
+    output << "            constructor() {\n";
+    output << "                this.routes = {};\n";
+    output << "                window.addEventListener('popstate', () => this.handleRoute());\n";
+    output << "                document.addEventListener('click', (e) => {\n";
+    output << "                    const link = e.target.closest('a');\n";
+    output << "                    if (link && link.getAttribute('href') && link.getAttribute('href').startsWith('/')) {\n";
+    output << "                        e.preventDefault();\n";
+    output << "                        this.navigate(link.getAttribute('href'));\n";
+    output << "                    }\n";
+    output << "                });\n";
+    output << "            }\n";
+    output << "            register(path, componentClass) {\n";
+    output << "                this.routes[path] = componentClass;\n";
+    output << "            }\n";
+    output << "            navigate(path) {\n";
+    output << "                window.history.pushState({}, '', path);\n";
+    output << "                this.handleRoute();\n";
+    output << "            }\n";
+    output << "            handleRoute() {\n";
+    output << "                const path = window.location.pathname || '/';\n";
+    output << "                const componentClass = this.routes[path] || this.routes['/'] || Object.values(this.routes)[0];\n";
+    output << "                if (componentClass) {\n";
+    output << "                    const inst = new componentClass();\n";
+    output << "                    inst.render();\n";
+    output << "                } else {\n";
+    output << "                    console.warn('[Router] No routed class registered.');\n";
+    output << "                }\n";
+    output << "            }\n";
+    output << "        }\n";
+    output << "        window.zenithRouter = new ZenithRouter();\n\n";
     output << "        const zenith = {\n";
+    output << "            runGameLoop: function(game) {\n";
+    output << "                if (game.init) game.init();\n";
+    output << "                const root = document.getElementById('zenith-ui-root');\n";
+    output << "                root.innerHTML = '';\n";
+    output << "                const canvasEl = document.createElement('canvas');\n";
+    output << "                canvasEl.width = 640;\n";
+    output << "                canvasEl.height = 480;\n";
+    output << "                canvasEl.style.display = 'block';\n";
+    output << "                canvasEl.style.margin = '20px auto';\n";
+    output << "                canvasEl.style.background = '#000000';\n";
+    output << "                canvasEl.style.borderRadius = '12px';\n";
+    output << "                canvasEl.style.boxShadow = '0 10px 30px rgba(0, 0, 0, 0.5)';\n";
+    output << "                root.appendChild(canvasEl);\n";
+    output << "                const ctx = canvasEl.getContext('2d');\n";
+    output << "                const canvas = {\n";
+    output << "                    clear: function(color = 'black') {\n";
+    output << "                        ctx.fillStyle = color;\n";
+    output << "                        ctx.fillRect(0, 0, canvasEl.width, canvasEl.height);\n";
+    output << "                    },\n";
+    output << "                    drawRect: function(x, y, w, h, color = 'white') {\n";
+    output << "                        ctx.fillStyle = color;\n";
+    output << "                        ctx.fillRect(x * 8, y * 20, w * 8, h * 20);\n";
+    output << "                    },\n";
+    output << "                    drawCircle: function(cx, cy, r, color = 'white') {\n";
+    output << "                        ctx.fillStyle = color;\n";
+    output << "                        ctx.beginPath();\n";
+    output << "                        ctx.arc(cx * 8, cy * 20, r * 14, 0, Math.PI * 2);\n";
+    output << "                        ctx.fill();\n";
+    output << "                    },\n";
+    output << "                    drawText: function(text, x, y, color = 'white') {\n";
+    output << "                        ctx.fillStyle = color;\n";
+    output << "                        ctx.font = '16px monospace';\n";
+    output << "                        ctx.fillText(text, x * 8, y * 20 + 12);\n";
+    output << "                    },\n";
+    output << "                    present: function() {}\n";
+    output << "                };\n";
+    output << "                window._zenith_keys = {};\n";
+    output << "                window.addEventListener('keydown', (e) => { window._zenith_keys[e.key] = true; });\n";
+    output << "                window.addEventListener('keyup', (e) => { window._zenith_keys[e.key] = false; });\n";
+    output << "                window._zenith_mouseX = 0;\n";
+    output << "                window._zenith_mouseY = 0;\n";
+    output << "                canvasEl.addEventListener('mousemove', (e) => {\n";
+    output << "                    const rect = canvasEl.getBoundingClientRect();\n";
+    output << "                    window._zenith_mouseX = (e.clientX - rect.left) / 8.0;\n";
+    output << "                    window._zenith_mouseY = (e.clientY - rect.top) / 20.0;\n";
+    output << "                });\n";
+    output << "                let lastTime = performance.now();\n";
+    output << "                const loop = (time) => {\n";
+    output << "                    const dt = (time - lastTime) / 1000;\n";
+    output << "                    lastTime = time;\n";
+    output << "                    if (game.update) game.update(dt);\n";
+    output << "                    canvas.clear('black');\n";
+    output << "                    if (game.draw) game.draw(canvas);\n";
+    output << "                    requestAnimationFrame(loop);\n";
+    output << "                };\n";
+    output << "                requestAnimationFrame(loop);\n";
+    output << "            },\n";
     output << "            consoleElement: null,\n";
     output << "            print: function(msg) {\n";
     output << "                if (!this.consoleElement) this.consoleElement = document.getElementById('zenith-console');\n";
@@ -1638,6 +1804,16 @@ std::string JSCodeGenerator::generate(ProgramNode* program) {
     output << "                if (attrs.alignItems) el.style.alignItems = attrs.alignItems;\n";
     output << "                if (attrs.flexGrow !== undefined) el.style.flexGrow = attrs.flexGrow;\n";
     output << "                if (attrs.gap) el.style.gap = typeof attrs.gap === 'number' ? attrs.gap + 'px' : attrs.gap;\n";
+    output << "                if (attrs.fontSize) el.style.fontSize = typeof attrs.fontSize === 'number' ? attrs.fontSize + 'px' : attrs.fontSize;\n";
+    output << "                if (attrs.borderRadius) el.style.borderRadius = typeof attrs.borderRadius === 'number' ? attrs.borderRadius + 'px' : attrs.borderRadius;\n";
+    output << "                if (attrs.border) el.style.border = attrs.border;\n";
+    output << "                if (attrs.opacity !== undefined) el.style.opacity = attrs.opacity;\n";
+    output << "                if (attrs.cursor) el.style.cursor = attrs.cursor;\n";
+    output << "                if (attrs.display) el.style.display = attrs.display;\n";
+    output << "                if (attrs.boxShadow) el.style.boxShadow = attrs.boxShadow;\n";
+    output << "                if (attrs.alignSelf) el.style.alignSelf = attrs.alignSelf;\n";
+    output << "                if (attrs.fontFamily) el.style.fontFamily = attrs.fontFamily;\n";
+    output << "                if (attrs.transition) el.style.transition = attrs.transition;\n";
     output << "                if (attrs.onClick && typeof attrs.onClick === 'function') {\n";
     output << "                    el.onclick = attrs.onClick;\n";
     output << "                }\n";
@@ -1696,17 +1872,63 @@ std::string JSCodeGenerator::generate(ProgramNode* program) {
     output << "                return el;\n";
     output << "            },\n";
     output << "            TextField: function(placeholder, attrs = {}) {\n";
+    output << "                const container = document.createElement('div');\n";
+    output << "                container.style.display = 'flex';\n";
+    output << "                container.style.flexDirection = 'column';\n";
+    output << "                container.style.gap = '4px';\n";
+    output << "                container.style.width = '100%';\n";
     output << "                const el = document.createElement('input');\n";
     output << "                el.type = 'text';\n";
     output << "                el.placeholder = Array.isArray(placeholder) ? placeholder.join('') : placeholder;\n";
     output << "                el.className = 'zenith-input';\n";
+    output << "                el.style.width = '100%';\n";
     output << "                if (attrs.value) el.value = attrs.value;\n";
+    output << "                const errorSpan = document.createElement('span');\n";
+    output << "                errorSpan.style.color = '#ef4444';\n";
+    output << "                errorSpan.style.fontSize = '0.8rem';\n";
+    output << "                errorSpan.style.display = 'none';\n";
+    output << "                container.appendChild(el);\n";
+    output << "                container.appendChild(errorSpan);\n";
     output << "                UI.applyStyles(el, attrs);\n";
-    output << "                el.render = function() {\n";
-    output << "                    UI.render(el);\n";
-    output << "                    return el;\n";
+    output << "                if (attrs.validator && typeof attrs.validator === 'function') {\n";
+    output << "                    const validate = () => {\n";
+    output << "                        const err = attrs.validator(el.value);\n";
+    output << "                        if (err && typeof err === 'string' && err.length > 0) {\n";
+    output << "                            el.style.borderColor = '#ef4444';\n";
+    output << "                            el.style.boxShadow = '0 0 0 1px #ef4444';\n";
+    output << "                            errorSpan.textContent = err;\n";
+    output << "                            errorSpan.style.display = 'block';\n";
+    output << "                        } else if (err === false) {\n";
+    output << "                            el.style.borderColor = '#ef4444';\n";
+    output << "                            el.style.boxShadow = '0 0 0 1px #ef4444';\n";
+    output << "                            errorSpan.textContent = 'Invalid input';\n";
+    output << "                            errorSpan.style.display = 'block';\n";
+    output << "                        } else {\n";
+    output << "                            el.style.borderColor = '';\n";
+    output << "                            el.style.boxShadow = '';\n";
+    output << "                            errorSpan.style.display = 'none';\n";
+    output << "                            errorSpan.textContent = '';\n";
+    output << "                        }\n";
+    output << "                    };\n";
+    output << "                    el.oninput = function() {\n";
+    output << "                        validate();\n";
+    output << "                        if (attrs.onChange && typeof attrs.onChange === 'function') {\n";
+    output << "                            attrs.onChange(el.value);\n";
+    output << "                        }\n";
+    output << "                    };\n";
+    output << "                    if (el.value) {\n";
+    output << "                        validate();\n";
+    output << "                    }\n";
+    output << "                } else {\n";
+    output << "                    if (attrs.onChange && typeof attrs.onChange === 'function') {\n";
+    output << "                        el.oninput = function() { attrs.onChange(el.value); };\n";
+    output << "                    }\n";
+    output << "                }\n";
+    output << "                container.render = function() {\n";
+    output << "                    UI.render(container);\n";
+    output << "                    return container;\n";
     output << "                };\n";
-    output << "                return el;\n";
+    output << "                return container;\n";
     output << "            },\n";
     output << "            Checkbox: function(label, attrs = {}) {\n";
     output << "                const wrapper = document.createElement('label');\n";
@@ -1964,59 +2186,110 @@ std::string JSCodeGenerator::generate(ProgramNode* program) {
         }
     }
     
-    // Add global trigger handles and execute main
-    output << "        let counterGlobalInstance = null;\n";
-    output << "        function triggerIncrement() {\n";
-    output << "            if (counterGlobalInstance) {\n";
-    output << "                if (typeof counterGlobalInstance.increment === 'function') {\n";
-    output << "                    counterGlobalInstance.increment();\n";
-    output << "                } else if (typeof counterGlobalInstance.handleIncrement === 'function') {\n";
-    output << "                    counterGlobalInstance.handleIncrement();\n";
-    output << "                }\n";
-    output << "            }\n";
-    output << "        }\n\n";
+    // Register routed components
+    std::vector<std::pair<std::string, std::string>> routes;
+    for (const auto& stmt : program->statements) {
+        if (auto* class_decl = dynamic_cast<ClassDeclNode*>(stmt.get())) {
+            if (class_decl->is_routed) {
+                routes.push_back({class_decl->route_path, class_decl->class_name});
+            }
+        }
+    }
     
-    output << "        window.onload = async () => {\n";
-    output << "            if (typeof wasmPromises !== 'undefined' && wasmPromises.length > 0) {\n";
-    output << "                zenith.println('[WASM] Waiting for ' + wasmPromises.length + ' WASM module(s)...');\n";
-    output << "                await Promise.all(wasmPromises);\n";
-    output << "                zenith.println('[WASM] All modules loaded. Ready.');\n";
-    output << "            }\n";
-    output << "            // Define fallback mocks if WASM failed to load\n";
-    output << "            if (typeof encrypt === 'undefined') {\n";
-    output << "                window.encrypt = function(plaintext, key) {\n";
-    output << "                    let result = '';\n";
-    output << "                    for (let i = 0; i < plaintext.length; i++) {\n";
-    output << "                        result += String.fromCharCode(plaintext.charCodeAt(i) ^ key.charCodeAt(i % key.length));\n";
-    output << "                    }\n";
-    output << "                    return btoa(result);\n";
-    output << "                };\n";
-    output << "            }\n";
-    output << "            if (typeof decrypt === 'undefined') {\n";
-    output << "                window.decrypt = function(ciphertext, key) {\n";
-    output << "                    try {\n";
-    output << "                        let plaintext = atob(ciphertext);\n";
-    output << "                        let result = '';\n";
-    output << "                        for (let i = 0; i < plaintext.length; i++) {\n";
-    output << "                            result += String.fromCharCode(plaintext.charCodeAt(i) ^ key.charCodeAt(i % key.length));\n";
-    output << "                        }\n";
-    output << "                        return result;\n";
-    output << "                    } catch (e) {\n";
-    output << "                        return 'Decryption Error: Invalid Key/Data';\n";
-    output << "                    }\n";
-    output << "                };\n";
-    output << "            }\n";
-    output << "            if (typeof deriveKey === 'undefined') {\n";
-    output << "                window.deriveKey = function(password, salt) {\n";
-    output << "                    return btoa(password + ':' + salt);\n";
-    output << "                };\n";
-    output << "            }\n";
-    output << "            if (typeof println === 'undefined') window.println = (msg) => zenith.println(msg);\n";
-    output << "            if (typeof print === 'undefined') window.print = (msg) => zenith.print(msg);\n";
-    output << "            main();\n";
-    output << "        };\n";
-    output << "    </script>\n";
-    output << "</body>\n</html>\n";
+    if (!is_module_mode) {
+        output << "        window.onload = async () => {\n";
+        output << "            if (typeof wasmPromises !== 'undefined' && wasmPromises.length > 0) {\n";
+        output << "                zenith.println('[WASM] Waiting for ' + wasmPromises.length + ' WASM module(s)...');\n";
+        output << "                await Promise.all(wasmPromises);\n";
+        output << "                zenith.println('[WASM] All modules loaded. Ready.');\n";
+        output << "            }\n";
+        output << "            // Define fallback mocks if WASM failed to load\n";
+        output << "            if (typeof encrypt === 'undefined') {\n";
+        output << "                window.encrypt = function(plaintext, key) {\n";
+        output << "                    let result = '';\n";
+        output << "                    for (let i = 0; i < plaintext.length; i++) {\n";
+        output << "                        result += String.fromCharCode(plaintext.charCodeAt(i) ^ key.charCodeAt(i % key.length));\n";
+        output << "                    }\n";
+        output << "                    return btoa(result);\n";
+        output << "                };\n";
+        output << "            }\n";
+        output << "            if (typeof decrypt === 'undefined') {\n";
+        output << "                window.decrypt = function(ciphertext, key) {\n";
+        output << "                    try {\n";
+        output << "                        let plaintext = atob(ciphertext);\n";
+        output << "                        let result = '';\n";
+        output << "                        for (let i = 0; i < plaintext.length; i++) {\n";
+        output << "                            result += String.fromCharCode(plaintext.charCodeAt(i) ^ key.charCodeAt(i % key.length));\n";
+        output << "                        }\n";
+        output << "                        return result;\n";
+        output << "                    } catch (e) {\n";
+        output << "                        return 'Decryption Error: Invalid Key/Data';\n";
+        output << "                    }\n";
+        output << "                };\n";
+        output << "            }\n";
+        output << "            if (typeof deriveKey === 'undefined') {\n";
+        output << "                window.deriveKey = function(password, salt) {\n";
+        output << "                    return btoa(password + ':' + salt);\n";
+        output << "                };\n";
+        output << "            }\n";
+        output << "            if (typeof println === 'undefined') window.println = (msg) => zenith.println(msg);\n";
+        output << "            if (typeof print === 'undefined') window.print = (msg) => zenith.print(msg);\n";
+        if (!routes.empty()) {
+            for (const auto& route : routes) {
+                output << "            window.zenithRouter.register(\"" << route.first << "\", " << route.second << ");\n";
+            }
+            output << "            window.zenithRouter.handleRoute();\n";
+        } else {
+            output << "            main();\n";
+        }
+        output << "        };\n";
+        output << "    </script>\n";
+        output << "</body>\n</html>\n";
+    } else {
+        output << "        // Define fallback mocks for modules\n";
+        output << "        if (typeof window !== 'undefined') {\n";
+        output << "            if (typeof window.encrypt === 'undefined') {\n";
+        output << "                window.encrypt = function(plaintext, key) {\n";
+        output << "                    let result = '';\n";
+        output << "                    for (let i = 0; i < plaintext.length; i++) {\n";
+        output << "                        result += String.fromCharCode(plaintext.charCodeAt(i) ^ key.charCodeAt(i % key.length));\n";
+        output << "                    }\n";
+        output << "                    return btoa(result);\n";
+        output << "                };\n";
+        output << "            }\n";
+        output << "            if (typeof window.decrypt === 'undefined') {\n";
+        output << "                window.decrypt = function(ciphertext, key) {\n";
+        output << "                    try {\n";
+        output << "                        let plaintext = atob(ciphertext);\n";
+        output << "                        let result = '';\n";
+        output << "                        for (let i = 0; i < plaintext.length; i++) {\n";
+        output << "                            result += String.fromCharCode(plaintext.charCodeAt(i) ^ key.charCodeAt(i % key.length));\n";
+        output << "                        }\n";
+        output << "                        return result;\n";
+        output << "                    } catch (e) {\n";
+        output << "                        return 'Decryption Error: Invalid Key/Data';\n";
+        output << "                    }\n";
+        output << "                };\n";
+        output << "            }\n";
+        output << "            if (typeof window.deriveKey === 'undefined') {\n";
+        output << "                window.deriveKey = function(password, salt) {\n";
+        output << "                    return btoa(password + ':' + salt);\n";
+        output << "                };\n";
+        output << "            }\n";
+        output << "            if (typeof window.println === 'undefined') window.println = (msg) => zenith.println(msg);\n";
+        output << "            if (typeof window.print === 'undefined') window.print = (msg) => zenith.print(msg);\n";
+        output << "        }\n\n";
+
+        output << "// ES6 Module Exports\n";
+        output << "export { UI, zenith, httpGet, httpPost, isAndroid, isIos, isMac, isLinux, isWeb, isWindows";
+        for (const auto& c : class_names) {
+            output << ", " << c;
+        }
+        for (const auto& f : function_names) {
+            output << ", " << f;
+        }
+        output << " };\n";
+    }
     
     return output.str();
 }

@@ -1,0 +1,8 @@
+#!/bin/sh
+# Gradle wrapper script - delegates to system gradle
+if command -v gradle >/dev/null 2>&1; then
+    exec gradle "$@"
+else
+    echo "Error: Gradle not found. Please install Gradle or use Android Studio."
+    exit 1
+fi

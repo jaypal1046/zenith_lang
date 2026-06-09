@@ -1,0 +1,32 @@
+name: zenith_app
+description: Zenith programming language Android app with native Rust integration
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  ffi: ^2.1.0
+  path_provider: ^2.1.1
+  
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  ffigen: ^9.0.0
+  lints: ^2.0.0
+
+ffigen:
+  name: ZenithNativeBindings
+  description: FFI bindings for Zenith native library
+  output: 'lib/zenith_native_bindings.dart'
+  headers:
+    entry-points:
+      - '../rust/include/zenith_native.h'
+  compiler-opts:
+    - '-I../rust/include'
+
+flutter:
+  uses-material-design: true

@@ -218,6 +218,91 @@ inline void android_log(const std::string& msg) {
     LOGI("%s", msg.c_str());
 }
 
+// -- Global app instance for callbacks ------------------------
+static void* g_zenith_app_instance = nullptr;
+static int g_screen_width = 0;
+static int g_screen_height = 0;
+
+// -- Touch event handlers -------------------------------------
+inline void zenith_android_on_touch(float x, float y, bool isDown) {
+    LOGI("Touch event: %s at (%f, %f)", isDown ? "DOWN" : "UP", x, y);
+    // TODO: Dispatch to Zenith app instance
+    if (g_zenith_app_instance) {
+        // Call app's onTouch method if available
+    }
+}
+
+inline void zenith_android_on_touch_move(float x, float y) {
+    LOGI("Touch move: (%f, %f)", x, y);
+    // TODO: Dispatch to Zenith app instance
+    if (g_zenith_app_instance) {
+        // Call app's onTouchMove method if available
+    }
+}
+
+// -- Initialize Android runtime -------------------------------
+inline void zenith_android_init(int width, int height) {
+    LOGI("Initializing Zenith Android runtime: %dx%d", width, height);
+    g_screen_width = width;
+    g_screen_height = height;
+    
+    // Redirect stdout/stderr to logcat
+    redirect_stdout_to_logcat();
+    
+    LOGI("Zenith Android runtime initialized");
+}
+
+// -- Render function ------------------------------------------
+inline void zenith_android_render() {
+    // TODO: Implement proper GLES2 rendering
+    // For now, just clear screen with black
+    glClearColor(0.1f, 0.1f, 0.15f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+}
+
+// -- Execute Zenith code --------------------------------------
+inline std::string zenith_android_execute(const char* code) {
+    LOGI("Executing Zenith code: %s", code);
+    
+    // TODO: Integrate with Zenith compiler/runtime
+    // For now, return a simple response
+    std::string result = "Executed: ";
+    result += code;
+    
+    return result;
+}
+
+// -- Rust FFI integration -------------------------------------
+inline void zenith_android_init_rust() {
+    LOGI("Initializing Rust runtime");
+    // TODO: Load and initialize Rust library
+}
+
+inline std::string zenith_android_call_rust(const char* functionName, const char* args) {
+    LOGI("Calling Rust function: %s with args: %s", functionName, args);
+    
+    // TODO: Call actual Rust function via FFI
+    std::string result = "Rust call result for ";
+    result += functionName;
+    
+    return result;
+}
+
+// -- Dynamic library loading ----------------------------------
+inline bool zenith_android_load_library(const char* libPath) {
+    LOGI("Loading dynamic library: %s", libPath);
+    
+    // Use dlopen for Android
+    void* handle = dlopen(libPath, RTLD_NOW);
+    if (!handle) {
+        LOGE("Failed to load library: %s", dlerror());
+        return false;
+    }
+    
+    LOGI("Library loaded successfully: %s", libPath);
+    return true;
+}
+
 } // namespace zenith
 
 #endif // ZENITH_ANDROID_H

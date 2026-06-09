@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.zenith.template"
+    package="com.zenith.app"
     android:versionCode="1"
     android:versionName="1.0">
 
@@ -12,15 +12,15 @@
         android:label="Zenith App"
         android:allowBackup="false"
         android:theme="@android:style/Theme.NoTitleBar.Fullscreen"
-        android:hasCode="false">
+        android:hasCode="true">
 
-        <!-- NativeActivity drives the Zenith NDK binary -->
+        <!-- Custom Activity that integrates native C++ with Dart/Flutter -->
         <activity
-            android:name="android.app.NativeActivity"
+            android:name=".ZenithActivity"
             android:label="Zenith App"
             android:configChanges="orientation|keyboardHidden|screenSize"
             android:exported="true">
-            <meta-data android:name="android.app.lib_name" android:value="zenith_main" />
+            <meta-data android:name="android.app.lib_name" android:value="zenith_native" />
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

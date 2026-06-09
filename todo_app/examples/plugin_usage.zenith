@@ -1,0 +1,29 @@
+// ZENITH PLUGIN SYSTEM
+// Allows Zenith code to call Dart (pub.dev) and Rust crates
+
+// Example: Using Location Plugin (Dart)
+import "location" as loc;
+import "camera" as cam;
+import "crypto" as cry; // Rust crate
+
+func main() {
+    // 1. Call Dart Plugin (pub.dev package)
+    var location_data = loc.get_current_position({
+        "accuracy": "high",
+        "timeout": 5000
+    });
+    
+    print("Current Location: " + location_data);
+    
+    // 2. Call Rust Plugin (Crate)
+    var hash = cry.sha256("Hello Zenith");
+    print("SHA256: " + hash);
+    
+    // 3. Use Camera (Dart plugin with native C++ backing)
+    var image = cam.capture_photo({
+        "resolution": "1920x1080",
+        "flash": "auto"
+    });
+    
+    display(image);
+}

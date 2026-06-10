@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zenith Web Runtime</title>
+    <style>
+        body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+        #app { width: 100vw; height: 100vh; display: flex; flex-direction: column; }
+        .zenith-container { flex: 1; overflow: auto; padding: 16px; }
+        .zenith-button { background: #6200ee; color: white; border: none; padding: 12px 24px; border-radius: 8px; font-size: 14px; cursor: pointer; }
+        .zenith-card { background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); padding: 16px; margin: 8px 0; }
+        .zenith-text { font-size: 16px; line-height: 1.5; color: #333; }
+        .zenith-input { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 16px; box-sizing: border-box; }
+    </style>
+</head>
+<body>
+    <div id="app"></div>
+    <script>
+        // Zenith Web Runtime - Executes Zenith bytecode in browser via WebAssembly
+        class ZenithRuntime {
+            constructor() {
+                this.state = {};
+                this.plugins = {};
+                this.uiTree = [];
+            }
+
+            // Register web-compatible plugins
+            registerPlugin(name, impl) {
+                this.plugins[name] = impl;
+            }
+
+            // Execute Zenith function
+            async execute(funcName, args = {}) {
+                if (this.plugins[funcName]) {
+                    return await this.plugins[funcName](args);
+                }
+                throw new Error(`Function ${funcName} not found`);
+            }
+
+            // Render UI from Zenith AST
+            render(ast, containerId) {
+                const container = document.getElementById(containerId);
+                container.innerHTML = '';
+                
+                const renderNode = (node) => {
+                    if (node.type === 'Container') {
+                        const el = document.createElement('div');
+                        el.className = 'zenith-container';
+                        node.children?.forEach(child => el.appendChild(renderNode(child)));
+                        return el;
+                    }
+                    if (node.type === 'Text') {
+                        const el = document.createElement('span');
+                        el.className = 'zenith-text';
+                        el.textContent = node.value || '';
+                        return el;
+                    }
+                    if (node.type === 'Button') {
+                        const el = document.createElement('button');
+                        el.className = 'zenith-button';
+                        el.textContent = node.label || 'Button';
+                        if (node.onClick) {
+                            el.onclick = () => this.execute(node.onClick, {});
+                        }
+                        return el;
+                    }
+                    if (node.type === 'Card') {
+                        const el = document.createElement('div');
+                        el.className = 'zenith-card';
+                        node.children?.forEach(child => el.appendChild(renderNode(child)));
+                        return el;
+                    }
+                    if (node.type === 'Input') {
+                        const el = document.createElement('input');
+                        el.className = 'zenith-input';
+                        el.placeholder = node.placeholder || '';
+                        if (node.onChange) {
+                            el.oninput = (e) => this.execute(node.onChange, { value: e.target.value });
+                        }
+                        return el;
+                    }
+                    return document.createTextNode('');
+                };
+
+                ast.forEach(node => container.appendChild(renderNode(node)));
+            }
+        }
+
+        // Initialize runtime
+        const runtime = new ZenithRuntime();
+
+        // Web-native plugin implementations
+        runtime.registerPlugin('http.get', async ({ url }) => {
+            const response = await fetch(url);
+            return await response.json();
+        });
+
+        runtime.registerPlugin('storage.set', async ({ key, value }) => {
+            localStorage.setItem(key, JSON.stringify(value));
+            return { success: true };
+        });
+
+        runtime.registerPlugin('storage.get', async ({ key }) => {
+            const value = localStorage.getItem(key);
+            return value ? JSON.parse(value) : null;
+        });
+
+        runtime.registerPlugin('camera.capture', async () => {
+            // Placeholder for camera API
+            return { path: 'web_camera_placeholder.jpg' };
+        });
+
+        runtime.registerPlugin('crypto.sha256', async ({ data }) => {
+            const encoder = new TextEncoder();
+            const hashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(data));
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        });
+
+        // Load and execute Zenith app
+        async function loadZenithApp(zenithCode) {
+            // Simple parser for demo - in production this would compile to Wasm
+            console.log('Loading Zenith app...');
+            
+            // Example UI AST (would be compiled from .zen file)
+            const uiAST = [
+                {
+                    type: 'Container',
+                    children: [
+                        { type: 'Text', value: 'Welcome to Zenith Web!' },
+                        {
+                            type: 'Card',
+                            children: [
+                                { type: 'Text', value: 'This UI is rendered from Zenith code' },
+                                { type: 'Button', label: 'Click Me', onClick: 'handleClick' }
+                            ]
+                        },
+                        { type: 'Input', placeholder: 'Type something...', onChange: 'handleInput' }
+                    ]
+                }
+            ];
+
+            runtime.render(uiAST, 'app');
+            
+            // Register app functions
+            runtime.execute('handleClick', {}).then(() => console.log('Button clicked!'));
+            runtime.execute('handleInput', { value: 'test' }).then(() => console.log('Input changed!'));
+        }
+
+        // Auto-initialize
+        window.addEventListener('DOMContentLoaded', () => {
+            loadZenithApp('');
+            console.log('Zenith Web Runtime initialized');
+        });
+    </script>
+</body>
+</html>

@@ -1,52 +1,46 @@
 ```
-# Build artifacts
-build/
-dist/
-*.o
-*.obj
-*.out
-
 # Dependencies
 node_modules/
 venv/
 .venv/
 __pycache__/
-*.egg-info/
+.mypy_cache/
+.pytest_cache/
+target/
+.gradle/
 
-# Environment
-.env
-.env.local
-*.env.*
+# Build artifacts
+build/
+dist/
+*.o
+*.obj
+*.exe
+*.dll
+*.so
+*.a
+*.out
 
-# Editors
+# IDE/Editor files
 .vscode/
 .idea/
 *.swp
 *.swo
-
-# Logs and temp files
-*.log
 *.tmp
 
-# Python specific
-*.pyc
-*.pyo
-*.pyd
-.Python
-*.so
+# Logs
+*.log
 
 # Coverage
 coverage/
 htmlcov/
 .coverage
 
-# OS generated
+# Environment
+.env
+.env.local
+*.env.*
+
+# OS specific
 .DS_Store
 Thumbs.db
-
-# Runtime and cache
-.mypy_cache/
-.pytest_cache/
-target/
-.gradle/
 ```

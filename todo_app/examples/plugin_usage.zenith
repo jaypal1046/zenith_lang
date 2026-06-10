@@ -2,9 +2,9 @@
 // Allows Zenith code to call Dart (pub.dev) and Rust crates
 
 // Example: Using Location Plugin (Dart)
-import "location" as loc;
-import "camera" as cam;
-import "crypto" as cry; // Rust crate
+import "native:location" as loc;
+import "native:camera" as cam;
+import "native:crypto" as cry; // Rust crate
 
 func main() {
     // 1. Call Dart Plugin (pub.dev package)
@@ -12,18 +12,153 @@ func main() {
         "accuracy": "high",
         "timeout": 5000
     });
-    
+
     print("Current Location: " + location_data);
-    
+
     // 2. Call Rust Plugin (Crate)
     var hash = cry.sha256("Hello Zenith");
     print("SHA256: " + hash);
-    
+
     // 3. Use Camera (Dart plugin with native C++ backing)
     var image = cam.capture_photo({
         "resolution": "1920x1080",
         "flash": "auto"
     });
-    
+
     display(image);
+}
+
+// ============================================
+// ADVANCED EXAMPLES
+// ============================================
+
+// Example: Using HTTP Client (Dart)
+import "native:http" as http;
+
+func fetchUserData(String userId) {
+    var response = http.get({
+        "url": "https://api.example.com/users/" + userId,
+        "headers": {"Authorization": "Bearer token123"}
+    });
+    
+    if (response.status == 200) {
+        var userData = parseJson(response.body);
+        print("User: " + userData.name);
+        return userData;
+    } else {
+        print("Error: " + response.status);
+        return null;
+    }
+}
+
+// Example: Using Sensors (Dart)
+import "native:sensors" as sensors;
+
+func monitorMotion() {
+    var accelerometer = sensors.get_accelerometer();
+    print("X: " + accelerometer.x + ", Y: " + accelerometer.y + ", Z: " + accelerometer.z);
+    
+    var gyroscope = sensors.get_gyroscope();
+    print("Rotation: " + gyroscope.x + ", " + gyroscope.y + ", " + gyroscope.z);
+}
+
+// Example: Using Encryption (Rust)
+import "native:aes" as aes;
+
+func secureData(String data, String key) {
+    var encrypted = aes.encrypt({
+        "data": data,
+        "key": key,
+        "mode": "GCM"
+    });
+    
+    print("Encrypted: " + encrypted.ciphertext);
+    print("Nonce: " + encrypted.nonce);
+    
+    // Decrypt it back
+    var decrypted = aes.decrypt({
+        "ciphertext": encrypted.ciphertext,
+        "key": key,
+        "nonce": encrypted.nonce
+    });
+    
+    print("Decrypted: " + decrypted);
+    return decrypted;
+}
+
+// Example: Using Compression (Rust)
+import "native:lz4" as lz4;
+
+func compressData(String largeData) {
+    var compressed = lz4.compress({
+        "data": largeData,
+        "level": 9
+    });
+    
+    print("Original size: " + largeData.length);
+    print("Compressed size: " + compressed.size);
+    print("Ratio: " + (compressed.size / largeData.length * 100) + "%");
+    
+    // Decompress
+    var decompressed = lz4.decompress({
+        "data": compressed.data,
+        "original_size": largeData.length
+    });
+    
+    return decompressed;
+}
+
+// Example: Using SharedPreferences (Dart)
+import "native:storage" as storage;
+
+func saveAndLoadData() {
+    // Save data
+    storage.set({
+        "key": "user_preferences",
+        "value": "{\"theme\": \"dark\", \"notifications\": true}"
+    });
+    
+    // Load data
+    var saved = storage.get({
+        "key": "user_preferences"
+    });
+    
+    var prefs = parseJson(saved);
+    print("Theme: " + prefs.theme);
+    print("Notifications: " + prefs.notifications);
+    
+    return prefs;
+}
+
+// Example: Combined Workflow
+func completeWorkflow() {
+    // Get user location
+    var location = loc.get_current_position({"accuracy": "high"});
+    
+    // Fetch weather data for that location
+    var weatherUrl = "https://api.weather.com/?lat=" + location.latitude + "&lon=" + location.longitude;
+    var weatherResponse = http.get({"url": weatherUrl});
+    var weather = parseJson(weatherResponse.body);
+    
+    // Encrypt the data before storing
+    var encryptedWeather = aes.encrypt({
+        "data": weatherResponse.body,
+        "key": "secret_key_123",
+        "mode": "GCM"
+    });
+    
+    // Store encrypted data
+    storage.set({
+        "key": "last_weather",
+        "value": encryptedWeather.ciphertext
+    });
+    
+    // Compress for efficient storage
+    var compressed = lz4.compress({"data": weatherResponse.body});
+    
+    print("Workflow complete!");
+    print("Location: " + location.latitude + ", " + location.longitude);
+    print("Weather: " + weather.condition);
+    print("Stored encrypted data: " + encryptedWeather.ciphertext.length + " bytes");
+    print("Compressed to: " + compressed.size + " bytes");
 }

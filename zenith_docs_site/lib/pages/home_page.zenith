@@ -1,0 +1,363 @@
+// Home Page - Landing page for Zenith Language
+// Built with 100% Zenith Code
+
+import 'package:zenith_ui/zenith_ui.dart';
+import '../components/navigation.dart';
+import '../components/footer.dart';
+import '../components/platform_showcase.dart';
+import '../components/feature_grid.dart';
+import '../components/code_demo.dart';
+
+class HomePage extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: Navigation(),
+      body: Column(
+        children: [
+          _buildHeroSection(),
+          _buildPlatformShowcase(),
+          _buildFeatureGrid(),
+          _buildCodeDemo(),
+          _buildCookbookPreview(),
+          _buildPackagesSection(),
+          _buildCTASection(),
+        ],
+      ),
+      footer: Footer(),
+    );
+  }
+
+  Widget _buildHeroSection() {
+    return Container(
+      padding: EdgeInsets.symmetric(vertical: 80, horizontal: 20),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            Color(0xFF6366F1),
+            Color(0xFF8B5CF6),
+            Color(0xFFEC4899),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            'Zenith Language',
+            style: TextStyle(
+              fontSize: 64,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+          ),
+          SizedBox(height: 20),
+          Text(
+            'Build Everything with 100% Zenith Code',
+            style: TextStyle(
+              fontSize: 28,
+              color: Colors.white.withOpacity(0.9),
+            ),
+            textAlign: TextAlign.center,
+          ),
+          SizedBox(height: 16),
+          Text(
+            'Games • Mobile • Desktop • Web • WebAssembly',
+            style: TextStyle(
+              fontSize: 18,
+              color: Colors.white.withOpacity(0.8),
+            ),
+          ),
+          SizedBox(height: 40),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              ElevatedButton(
+                onPressed: () => Navigator.pushNamed(context, '/docs'),
+                child: Text('Get Started'),
+                style: ElevatedButton.styleFrom(
+                  padding: EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                  fontSize: 18,
+                ),
+              ),
+              SizedBox(width: 16),
+              OutlinedButton(
+                onPressed: () => Navigator.pushNamed(context, '/cookbook'),
+                child: Text('View Cookbook'),
+                style: OutlinedButton.styleFrom(
+                  padding: EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                  fontSize: 18,
+                  side: BorderSide(color: Colors.white, width: 2),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPlatformShowcase() {
+    return PlatformShowcase();
+  }
+
+  Widget _buildFeatureGrid() {
+    return FeatureGrid();
+  }
+
+  Widget _buildCodeDemo() {
+    return CodeDemo(
+      title: 'Simple & Powerful',
+      description: 'Write once, run everywhere',
+      code: '''
+// Hello World in Zenith
+void main() {
+  print('Hello, Zenith!');
+}
+
+// Cross-platform UI
+class MyApp extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      home: Scaffold(
+        appBar: AppBar(title: Text('Zenith App')),
+        body: Center(child: Text('Works everywhere!')),
+      ),
+    );
+  }
+}
+
+// Rust Integration
+import 'package:zenith_rust/zenith_rust.dart';
+final result = await RustBridge.call('my_function');
+
+// Dart Package Support
+import 'package:http/http.dart' as http;
+final response = await http.get(Uri.parse('https://api.example.com'));
+''',
+    );
+  }
+
+  Widget _buildCookbookPreview() {
+    return Container(
+      padding: EdgeInsets.all(40),
+      child: Column(
+        children: [
+          Text(
+            'Cookbook',
+            style: TextStyle(fontSize: 42, fontWeight: FontWeight.bold),
+          ),
+          SizedBox(height: 16),
+          Text(
+            'Learn by building real applications',
+            style: TextStyle(fontSize: 20, color: Colors.grey[600]),
+          ),
+          SizedBox(height: 40),
+          GridView.count(
+            crossAxisCount: 3,
+            shrinkWrap: true,
+            physics: NeverScrollableScrollPhysics(),
+            children: [
+              _buildCookbookItem('🎮', 'Game Development', 'Snake, Tic-Tac-Toe, Platformer'),
+              _buildCookbookItem('📱', 'Mobile Apps', 'iOS & Android native apps'),
+              _buildCookbookItem('🖥️', 'Desktop Apps', 'Windows, Mac, Linux'),
+              _buildCookbookItem('🌐', 'Web Apps', 'Modern web applications'),
+              _buildCookbookItem('🦀', 'Rust Bridge', 'Use Rust packages'),
+              _buildCookbookItem('🎯', 'Dart Packages', 'Dart ecosystem access'),
+            ],
+          ),
+          SizedBox(height: 32),
+          ElevatedButton(
+            onPressed: () => Navigator.pushNamed(context, '/cookbook'),
+            child: Text('Explore Full Cookbook'),
+            style: ElevatedButton.styleFrom(
+              padding: EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+              fontSize: 18,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCookbookItem(String emoji, String title, String description) {
+    return Card(
+      margin: EdgeInsets.all(16),
+      child: Padding(
+        padding: EdgeInsets.all(20),
+        child: Column(
+          children: [
+            Text(emoji, style: TextStyle(fontSize: 48)),
+            SizedBox(height: 12),
+            Text(
+              title,
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            SizedBox(height: 8),
+            Text(
+              description,
+              style: TextStyle(color: Colors.grey[600]),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPackagesSection() {
+    return Container(
+      padding: EdgeInsets.all(40),
+      color: Color(0xFFF8FAFC),
+      child: Column(
+        children: [
+          Text(
+            'Package Ecosystem',
+            style: TextStyle(fontSize: 42, fontWeight: FontWeight.bold),
+          ),
+          SizedBox(height: 16),
+          Text(
+            'Leverage existing ecosystems with seamless bridges',
+            style: TextStyle(fontSize: 20, color: Colors.grey[600]),
+          ),
+          SizedBox(height: 40),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _buildPackageCard(
+                '🦀 Rust',
+                'zenith_rust',
+                'Access thousands of Rust crates directly from Zenith code. Perfect for performance-critical operations.',
+                ['Zero-copy FFI', 'Async support', 'Type-safe bindings'],
+              ),
+              SizedBox(width: 24),
+              _buildPackageCard(
+                '🎯 Dart',
+                'zenith_dart',
+                'Use Dart packages with auto-generated bindings. Full access to the Dart ecosystem.',
+                ['Auto-bindings', 'Hot reload', 'Null safety'],
+              ),
+            ],
+          ),
+          SizedBox(height: 32),
+          ElevatedButton(
+            onPressed: () => Navigator.pushNamed(context, '/packages'),
+            child: Text('Learn About Package Integration'),
+            style: ElevatedButton.styleFrom(
+              padding: EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+              fontSize: 18,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPackageCard(String emoji, String title, String packageName, List<String> features) {
+    return Card(
+      elevation: 4,
+      child: Container(
+        width: 400,
+        padding: EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text(emoji, style: TextStyle(fontSize: 36)),
+                SizedBox(width: 12),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+                    Text(packageName, style: TextStyle(color: Colors.blue, fontSize: 14)),
+                  ],
+                ),
+              ],
+            ),
+            SizedBox(height: 16),
+            Text(
+              'Access thousands of Rust crates directly from Zenith code. Perfect for performance-critical operations.',
+              style: TextStyle(color: Colors.grey[700]),
+            ),
+            SizedBox(height: 16),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: features.map((f) => Padding(
+                padding: EdgeInsets.only(bottom: 8),
+                child: Row(
+                  children: [
+                    Icon(Icons.check, color: Colors.green, size: 18),
+                    SizedBox(width: 8),
+                    Text(f),
+                  ],
+                ),
+              )).toList(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCTASection() {
+    return Container(
+      padding: EdgeInsets.all(60),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+        ),
+      ),
+      child: Column(
+        children: [
+          Text(
+            'Ready to Start Building?',
+            style: TextStyle(
+              fontSize: 36,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+          ),
+          SizedBox(height: 16),
+          Text(
+            'Join thousands of developers building with Zenith',
+            style: TextStyle(
+              fontSize: 18,
+              color: Colors.white.withOpacity(0.9),
+            ),
+          ),
+          SizedBox(height: 32),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              ElevatedButton(
+                onPressed: () => Navigator.pushNamed(context, '/docs'),
+                child: Text('Read Documentation'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  foregroundColor: Color(0xFF6366F1),
+                  padding: EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                  fontSize: 18,
+                ),
+              ),
+              SizedBox(width: 16),
+              OutlinedButton(
+                onPressed: () {},
+                child: Text('Star on GitHub'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.white,
+                  padding: EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                  fontSize: 18,
+                  side: BorderSide(color: Colors.white, width: 2),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}

@@ -1,0 +1,288 @@
+// Cookbook Page - Recipe Browser for Zenith Language
+// Built with 100% Zenith Code
+
+import 'package:zenith_ui/zenith_ui.dart';
+import '../components/navigation.dart';
+import '../components/footer.dart';
+
+class CookbookPage extends StatelessWidget {
+  final List<Map<String, dynamic>> recipes = [
+    {
+      'category': 'Getting Started',
+      'icon': '🚀',
+      'color': Color(0xFF10B981),
+      'recipes': [
+        {'title': 'Hello World', 'level': 'Beginner', 'file': '01-hello-world.md'},
+        {'title': 'Variables & Types', 'level': 'Beginner', 'file': '02-variables.md'},
+        {'title': 'Functions', 'level': 'Beginner', 'file': '03-functions.md'},
+        {'title': 'Control Flow', 'level': 'Beginner', 'file': '04-control-flow.md'},
+      ],
+    },
+    {
+      'category': 'Game Development',
+      'icon': '🎮',
+      'color': Color(0xFFEC4899),
+      'recipes': [
+        {'title': 'Snake Game', 'level': 'Intermediate', 'file': 'snake-game.md'},
+        {'title': 'Pong', 'level': 'Intermediate', 'file': 'pong.md'},
+        {'title': 'Platformer Basics', 'level': 'Advanced', 'file': 'platformer.md'},
+        {'title': 'Physics Engine', 'level': 'Advanced', 'file': 'physics.md'},
+      ],
+    },
+    {
+      'category': 'Mobile Apps',
+      'icon': '📱',
+      'color': Color(0xFF3B82F6),
+      'recipes': [
+        {'title': 'Todo App', 'level': 'Beginner', 'file': 'todo-app.md'},
+        {'title': 'Weather App', 'level': 'Intermediate', 'file': 'weather-app.md'},
+        {'title': 'Chat Application', 'level': 'Advanced', 'file': 'chat-app.md'},
+        {'title': 'Camera Integration', 'level': 'Advanced', 'file': 'camera.md'},
+      ],
+    },
+    {
+      'category': 'Rust Integration',
+      'icon': '🦀',
+      'color': Color(0xFFFF7139),
+      'recipes': [
+        {'title': 'Basic FFI Setup', 'level': 'Intermediate', 'file': 'basic-ffi.md'},
+        {'title': 'Using serde for JSON', 'level': 'Intermediate', 'file': 'serde-json.md'},
+        {'title': 'Async Operations', 'level': 'Advanced', 'file': 'rust-async.md'},
+        {'title': 'Performance Optimization', 'level': 'Advanced', 'file': 'perf-opt.md'},
+      ],
+    },
+    {
+      'category': 'Dart Packages',
+      'icon': '🎯',
+      'color': Color(0xFF00D9FF),
+      'recipes': [
+        {'title': 'HTTP Requests', 'level': 'Beginner', 'file': 'http-requests.md'},
+        {'title': 'Provider State Management', 'level': 'Intermediate', 'file': 'provider.md'},
+        {'title': 'Firebase Integration', 'level': 'Advanced', 'file': 'firebase.md'},
+        {'title': 'SQLite Database', 'level': 'Intermediate', 'file': 'sqlite.md'},
+      ],
+    },
+    {
+      'category': 'Desktop Apps',
+      'icon': '🖥️',
+      'color': Color(0xFF6366F1),
+      'recipes': [
+        {'title': 'File System Access', 'level': 'Intermediate', 'file': 'filesystem.md'},
+        {'title': 'System Tray App', 'level': 'Intermediate', 'file': 'system-tray.md'},
+        {'title': 'Native Menus', 'level': 'Beginner', 'file': 'menus.md'},
+        {'title': 'Multi-Window App', 'level': 'Advanced', 'file': 'multi-window.md'},
+      ],
+    },
+    {
+      'category': 'WebAssembly',
+      'icon': '⚡',
+      'color': Color(0xFF8B5CF6),
+      'recipes': [
+        {'title': 'Browser DOM Access', 'level': 'Intermediate', 'file': 'dom-access.md'},
+        {'title': 'WebGL Graphics', 'level': 'Advanced', 'file': 'webgl.md'},
+        {'title': 'Web Workers', 'level': 'Advanced', 'file': 'web-workers.md'},
+        {'title': 'Service Workers', 'level': 'Advanced', 'file': 'service-workers.md'},
+      ],
+    },
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: Navigation(),
+      body: ListView(
+        padding: EdgeInsets.all(20),
+        children: [
+          _buildHeader(),
+          SizedBox(height: 40),
+          ...recipes.map((category) => _buildCategorySection(category)),
+          SizedBox(height: 40),
+          _buildResources(),
+        ],
+      ),
+      footer: Footer(),
+    );
+  }
+
+  Widget _buildHeader() {
+    return Container(
+      padding: EdgeInsets.symmetric(vertical: 40),
+      child: Column(
+        children: [
+          Text(
+            '📖 Cookbook',
+            style: TextStyle(fontSize: 48, fontWeight: FontWeight.bold),
+          ),
+          SizedBox(height: 16),
+          Text(
+            'Learn Zenith through practical examples',
+            style: TextStyle(fontSize: 20, color: Colors.grey[600]),
+          ),
+          SizedBox(height: 24),
+          Text(
+            '25+ complete recipes covering games, mobile, desktop, web, and package integration',
+            style: TextStyle(fontSize: 16, color: Colors.grey[500]),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCategorySection(Map<String, dynamic> category) {
+    return Container(
+      margin: EdgeInsets.only(bottom: 40),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                category['icon'],
+                style: TextStyle(fontSize: 32),
+              ),
+              SizedBox(width: 12),
+              Text(
+                category['category'],
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                  color: category['color'],
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 20),
+          GridView.builder(
+            shrinkWrap: true,
+            physics: NeverScrollableScrollPhysics(),
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              childAspectRatio: 3,
+              crossAxisSpacing: 16,
+              mainAxisSpacing: 16,
+            ),
+            itemCount: (category['recipes'] as List).length,
+            itemBuilder: (context, index) {
+              final recipe = (category['recipes'] as List)[index];
+              return _buildRecipeCard(recipe, category['color']);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRecipeCard(Map<String, dynamic> recipe, Color color) {
+    return InkWell(
+      onTap: () {
+        // Navigate to recipe detail
+        print('Opening: ${recipe['title']}');
+      },
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withOpacity(0.3)),
+          color: color.withOpacity(0.05),
+        ),
+        padding: EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    recipe['title'],
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  SizedBox(height: 4),
+                  Container(
+                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: _getLevelColor(recipe['level']),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      recipe['level'],
+                      style: TextStyle(fontSize: 12, color: Colors.white),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.arrow_forward_ios, size: 16, color: color),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Color _getLevelColor(String level) {
+    switch (level) {
+      case 'Beginner':
+        return Color(0xFF10B981);
+      case 'Intermediate':
+        return Color(0xFFF59E0B);
+      case 'Advanced':
+        return Color(0xFFEF4444);
+      default:
+        return Colors.grey;
+    }
+  }
+
+  Widget _buildResources() {
+    return Container(
+      padding: EdgeInsets.all(32),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+        ),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        children: [
+          Text(
+            '💡 Need More Help?',
+            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
+          ),
+          SizedBox(height: 16),
+          Text(
+            'Check out our full documentation or join the community',
+            style: TextStyle(color: Colors.white.withOpacity(0.9)),
+            textAlign: TextAlign.center,
+          ),
+          SizedBox(height: 24),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              ElevatedButton(
+                onPressed: () => Navigator.pushNamed(context, '/docs'),
+                child: Text('📚 Full Documentation'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  foregroundColor: Color(0xFF6366F1),
+                ),
+              ),
+              SizedBox(width: 16),
+              OutlinedButton(
+                onPressed: () {
+                  // Open Discord
+                },
+                child: Text('💬 Join Discord'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.white,
+                  side: BorderSide(color: Colors.white),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}

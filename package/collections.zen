@@ -1,0 +1,713 @@
+# Collections module for Zenith
+# Provides advanced data structures and collection utilities
+
+module collections;
+
+# Stack implementation
+pub struct Stack<T> {
+    items: List<T>,
+}
+
+impl Stack<T> {
+    pub fn new() -> Stack<T> {
+        return Stack { items: [] };
+    }
+
+    pub fn push(&mut self, item: T) {
+        self.items.append(item);
+    }
+
+    pub fn pop(&mut self) -> Option<T> {
+        if self.items.is_empty() {
+            return None;
+        }
+        return Some(self.items.pop());
+    }
+
+    pub fn peek(&self) -> Option<T> {
+        if self.items.is_empty() {
+            return None;
+        }
+        return Some(self.items.last());
+    }
+
+    pub fn is_empty(&self) -> Bool {
+        return self.items.is_empty();
+    }
+
+    pub fn size(&self) -> Int {
+        return self.items.len();
+    }
+}
+
+# Queue implementation
+pub struct Queue<T> {
+    items: List<T>,
+}
+
+impl Queue<T> {
+    pub fn new() -> Queue<T> {
+        return Queue { items: [] };
+    }
+
+    pub fn enqueue(&mut self, item: T) {
+        self.items.append(item);
+    }
+
+    pub fn dequeue(&mut self) -> Option<T> {
+        if self.items.is_empty() {
+            return None;
+        }
+        let item = self.items[0];
+        self.items.remove(0);
+        return Some(item);
+    }
+
+    pub fn front(&self) -> Option<T> {
+        if self.items.is_empty() {
+            return None;
+        }
+        return Some(self.items[0]);
+    }
+
+    pub fn is_empty(&self) -> Bool {
+        return self.items.is_empty();
+    }
+
+    pub fn size(&self) -> Int {
+        return self.items.len();
+    }
+}
+
+# Linked List Node
+pub struct ListNode<T> {
+    value: T,
+    next: Option<Box<ListNode<T>>>,
+}
+
+# Linked List implementation
+pub struct LinkedList<T> {
+    head: Option<Box<ListNode<T>>>,
+    length: Int,
+}
+
+impl LinkedList<T> {
+    pub fn new() -> LinkedList<T> {
+        return LinkedList { head: None, length: 0 };
+    }
+
+    pub fn append(&mut self, value: T) {
+        let new_node = Box::new(ListNode { value, next: None });
+        
+        if self.head.is_none() {
+            self.head = Some(new_node);
+        } else {
+            let mut current = &mut self.head;
+            while let Some(ref mut node) = current {
+                if node.next.is_none() {
+                    node.next = Some(new_node);
+                    break;
+                }
+                current = &mut node.next;
+            }
+        }
+        self.length += 1;
+    }
+
+    pub fn prepend(&mut self, value: T) {
+        let new_node = Box::new(ListNode { 
+            value, 
+            next: self.head.take(),
+        });
+        self.head = Some(new_node);
+        self.length += 1;
+    }
+
+    pub fn remove(&mut self, index: Int) -> Option<T> {
+        if index < 0 || index >= self.length {
+            return None;
+        }
+
+        if index == 0 {
+            let node = self.head.take()?;
+            self.head = node.next;
+            self.length -= 1;
+            return Some(node.value);
+        }
+
+        let mut current = &mut self.head;
+        for i in 0..index {
+            current = &mut current.as_mut()?.next;
+        }
+
+        let node = current.as_mut()?.next.take()?;
+        current.as_mut().unwrap().next = node.next;
+        self.length -= 1;
+        return Some(node.value);
+    }
+
+    pub fn get(&self, index: Int) -> Option<T> {
+        if index < 0 || index >= self.length {
+            return None;
+        }
+
+        let mut current = &self.head;
+        for i in 0..index {
+            current = &current.as_ref()?.next;
+        }
+        return Some(current.as_ref()?.value.clone());
+    }
+
+    pub fn len(&self) -> Int {
+        return self.length;
+    }
+
+    pub fn is_empty(&self) -> Bool {
+        return self.length == 0;
+    }
+}
+
+# HashMap implementation
+pub struct HashMap<K, V> {
+    buckets: List<List<(K, V)>>,
+    capacity: Int,
+    size: Int,
+}
+
+impl HashMap<K, V> 
+where K: Hash + Eq {
+    pub fn new() -> HashMap<K, V> {
+        return HashMap {
+            buckets: vec![vec![]; 16],
+            capacity: 16,
+            size: 0,
+        };
+    }
+
+    fn hash(&self, key: &K) -> Int {
+        return key.hash() % self.capacity;
+    }
+
+    pub fn insert(&mut self, key: K, value: V) -> Option<V> {
+        let index = self.hash(&key);
+        let bucket = &mut self.buckets[index];
+
+        for item in bucket.iter_mut() {
+            if item.0 == key {
+                let old_value = std::mem::replace(&mut item.1, value);
+                return Some(old_value);
+            }
+        }
+
+        bucket.push((key, value));
+        self.size += 1;
+        return None;
+    }
+
+    pub fn get(&self, key: &K) -> Option<V> {
+        let index = self.hash(key);
+        let bucket = &self.buckets[index];
+
+        for item in bucket.iter() {
+            if item.0 == *key {
+                return Some(item.1.clone());
+            }
+        }
+        return None;
+    }
+
+    pub fn remove(&mut self, key: &K) -> Option<V> {
+        let index = self.hash(key);
+        let bucket = &mut self.buckets[index];
+
+        for i in 0..bucket.len() {
+            if bucket[i].0 == *key {
+                let (_, value) = bucket.remove(i);
+                self.size -= 1;
+                return Some(value);
+            }
+        }
+        return None;
+    }
+
+    pub fn contains_key(&self, key: &K) -> Bool {
+        return self.get(key).is_some();
+    }
+
+    pub fn len(&self) -> Int {
+        return self.size;
+    }
+
+    pub fn is_empty(&self) -> Bool {
+        return self.size == 0;
+    }
+
+    pub fn clear(&mut self) {
+        self.buckets = vec![vec![]; self.capacity];
+        self.size = 0;
+    }
+}
+
+# Set implementation
+pub struct Set<T> 
+where T: Hash + Eq {
+    map: HashMap<T, ()>,
+}
+
+impl Set<T> 
+where T: Hash + Eq {
+    pub fn new() -> Set<T> {
+        return Set { map: HashMap::new() };
+    }
+
+    pub fn add(&mut self, value: T) {
+        self.map.insert(value, ());
+    }
+
+    pub fn remove(&mut self, value: &T) -> Bool {
+        return self.map.remove(value).is_some();
+    }
+
+    pub fn contains(&self, value: &T) -> Bool {
+        return self.map.contains_key(value);
+    }
+
+    pub fn len(&self) -> Int {
+        return self.map.len();
+    }
+
+    pub fn is_empty(&self) -> Bool {
+        return self.map.is_empty();
+    }
+
+    pub fn clear(&mut self) {
+        self.map.clear();
+    }
+
+    pub fn union(&self, other: &Set<T>) -> Set<T> {
+        let mut result = Set::new();
+        // Add all elements from self
+        // Add all elements from other
+        return result;
+    }
+
+    pub fn intersection(&self, other: &Set<T>) -> Set<T> {
+        let mut result = Set::new();
+        // Add only elements present in both
+        return result;
+    }
+
+    pub fn difference(&self, other: &Set<T>) -> Set<T> {
+        let mut result = Set::new();
+        // Add elements in self but not in other
+        return result;
+    }
+}
+
+# Binary Tree Node
+pub struct TreeNode<T> {
+    value: T,
+    left: Option<Box<TreeNode<T>>>,
+    right: Option<Box<TreeNode<T>>>,
+}
+
+# Binary Search Tree implementation
+pub struct BinarySearchTree<T> 
+where T: Ord {
+    root: Option<Box<TreeNode<T>>>,
+    size: Int,
+}
+
+impl BinarySearchTree<T> 
+where T: Ord {
+    pub fn new() -> BinarySearchTree<T> {
+        return BinarySearchTree { root: None, size: 0 };
+    }
+
+    pub fn insert(&mut self, value: T) {
+        self.root = Self::insert_node(self.root.take(), value);
+        self.size += 1;
+    }
+
+    fn insert_node(node: Option<Box<TreeNode<T>>>, value: T) -> Option<Box<TreeNode<T>>> {
+        match node {
+            None => Some(Box::new(TreeNode { value, left: None, right: None })),
+            Some(mut n) => {
+                if value < n.value {
+                    n.left = Self::insert_node(n.left.take(), value);
+                } else if value > n.value {
+                    n.right = Self::insert_node(n.right.take(), value);
+                }
+                Some(n)
+            }
+        }
+    }
+
+    pub fn search(&self, value: T) -> Bool {
+        return Self::search_node(&self.root, value);
+    }
+
+    fn search_node(node: &Option<Box<TreeNode<T>>>, value: T) -> Bool {
+        match node {
+            None => false,
+            Some(n) => {
+                if value == n.value {
+                    true
+                } else if value < n.value {
+                    Self::search_node(&n.left, value)
+                } else {
+                    Self::search_node(&n.right, value)
+                }
+            }
+        }
+    }
+
+    pub fn len(&self) -> Int {
+        return self.size;
+    }
+
+    pub fn is_empty(&self) -> Bool {
+        return self.size == 0;
+    }
+
+    pub fn inorder_traversal(&self) -> List<T> {
+        let mut result = [];
+        Self::inorder_helper(&self.root, &mut result);
+        return result;
+    }
+
+    fn inorder_helper(node: &Option<Box<TreeNode<T>>>, result: &mut List<T>) {
+        if let Some(n) = node {
+            Self::inorder_helper(&n.left, result);
+            result.push(n.value.clone());
+            Self::inorder_helper(&n.right, result);
+        }
+    }
+}
+
+# Heap (Priority Queue) implementation
+pub struct MinHeap<T> 
+where T: Ord {
+    data: List<T>,
+}
+
+impl MinHeap<T> 
+where T: Ord {
+    pub fn new() -> MinHeap<T> {
+        return MinHeap { data: [] };
+    }
+
+    pub fn push(&mut self, value: T) {
+        self.data.push(value);
+        self.heapify_up(self.data.len() - 1);
+    }
+
+    pub fn pop(&mut self) -> Option<T> {
+        if self.data.is_empty() {
+            return None;
+        }
+
+        let len = self.data.len();
+        self.data.swap(0, len - 1);
+        let value = self.data.pop();
+        
+        if !self.data.is_empty() {
+            self.heapify_down(0);
+        }
+        
+        return value;
+    }
+
+    pub fn peek(&self) -> Option<T> {
+        return self.data.first().cloned();
+    }
+
+    fn heapify_up(&mut self, mut index: Int) {
+        while index > 0 {
+            let parent = (index - 1) / 2;
+            if self.data[index] < self.data[parent] {
+                self.data.swap(index, parent);
+                index = parent;
+            } else {
+                break;
+            }
+        }
+    }
+
+    fn heapify_down(&mut self, mut index: Int) {
+        let len = self.data.len();
+        loop {
+            let left = 2 * index + 1;
+            let right = 2 * index + 2;
+            let mut smallest = index;
+
+            if left < len && self.data[left] < self.data[smallest] {
+                smallest = left;
+            }
+            if right < len && self.data[right] < self.data[smallest] {
+                smallest = right;
+            }
+
+            if smallest != index {
+                self.data.swap(index, smallest);
+                index = smallest;
+            } else {
+                break;
+            }
+        }
+    }
+
+    pub fn len(&self) -> Int {
+        return self.data.len();
+    }
+
+    pub fn is_empty(&self) -> Bool {
+        return self.data.is_empty();
+    }
+}
+
+# MaxHeap implementation
+pub struct MaxHeap<T> 
+where T: Ord {
+    data: List<T>,
+}
+
+impl MaxHeap<T> 
+where T: Ord {
+    pub fn new() -> MaxHeap<T> {
+        return MaxHeap { data: [] };
+    }
+
+    pub fn push(&mut self, value: T) {
+        self.data.push(value);
+        self.heapify_up(self.data.len() - 1);
+    }
+
+    pub fn pop(&mut self) -> Option<T> {
+        if self.data.is_empty() {
+            return None;
+        }
+
+        let len = self.data.len();
+        self.data.swap(0, len - 1);
+        let value = self.data.pop();
+        
+        if !self.data.is_empty() {
+            self.heapify_down(0);
+        }
+        
+        return value;
+    }
+
+    pub fn peek(&self) -> Option<T> {
+        return self.data.first().cloned();
+    }
+
+    fn heapify_up(&mut self, mut index: Int) {
+        while index > 0 {
+            let parent = (index - 1) / 2;
+            if self.data[index] > self.data[parent] {
+                self.data.swap(index, parent);
+                index = parent;
+            } else {
+                break;
+            }
+        }
+    }
+
+    fn heapify_down(&mut self, mut index: Int) {
+        let len = self.data.len();
+        loop {
+            let left = 2 * index + 1;
+            let right = 2 * index + 2;
+            let mut largest = index;
+
+            if left < len && self.data[left] > self.data[largest] {
+                largest = left;
+            }
+            if right < len && self.data[right] > self.data[largest] {
+                largest = right;
+            }
+
+            if largest != index {
+                self.data.swap(index, largest);
+                index = largest;
+            } else {
+                break;
+            }
+        }
+    }
+
+    pub fn len(&self) -> Int {
+        return self.data.len();
+    }
+
+    pub fn is_empty(&self) -> Bool {
+        return self.data.is_empty();
+    }
+}
+
+# Graph implementation
+pub struct Graph<T> 
+where T: Hash + Eq {
+    vertices: HashMap<T, List<T>>,
+    directed: Bool,
+}
+
+impl Graph<T> 
+where T: Hash + Eq {
+    pub fn new(directed: Bool) -> Graph<T> {
+        return Graph {
+            vertices: HashMap::new(),
+            directed,
+        };
+    }
+
+    pub fn add_vertex(&mut self, vertex: T) {
+        if !self.vertices.contains_key(&vertex) {
+            self.vertices.insert(vertex, []);
+        }
+    }
+
+    pub fn add_edge(&mut self, from: T, to: T) {
+        self.add_vertex(from.clone());
+        self.add_vertex(to.clone());
+
+        if let Some(edges) = self.vertices.get_mut(&from) {
+            edges.push(to.clone());
+        }
+
+        if !self.directed {
+            if let Some(edges) = self.vertices.get_mut(&to) {
+                edges.push(from);
+            }
+        }
+    }
+
+    pub fn remove_edge(&mut self, from: &T, to: &T) {
+        if let Some(edges) = self.vertices.get_mut(from) {
+            edges.retain(|edge| edge != to);
+        }
+
+        if !self.directed {
+            if let Some(edges) = self.vertices.get_mut(to) {
+                edges.retain(|edge| edge != from);
+            }
+        }
+    }
+
+    pub fn has_edge(&self, from: &T, to: &T) -> Bool {
+        if let Some(edges) = self.vertices.get(from) {
+            return edges.contains(to);
+        }
+        return false;
+    }
+
+    pub fn neighbors(&self, vertex: &T) -> Option<List<T>> {
+        return self.vertices.get(vertex).cloned();
+    }
+
+    pub fn vertices_count(&self) -> Int {
+        return self.vertices.len();
+    }
+
+    pub fn edges_count(&self) -> Int {
+        let mut count = 0;
+        for edges in self.vertices.values() {
+            count += edges.len();
+        }
+        if !self.directed {
+            count /= 2;
+        }
+        return count;
+    }
+
+    pub fn bfs(&self, start: T) -> List<T> {
+        let mut visited = Set::new();
+        let mut queue = Queue::new();
+        let mut result = [];
+
+        queue.enqueue(start.clone());
+        visited.add(start);
+
+        while !queue.is_empty() {
+            if let Some(vertex) = queue.dequeue() {
+                result.push(vertex.clone());
+                
+                if let Some(neighbors) = self.neighbors(&vertex) {
+                    for neighbor in neighbors {
+                        if !visited.contains(&neighbor) {
+                            visited.add(neighbor.clone());
+                            queue.enqueue(neighbor);
+                        }
+                    }
+                }
+            }
+        }
+
+        return result;
+    }
+
+    pub fn dfs(&self, start: T) -> List<T> {
+        let mut visited = Set::new();
+        let mut result = [];
+        Self::dfs_helper(self, &start, &mut visited, &mut result);
+        return result;
+    }
+
+    fn dfs_helper(&self, vertex: &T, visited: &mut Set<T>, result: &mut List<T>) {
+        visited.add(vertex.clone());
+        result.push(vertex.clone());
+
+        if let Some(neighbors) = self.neighbors(vertex) {
+            for neighbor in neighbors {
+                if !visited.contains(&neighbor) {
+                    Self::dfs_helper(self, &neighbor, visited, result);
+                }
+            }
+        }
+    }
+}
+
+# Helper functions for creating collections
+pub fn stack<T>() -> Stack<T> {
+    return Stack::new();
+}
+
+pub fn queue<T>() -> Queue<T> {
+    return Queue::new();
+}
+
+pub fn linked_list<T>() -> LinkedList<T> {
+    return LinkedList::new();
+}
+
+pub fn hash_map<K, V>() -> HashMap<K, V> 
+where K: Hash + Eq {
+    return HashMap::new();
+}
+
+pub fn set<T>() -> Set<T> 
+where T: Hash + Eq {
+    return Set::new();
+}
+
+pub fn binary_search_tree<T>() -> BinarySearchTree<T> 
+where T: Ord {
+    return BinarySearchTree::new();
+}
+
+pub fn min_heap<T>() -> MinHeap<T> 
+where T: Ord {
+    return MinHeap::new();
+}
+
+pub fn max_heap<T>() -> MaxHeap<T> 
+where T: Ord {
+    return MaxHeap::new();
+}
+
+pub fn graph<T>(directed: Bool) -> Graph<T> 
+where T: Hash + Eq {
+    return Graph::new(directed);
+}

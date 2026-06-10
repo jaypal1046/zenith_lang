@@ -1,0 +1,142 @@
+# Collections Example for Zenith Basic Package
+# Demonstrates advanced data structures usage
+
+import package.collections;
+
+fn main() {
+    console.println("=== Collections Module Examples ===\n");
+
+    # Stack Example
+    console.println("--- Stack Example ---");
+    let mut stack = collections.stack<Int>();
+    stack.push(10);
+    stack.push(20);
+    stack.push(30);
+    console.println("Stack size: " + stack.size().to_string());
+    console.println("Peek: " + stack.peek().to_string());
+    console.println("Pop: " + stack.pop().to_string());
+    console.println("Pop: " + stack.pop().to_string());
+    console.println("Is empty: " + stack.is_empty().to_string());
+    console.println("");
+
+    # Queue Example
+    console.println("--- Queue Example ---");
+    let mut queue = collections.queue<String>();
+    queue.enqueue("First");
+    queue.enqueue("Second");
+    queue.enqueue("Third");
+    console.println("Queue size: " + queue.size().to_string());
+    console.println("Front: " + queue.front().to_string());
+    console.println("Dequeue: " + queue.dequeue().to_string());
+    console.println("Dequeue: " + queue.dequeue().to_string());
+    console.println("");
+
+    # Linked List Example
+    console.println("--- Linked List Example ---");
+    let mut list = collections.linked_list<Int>();
+    list.append(1);
+    list.append(2);
+    list.append(3);
+    list.prepend(0);
+    console.println("List length: " + list.len().to_string());
+    console.println("Get index 2: " + list.get(2).to_string());
+    list.remove(1);
+    console.println("After removing index 1, length: " + list.len().to_string());
+    console.println("");
+
+    # HashMap Example
+    console.println("--- HashMap Example ---");
+    let mut map = collections.hash_map<String, Int>();
+    map.insert("apple".to_string(), 5);
+    map.insert("banana".to_string(), 3);
+    map.insert("orange".to_string(), 7);
+    console.println("Map size: " + map.len().to_string());
+    console.println("Get 'apple': " + map.get(&"apple".to_string()).to_string());
+    console.println("Contains 'banana': " + map.contains_key(&"banana".to_string()).to_string());
+    map.remove(&"orange".to_string());
+    console.println("After removing 'orange', size: " + map.len().to_string());
+    console.println("");
+
+    # Set Example
+    console.println("--- Set Example ---");
+    let mut set1 = collections.set<Int>();
+    set1.add(1);
+    set1.add(2);
+    set1.add(3);
+    set1.add(4);
+    console.println("Set1 size: " + set1.len().to_string());
+    console.println("Contains 3: " + set1.contains(&3).to_string());
+    set1.remove(&2);
+    console.println("After removing 2, size: " + set1.len().to_string());
+    console.println("");
+
+    # Binary Search Tree Example
+    console.println("--- Binary Search Tree Example ---");
+    let mut bst = collections.binary_search_tree<Int>();
+    bst.insert(50);
+    bst.insert(30);
+    bst.insert(70);
+    bst.insert(20);
+    bst.insert(40);
+    bst.insert(60);
+    bst.insert(80);
+    console.println("BST size: " + bst.len().to_string());
+    console.println("Search 40: " + bst.search(40).to_string());
+    console.println("Search 25: " + bst.search(25).to_string());
+    console.println("Inorder traversal: " + bst.inorder_traversal().to_string());
+    console.println("");
+
+    # MinHeap Example
+    console.println("--- MinHeap Example ---");
+    let mut min_heap = collections.min_heap<Int>();
+    min_heap.push(50);
+    min_heap.push(30);
+    min_heap.push(70);
+    min_heap.push(20);
+    min_heap.push(40);
+    console.println("MinHeap size: " + min_heap.len().to_string());
+    console.println("Peek (min): " + min_heap.peek().to_string());
+    console.println("Pop: " + min_heap.pop().to_string());
+    console.println("Pop: " + min_heap.pop().to_string());
+    console.println("");
+
+    # MaxHeap Example
+    console.println("--- MaxHeap Example ---");
+    let mut max_heap = collections.max_heap<Int>();
+    max_heap.push(50);
+    max_heap.push(30);
+    max_heap.push(70);
+    max_heap.push(20);
+    max_heap.push(40);
+    console.println("MaxHeap size: " + max_heap.len().to_string());
+    console.println("Peek (max): " + max_heap.peek().to_string());
+    console.println("Pop: " + max_heap.pop().to_string());
+    console.println("Pop: " + max_heap.pop().to_string());
+    console.println("");
+
+    # Graph Example
+    console.println("--- Graph Example ---");
+    let mut graph = collections.graph<String>(false); # undirected graph
+    graph.add_vertex("A".to_string());
+    graph.add_vertex("B".to_string());
+    graph.add_vertex("C".to_string());
+    graph.add_vertex("D".to_string());
+    graph.add_edge("A".to_string(), "B".to_string());
+    graph.add_edge("A".to_string(), "C".to_string());
+    graph.add_edge("B".to_string(), "D".to_string());
+    graph.add_edge("C".to_string(), "D".to_string());
+    
+    console.println("Vertices count: " + graph.vertices_count().to_string());
+    console.println("Edges count: " + graph.edges_count().to_string());
+    console.println("Has edge A-B: " + graph.has_edge(&"A".to_string(), &"B".to_string()).to_string());
+    console.println("Neighbors of A: " + graph.neighbors(&"A".to_string()).to_string());
+    
+    let bfs_result = graph.bfs("A".to_string());
+    console.println("BFS from A: " + bfs_result.to_string());
+    
+    let dfs_result = graph.dfs("A".to_string());
+    console.println("DFS from A: " + dfs_result.to_string());
+    console.println("");
+
+    console.println("=== All Collection Examples Completed ===");
+}

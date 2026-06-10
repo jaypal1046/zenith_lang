@@ -1,0 +1,136 @@
+# Math Module Example for Zenith Basic Package
+# Demonstrates mathematical functions usage
+
+import package.math;
+
+fn main() {
+    console.println("=== Math Module Examples ===\n");
+
+    # Constants
+    console.println("--- Mathematical Constants ---");
+    console.println("PI: " + math.PI.to_string());
+    console.println("E: " + math.E.to_string());
+    console.println("PHI (Golden Ratio): " + math.PHI.to_string());
+    console.println("SQRT2: " + math.SQRT2.to_string());
+    console.println("");
+
+    # Basic Arithmetic
+    console.println("--- Basic Arithmetic ---");
+    console.println("abs(-42): " + math.abs(-42).to_string());
+    console.println("abs_float(-3.14): " + math.abs_float(-3.14).to_string());
+    console.println("pow(2.0, 10): " + math.pow(2.0, 10).to_string());
+    console.println("sqrt(16.0): " + math.sqrt(16.0).to_string());
+    console.println("cbrt(27.0): " + math.cbrt(27.0).to_string());
+    console.println("");
+
+    # Logarithms and Exponentials
+    console.println("--- Logarithms and Exponentials ---");
+    console.println("ln(E): " + math.ln(math.E).to_string());
+    console.println("log10(100.0): " + math.log10(100.0).to_string());
+    console.println("log2(1024.0): " + math.log2(1024.0).to_string());
+    console.println("exp(1.0): " + math.exp(1.0).to_string());
+    console.println("");
+
+    # Trigonometric Functions
+    console.println("--- Trigonometric Functions ---");
+    let angle = math.PI / 4.0; # 45 degrees in radians
+    console.println("sin(PI/4): " + math.sin(angle).to_string());
+    console.println("cos(PI/4): " + math.cos(angle).to_string());
+    console.println("tan(PI/4): " + math.tan(angle).to_string());
+    console.println("asin(0.707): " + math.asin(0.707).to_string());
+    console.println("acos(0.707): " + math.acos(0.707).to_string());
+    console.println("atan(1.0): " + math.atan(1.0).to_string());
+    console.println("");
+
+    # Hyperbolic Functions
+    console.println("--- Hyperbolic Functions ---");
+    console.println("sinh(1.0): " + math.sinh(1.0).to_string());
+    console.println("cosh(1.0): " + math.cosh(1.0).to_string());
+    console.println("tanh(1.0): " + math.tanh(1.0).to_string());
+    console.println("");
+
+    # Rounding Functions
+    console.println("--- Rounding Functions ---");
+    console.println("floor(3.7): " + math.floor(3.7).to_string());
+    console.println("ceil(3.2): " + math.ceil(3.2).to_string());
+    console.println("round(3.5): " + math.round(3.5).to_string());
+    console.println("trunc(-3.7): " + math.trunc(-3.7).to_string());
+    console.println("");
+
+    # Factorial and Combinatorics
+    console.println("--- Factorial and Combinatorics ---");
+    console.println("factorial(5): " + math.factorial(5).to_string());
+    console.println("factorial(10): " + math.factorial(10).to_string());
+    console.println("binomial(10, 3): " + math.binomial(10, 3).to_string());
+    console.println("permutations(5, 3): " + math.permutations(5, 3).to_string());
+    console.println("");
+
+    # GCD and LCM
+    console.println("--- GCD and LCM ---");
+    console.println("gcd(48, 18): " + math.gcd(48, 18).to_string());
+    console.println("lcm(12, 18): " + math.lcm(12, 18).to_string());
+    console.println("");
+
+    # Prime Numbers
+    console.println("--- Prime Numbers ---");
+    console.println("is_prime(17): " + math.is_prime(17).to_string());
+    console.println("is_prime(20): " + math.is_prime(20).to_string());
+    console.println("Primes up to 50: " + math.primes_up_to(50).to_string());
+    console.println("");
+
+    # Fibonacci
+    console.println("--- Fibonacci Sequence ---");
+    console.println("fibonacci(10): " + math.fibonacci(10).to_string());
+    console.println("First 10 Fibonacci numbers: " + math.fibonacci_sequence(10).to_string());
+    console.println("");
+
+    # Random Numbers
+    console.println("--- Random Numbers ---");
+    math.seed_random(42); # Set seed for reproducibility
+    console.println("random(): " + math.random().to_string());
+    console.println("random_int(1, 100): " + math.random_int(1, 100).to_string());
+    console.println("random_float(0.0, 10.0): " + math.random_float(0.0, 10.0).to_string());
+    console.println("");
+
+    # Statistics
+    console.println("--- Statistics ---");
+    let data = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
+    console.println("Data: " + data.to_string());
+    console.println("mean: " + math.mean(data).to_string());
+    console.println("median: " + math.median(data.clone()).to_string());
+    console.println("variance: " + math.variance(data).to_string());
+    console.println("std_dev: " + math.std_dev(data).to_string());
+    
+    let data2 = [2.0, 4.0, 6.0, 8.0, 10.0];
+    let data3 = [1.0, 3.0, 5.0, 7.0, 9.0];
+    console.println("correlation([2,4,6,8,10], [1,3,5,7,9]): " + math.correlation(data2, data3).to_string());
+    console.println("");
+
+    # Distance Functions
+    console.println("--- Distance Functions ---");
+    let p1 = [1.0, 2.0, 3.0];
+    let p2 = [4.0, 6.0, 8.0];
+    console.println("Point 1: " + p1.to_string());
+    console.println("Point 2: " + p2.to_string());
+    console.println("Euclidean distance: " + math.distance_euclidean(p1.clone(), p2.clone()).to_string());
+    console.println("Manhattan distance: " + math.distance_manhattan(p1.clone(), p2.clone()).to_string());
+    console.println("Minkowski distance (p=3): " + math.distance_minkowski(p1.clone(), p2.clone(), 3.0).to_string());
+    console.println("");
+
+    # Angle Conversion
+    console.println("--- Angle Conversion ---");
+    console.println("degrees_to_radians(180): " + math.degrees_to_radians(180.0).to_string());
+    console.println("radians_to_degrees(PI): " + math.radians_to_degrees(math.PI).to_string());
+    console.println("");
+
+    # Utility Functions
+    console.println("--- Utility Functions ---");
+    console.println("clamp(15.0, 0.0, 10.0): " + math.clamp(15.0, 0.0, 10.0).to_string());
+    console.println("lerp(0.0, 100.0, 0.25): " + math.lerp(0.0, 100.0, 0.25).to_string());
+    console.println("sign(-42.0): " + math.sign(-42.0).to_string());
+    console.println("sign(0.0): " + math.sign(0.0).to_string());
+    console.println("sign(42.0): " + math.sign(42.0).to_string());
+    console.println("");
+
+    console.println("=== All Math Examples Completed ===");
+}

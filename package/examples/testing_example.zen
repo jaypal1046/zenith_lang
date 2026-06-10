@@ -1,0 +1,61 @@
+// Example: Using the testing module
+// This demonstrates how to use the basic.testing module for unit and integration tests
+
+import basic.testing.{
+    TestResult, 
+    TestSuite, 
+    assert_true, 
+    assert_equal, 
+    assert_string_equal,
+    run_test,
+    run_suite,
+    print_summary,
+    unit_test_example,
+    integration_test_example
+};
+
+import basic.testing.integration.{
+    run_all_integration_tests,
+    create_integration_scenario,
+    test_database_integration,
+    test_api_integration
+};
+
+fn main() {
+    println("=== Basic Package Testing Example ===\n");
+    
+    // Example 1: Simple assertions
+    println("--- Simple Assertions ---");
+    let a = 10;
+    let b = 10;
+    assert_equal(a, b, "Values should be equal");
+    
+    let str1 = "hello";
+    let str2 = "hello";
+    assert_string_equal(str1, str2, "Strings should be equal");
+    
+    assert_true(5 > 3, "5 should be greater than 3");
+    
+    // Example 2: Running individual tests
+    println("\n--- Individual Test ---");
+    let result = run_test("Unit Test Example", unit_test_example);
+    println("Test: " + result.name + " - " + result.message);
+    
+    // Example 3: Running a test suite
+    println("\n--- Test Suite ---");
+    let tests: [(String, Fn() -> Bool)] = [
+        ("Simple Math", fn() -> Bool { return assert_equal(2 + 2, 4, "Math should work"); }),
+        ("String Compare", fn() -> Bool { return assert_string_equal("test", "test", "Strings match"); }),
+        ("Boolean Check", fn() -> Bool { return assert_true(true, "True is true"); })
+    ];
+    
+    let suite = run_suite("Example Test Suite", tests);
+    print_summary(suite);
+    
+    // Example 4: Integration tests
+    println("\n--- Integration Tests ---");
+    let integration_suite = run_all_integration_tests();
+    print_summary(integration_suite);
+    
+    println("\n=== Example Complete ===");
+}

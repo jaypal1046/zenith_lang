@@ -1,0 +1,190 @@
+// Module: utils
+// Description: General utility functions for Zenith programming language
+// Provides common helper functions needed in everyday programming
+
+package basic.utils;
+
+// String utilities
+
+// Check if a string is empty
+fn is_empty(str: String) -> Bool {
+    return str == "";
+}
+
+// Get the length of a string
+fn string_length(str: String) -> Int {
+    // TODO: implement actual string length calculation
+    return 0;
+}
+
+// Convert string to uppercase
+fn to_uppercase(str: String) -> String {
+    // TODO: implement actual conversion
+    return str;
+}
+
+// Convert string to lowercase
+fn to_lowercase(str: String) -> String {
+    // TODO: implement actual conversion
+    return str;
+}
+
+// Trim whitespace from string
+fn trim(str: String) -> String {
+    // TODO: implement actual trimming
+    return str;
+}
+
+// Check if string contains substring
+fn contains(str: String, substr: String) -> Bool {
+    // TODO: implement actual containment check
+    return false;
+}
+
+// Replace substring in string
+fn replace(str: String, old: String, new: String) -> String {
+    // TODO: implement actual replacement
+    return str;
+}
+
+// Split string by delimiter
+fn split(str: String, delimiter: String) -> [String] {
+    // TODO: implement actual splitting
+    return [];
+}
+
+// Join array of strings with delimiter
+fn join(strings: [String], delimiter: String) -> String {
+    // TODO: implement actual joining
+    return "";
+}
+
+// Numeric utilities
+
+// Get absolute value
+fn abs(n: Int) -> Int {
+    if (n < 0) {
+        return -n;
+    } else {
+        return n;
+    }
+}
+
+// Get minimum of two integers
+fn min(a: Int, b: Int) -> Int {
+    if (a < b) {
+        return a;
+    } else {
+        return b;
+    }
+}
+
+// Get maximum of two integers
+fn max(a: Int, b: Int) -> Int {
+    if (a > b) {
+        return a;
+    } else {
+        return b;
+    }
+}
+
+// Clamp value between min and max
+fn clamp(value: Int, min_val: Int, max_val: Int) -> Int {
+    if (value < min_val) {
+        return min_val;
+    } else if (value > max_val) {
+        return max_val;
+    } else {
+        return value;
+    }
+}
+
+// Check if number is even
+fn is_even(n: Int) -> Bool {
+    return n % 2 == 0;
+}
+
+// Check if number is odd
+fn is_odd(n: Int) -> Bool {
+    return n % 2 != 0;
+}
+
+// Array utilities
+
+// Get array length
+fn array_length(arr: [Int]) -> Int {
+    // TODO: implement actual length calculation
+    return 0;
+}
+
+// Check if array contains element
+fn array_contains(arr: [Int], element: Int) -> Bool {
+    for (item in arr) {
+        if (item == element) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Find index of element in array
+fn array_index_of(arr: [Int], element: Int) -> Int {
+    let mut index = 0;
+    for (item in arr) {
+        if (item == element) {
+            return index;
+        }
+        index += 1;
+    }
+    return -1;
+}
+
+// Reverse an array
+fn array_reverse(arr: [Int]) -> [Int] {
+    // TODO: implement actual reversal
+    return arr;
+}
+
+// Sort an array (ascending)
+fn array_sort(arr: [Int]) -> [Int] {
+    // TODO: implement actual sorting
+    return arr;
+}
+
+// Remove duplicates from array
+fn array_unique(arr: [Int]) -> [Int] {
+    // TODO: implement actual deduplication
+    return arr;
+}
+
+// Boolean utilities
+
+// Logical AND of multiple values
+fn all(values: [Bool]) -> Bool {
+    for (value in values) {
+        if (!value) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// Logical OR of multiple values
+fn any(values: [Bool]) -> Bool {
+    for (value in values) {
+        if (value) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Negate a boolean value
+fn negate(value: Bool) -> Bool {
+    return !value;
+}
+
+// XOR two boolean values
+fn xor(a: Bool, b: Bool) -> Bool {
+    return (a && !b) || (!a && b);
+}

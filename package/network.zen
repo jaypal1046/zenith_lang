@@ -1,0 +1,479 @@
+// Zenith Network Module
+// Network utilities and HTTP helpers
+
+module package.network;
+
+// Constants
+const DEFAULT_TIMEOUT: int = 30000;
+const DEFAULT_PORT_HTTP: int = 80;
+const DEFAULT_PORT_HTTPS: int = 443;
+
+// HTTP Methods
+const METHOD_GET: string = "GET";
+const METHOD_POST: string = "POST";
+const METHOD_PUT: string = "PUT";
+const METHOD_DELETE: string = "DELETE";
+const METHOD_PATCH: string = "PATCH";
+const METHOD_HEAD: string = "HEAD";
+const METHOD_OPTIONS: string = "OPTIONS";
+
+// Common Headers
+const HEADER_CONTENT_TYPE: string = "Content-Type";
+const HEADER_ACCEPT: string = "Accept";
+const HEADER_AUTHORIZATION: string = "Authorization";
+const HEADER_USER_AGENT: string = "User-Agent";
+const HEADER_COOKIE: string = "Cookie";
+const HEADER_SET_COOKIE: string = "Set-Cookie";
+const HEADER_CACHE_CONTROL: string = "Cache-Control";
+const HEADER_HOST: string = "Host";
+
+// Content Types
+const CONTENT_TYPE_JSON: string = "application/json";
+const CONTENT_TYPE_XML: string = "application/xml";
+const CONTENT_TYPE_HTML: string = "text/html";
+const CONTENT_TYPE_TEXT: string = "text/plain";
+const CONTENT_TYPE_FORM: string = "application/x-www-form-urlencoded";
+const CONTENT_TYPE_MULTIPART: string = "multipart/form-data";
+
+// Status Codes
+const STATUS_OK: int = 200;
+const STATUS_CREATED: int = 201;
+const STATUS_NO_CONTENT: int = 204;
+const STATUS_MOVED_PERMANENTLY: int = 301;
+const STATUS_FOUND: int = 302;
+const STATUS_NOT_MODIFIED: int = 304;
+const STATUS_BAD_REQUEST: int = 400;
+const STATUS_UNAUTHORIZED: int = 401;
+const STATUS_FORBIDDEN: int = 403;
+const STATUS_NOT_FOUND: int = 404;
+const STATUS_METHOD_NOT_ALLOWED: int = 405;
+const STATUS_CONFLICT: int = 409;
+const STATUS_INTERNAL_SERVER_ERROR: int = 500;
+const STATUS_BAD_GATEWAY: int = 502;
+const STATUS_SERVICE_UNAVAILABLE: int = 503;
+
+// Request Structure
+pub struct Request {
+    pub method: string,
+    pub url: string,
+    pub headers: map<string, string>,
+    pub body: string,
+    pub timeout: int
+}
+
+// Response Structure
+pub struct Response {
+    pub status_code: int,
+    pub status_text: string,
+    pub headers: map<string, string>,
+    pub body: string,
+    pub elapsed_ms: int
+}
+
+// URL Utilities
+
+/// Parse URL into components
+pub fn parse_url(url: string) -> map<string, string> {
+    var result: map<string, string> = map::new();
+    
+    var protocol: string = "";
+    var host: string = "";
+    var port: string = "";
+    var path: string = "/";
+    var query: string = "";
+    var fragment: string = "";
+    
+    var temp: string = url;
+    
+    // Extract protocol
+    if string::contains(temp, "://") {
+        var parts: [string] = string::split_n(temp, "://", 2);
+        protocol = parts[0];
+        temp = parts[1];
+    }
+    
+    // Extract fragment
+    if string::contains(temp, "#") {
+        var parts: [string] = string::split_n(temp, "#", 2);
+        temp = parts[0];
+        fragment = parts[1];
+    }
+    
+    // Extract query
+    if string::contains(temp, "?") {
+        var parts: [string] = string::split_n(temp, "?", 2);
+        temp = parts[0];
+        query = parts[1];
+    }
+    
+    // Extract host and port
+    if string::contains(temp, "/") {
+        var parts: [string] = string::split_n(temp, "/", 2);
+        host = parts[0];
+        path = "/" + parts[1];
+    } else {
+        host = temp;
+    }
+    
+    // Extract port from host
+    if string::contains(host, ":") {
+        var parts: [string] = string::split_n(host, ":", 2);
+        host = parts[0];
+        port = parts[1];
+    }
+    
+    map::set(result, "protocol", protocol);
+    map::set(result, "host", host);
+    map::set(result, "port", port);
+    map::set(result, "path", path);
+    map::set(result, "query", query);
+    map::set(result, "fragment", fragment);
+    
+    return result;
+}
+
+/// Build URL from components
+pub fn build_url(protocol: string, host: string, port: int, path: string, query: string) -> string {
+    var url: string = protocol + "://" + host;
+    
+    if port > 0 && ((protocol == "http" && port != 80) || (protocol == "https" && port != 443)) {
+        url = url + ":" + string::from_int(port);
+    }
+    
+    url = url + path;
+    
+    if query.length() > 0 {
+        url = url + "?" + query;
+    }
+    
+    return url;
+}
+
+/// Parse query string to map
+pub fn parse_query_string(query: string) -> map<string, string> {
+    var result: map<string, string> = map::new();
+    
+    if query.length() == 0 {
+        return result;
+    }
+    
+    var pairs: [string] = string::split(query, "&");
+    for pair in pairs {
+        if string::contains(pair, "=") {
+            var parts: [string] = string::split_n(pair, "=", 2);
+            var key: string = crypto::url_decode(parts[0]);
+            var value: string = crypto::url_decode(parts[1]);
+            map::set(result, key, value);
+        }
+    }
+    
+    return result;
+}
+
+/// Build query string from map
+pub fn build_query_string(params: map<string, string>) -> string {
+    var query: string = "";
+    var keys: [string] = map::keys(params);
+    
+    for i in 0..keys.length() {
+        var key: string = keys[i];
+        var value: string = map::get(params, key);
+        
+        if i > 0 {
+            query = query + "&";
+        }
+        
+        query = query + crypto::url_encode(key) + "=" + crypto::url_encode(value);
+    }
+    
+    return query;
+}
+
+/// Add query parameters to URL
+pub fn add_query_params(url: string, params: map<string, string>) -> string {
+    var query_string: string = build_query_string(params);
+    
+    if query_string.length() == 0 {
+        return url;
+    }
+    
+    if string::contains(url, "?") {
+        return url + "&" + query_string;
+    } else {
+        return url + "?" + query_string;
+    }
+}
+
+// HTTP Helpers
+
+/// Create GET request
+pub fn create_get_request(url: string) -> Request {
+    return Request {
+        method: METHOD_GET,
+        url: url,
+        headers: map::new(),
+        body: "",
+        timeout: DEFAULT_TIMEOUT
+    };
+}
+
+/// Create POST request
+pub fn create_post_request(url: string, body: string) -> Request {
+    var req: Request = Request {
+        method: METHOD_POST,
+        url: url,
+        headers: map::new(),
+        body: body,
+        timeout: DEFAULT_TIMEOUT
+    };
+    map::set(req.headers, HEADER_CONTENT_TYPE, CONTENT_TYPE_JSON);
+    return req;
+}
+
+/// Set header on request
+pub fn set_header(req: Request, name: string, value: string) -> Request {
+    map::set(req.headers, name, value);
+    return req;
+}
+
+/// Set authorization header
+pub fn set_auth_header(req: Request, token: string) -> Request {
+    return set_header(req, HEADER_AUTHORIZATION, "Bearer " + token);
+}
+
+/// Set basic auth header
+pub fn set_basic_auth(req: Request, username: string, password: string) -> Request {
+    var credentials: string = username + ":" + password;
+    var encoded: string = crypto::base64_encode(credentials);
+    return set_header(req, HEADER_AUTHORIZATION, "Basic " + encoded);
+}
+
+/// Set JSON content type
+pub fn set_json_content_type(req: Request) -> Request {
+    return set_header(req, HEADER_CONTENT_TYPE, CONTENT_TYPE_JSON);
+}
+
+/// Set form content type
+pub fn set_form_content_type(req: Request) -> Request {
+    return set_header(req, HEADER_CONTENT_TYPE, CONTENT_TYPE_FORM);
+}
+
+// Response Helpers
+
+/// Get response header
+pub fn get_response_header(resp: Response, name: string) -> string {
+    return map::get(resp.headers, name);
+}
+
+/// Check if response is successful
+pub fn is_success(resp: Response) -> bool {
+    return resp.status_code >= 200 && resp.status_code < 300;
+}
+
+/// Check if response is redirect
+pub fn is_redirect(resp: Response) -> bool {
+    return resp.status_code >= 300 && resp.status_code < 400;
+}
+
+/// Check if response is client error
+pub fn is_client_error(resp: Response) -> bool {
+    return resp.status_code >= 400 && resp.status_code < 500;
+}
+
+/// Check if response is server error
+pub fn is_server_error(resp: Response) -> bool {
+    return resp.status_code >= 500 && resp.status_code < 600;
+}
+
+/// Get status text
+pub fn get_status_text(status_code: int) -> string {
+    switch status_code {
+        case 200: return "OK";
+        case 201: return "Created";
+        case 204: return "No Content";
+        case 301: return "Moved Permanently";
+        case 302: return "Found";
+        case 304: return "Not Modified";
+        case 400: return "Bad Request";
+        case 401: return "Unauthorized";
+        case 403: return "Forbidden";
+        case 404: return "Not Found";
+        case 405: return "Method Not Allowed";
+        case 409: return "Conflict";
+        case 500: return "Internal Server Error";
+        case 502: return "Bad Gateway";
+        case 503: return "Service Unavailable";
+        default: return "Unknown";
+    }
+}
+
+// IP Utilities
+
+/// Check if IP is private
+pub fn is_private_ip(ip: string) -> bool {
+    if !validation::is_ipv4(ip) {
+        return false;
+    }
+    
+    var parts: [string] = string::split(ip, ".");
+    if parts.length() != 4 {
+        return false;
+    }
+    
+    var octet1: int = string::to_int(parts[0]);
+    var octet2: int = string::to_int(parts[1]);
+    
+    // 10.0.0.0/8
+    if octet1 == 10 {
+        return true;
+    }
+    
+    // 172.16.0.0/12
+    if octet1 == 172 && octet2 >= 16 && octet2 <= 31 {
+        return true;
+    }
+    
+    // 192.168.0.0/16
+    if octet1 == 192 && octet2 == 168 {
+        return true;
+    }
+    
+    // 127.0.0.0/8 (localhost)
+    if octet1 == 127 {
+        return true;
+    }
+    
+    return false;
+}
+
+/// Check if IP is localhost
+pub fn is_localhost(ip: string) -> bool {
+    return ip == "127.0.0.1" || ip == "localhost" || ip == "::1";
+}
+
+/// Convert IP to integer
+pub fn ip_to_int(ip: string) -> int {
+    var parts: [string] = string::split(ip, ".");
+    if parts.length() != 4 {
+        return 0;
+    }
+    
+    var result: int = 0;
+    for i in 0..4 {
+        result = (result << 8) + string::to_int(parts[i]);
+    }
+    
+    return result;
+}
+
+/// Convert integer to IP
+pub fn int_to_ip(value: int) -> string {
+    var o1: int = (value >> 24) & 0xFF;
+    var o2: int = (value >> 16) & 0xFF;
+    var o3: int = (value >> 8) & 0xFF;
+    var o4: int = value & 0xFF;
+    
+    return string::from_int(o1) + "." + 
+           string::from_int(o2) + "." + 
+           string::from_int(o3) + "." + 
+           string::from_int(o4);
+}
+
+// Socket Helpers
+
+/// Format socket address
+pub fn format_socket_address(host: string, port: int) -> string {
+    return host + ":" + string::from_int(port);
+}
+
+/// Parse socket address
+pub fn parse_socket_address(address: string) -> map<string, any> {
+    var result: map<string, any> = map::new();
+    
+    if string::contains(address, ":") {
+        var parts: [string] = string::split_n(address, ":", 2);
+        map::set(result, "host", parts[0]);
+        map::set(result, "port", string::to_int(parts[1]));
+    } else {
+        map::set(result, "host", address);
+        map::set(result, "port", 0);
+    }
+    
+    return result;
+}
+
+// DNS Helpers (mock implementations)
+
+/// Resolve hostname to IP (mock)
+pub fn resolve_hostname(hostname: string) -> string {
+    if hostname == "localhost" {
+        return "127.0.0.1";
+    }
+    // In real implementation, this would do DNS lookup
+    return "0.0.0.0";
+}
+
+/// Reverse DNS lookup (mock)
+pub fn reverse_lookup(ip: string) -> string {
+    if ip == "127.0.0.1" {
+        return "localhost";
+    }
+    // In real implementation, this would do reverse DNS lookup
+    return "";
+}
+
+// WebSocket Helpers
+
+/// Check if URL is WebSocket URL
+pub fn is_websocket_url(url: string) -> bool {
+    return string::starts_with(url, "ws://") || string::starts_with(url, "wss://");
+}
+
+/// Convert HTTP URL to WebSocket URL
+pub fn http_to_websocket_url(http_url: string) -> string {
+    if string::starts_with(http_url, "http://") {
+        return "ws://" + string::substring(http_url, 7);
+    } else if string::starts_with(http_url, "https://") {
+        return "wss://" + string::substring(http_url, 8);
+    }
+    return http_url;
+}
+
+// Cookie Helpers
+
+/// Parse cookie string
+pub fn parse_cookie(cookie_str: string) -> map<string, string> {
+    var result: map<string, string> = map::new();
+    
+    var pairs: [string] = string::split(cookie_str, ";");
+    for pair in pairs {
+        var trimmed: string = validation::trim(pair);
+        if string::contains(trimmed, "=") {
+            var parts: [string] = string::split_n(trimmed, "=", 2);
+            var key: string = validation::trim(parts[0]);
+            var value: string = validation::trim(parts[1]);
+            map::set(result, key, value);
+        }
+    }
+    
+    return result;
+}
+
+/// Build cookie string
+pub fn build_cookie(cookies: map<string, string>) -> string {
+    var result: string = "";
+    var keys: [string] = map::keys(cookies);
+    
+    for i in 0..keys.length() {
+        var key: string = keys[i];
+        var value: string = map::get(cookies, key);
+        
+        if i > 0 {
+            result = result + "; ";
+        }
+        
+        result = result + key + "=" + value;
+    }
+    
+    return result;
+}

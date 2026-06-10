@@ -1,0 +1,265 @@
+// Zenith Crypto Module
+// Cryptographic functions and utilities
+
+module package.crypto;
+
+// Constants
+const BASE64_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+const HEX_CHARS = "0123456789abcdef";
+
+// Hash Functions
+
+/// Simple hash function (DJB2 algorithm)
+pub fn hash(data: string) -> int {
+    var hash_value: int = 5381;
+    for i in 0..data.length() {
+        hash_value = ((hash_value << 5) + hash_value) + data.char_at(i);
+    }
+    return hash_value;
+}
+
+/// MD5-like hash (simplified implementation)
+pub fn md5(data: string) -> string {
+    var h: int = hash(data);
+    var result: string = "";
+    for i in 0..8 {
+        var nibble: int = (h >> (i * 4)) & 0xF;
+        result = result + HEX_CHARS.char_at(nibble);
+    }
+    return result;
+}
+
+/// SHA1-like hash (simplified implementation)
+pub fn sha1(data: string) -> string {
+    var h1: int = hash(data);
+    var h2: int = hash(data + "salt1");
+    var h3: int = hash(data + "salt2");
+    var result: string = "";
+    
+    var hashes: [int] = [h1, h2, h3];
+    for h in hashes {
+        for i in 0..8 {
+            var nibble: int = (h >> (i * 4)) & 0xF;
+            result = result + HEX_CHARS.char_at(nibble);
+        }
+    }
+    return result;
+}
+
+// Encoding/Decoding
+
+/// Base64 encode
+pub fn base64_encode(data: string) -> string {
+    var result: string = "";
+    var bytes: [int] = [];
+    
+    // Convert string to byte array
+    for i in 0..data.length() {
+        bytes.push(data.char_at(i));
+    }
+    
+    var i: int = 0;
+    while i < bytes.length() {
+        var b1: int = bytes[i];
+        var b2: int = (i + 1 < bytes.length()) ? bytes[i + 1] : 0;
+        var b3: int = (i + 2 < bytes.length()) ? bytes[i + 2] : 0;
+        
+        var n1: int = b1 >> 2;
+        var n2: int = ((b1 & 0x3) << 4) | (b2 >> 4);
+        var n3: int = ((b2 & 0xF) << 2) | (b3 >> 6);
+        var n4: int = b3 & 0x3F;
+        
+        result = result + BASE64_CHARS.char_at(n1);
+        result = result + BASE64_CHARS.char_at(n2);
+        result = result + ((i + 1 < bytes.length()) ? BASE64_CHARS.char_at(n3) : "=");
+        result = result + ((i + 2 < bytes.length()) ? BASE64_CHARS.char_at(n4) : "=");
+        
+        i = i + 3;
+    }
+    
+    return result;
+}
+
+/// Base64 decode
+pub fn base64_decode(data: string) -> string {
+    var result: string = "";
+    var values: [int] = [];
+    
+    // Convert base64 chars to values
+    for i in 0..data.length() {
+        var c: string = data.char_at(i);
+        if c == "=" {
+            break;
+        }
+        var idx: int = BASE64_CHARS.index_of(c);
+        if idx >= 0 {
+            values.push(idx);
+        }
+    }
+    
+    var i: int = 0;
+    while i < values.length() {
+        var n1: int = values[i];
+        var n2: int = (i + 1 < values.length()) ? values[i + 1] : 0;
+        var n3: int = (i + 2 < values.length()) ? values[i + 2] : 0;
+        var n4: int = (i + 3 < values.length()) ? values[i + 3] : 0;
+        
+        var b1: int = (n1 << 2) | (n2 >> 4);
+        var b2: int = ((n2 & 0xF) << 4) | (n3 >> 2);
+        var b3: int = ((n3 & 0x3) << 6) | n4;
+        
+        result = result + string::from_char(b1);
+        if i + 2 < values.length() {
+            result = result + string::from_char(b2);
+        }
+        if i + 3 < values.length() {
+            result = result + string::from_char(b3);
+        }
+        
+        i = i + 4;
+    }
+    
+    return result;
+}
+
+/// Hex encode
+pub fn hex_encode(data: string) -> string {
+    var result: string = "";
+    for i in 0..data.length() {
+        var c: int = data.char_at(i);
+        var h1: int = (c >> 4) & 0xF;
+        var h2: int = c & 0xF;
+        result = result + HEX_CHARS.char_at(h1) + HEX_CHARS.char_at(h2);
+    }
+    return result;
+}
+
+/// Hex decode
+pub fn hex_decode(data: string) -> string {
+    var result: string = "";
+    var i: int = 0;
+    while i < data.length() {
+        var h1: int = HEX_CHARS.index_of(data.char_at(i));
+        var h2: int = HEX_CHARS.index_of(data.char_at(i + 1));
+        if h1 >= 0 && h2 >= 0 {
+            var c: int = (h1 << 4) | h2;
+            result = result + string::from_char(c);
+        }
+        i = i + 2;
+    }
+    return result;
+}
+
+// XOR Cipher
+
+/// XOR encrypt/decrypt
+pub fn xor_cipher(data: string, key: string) -> string {
+    var result: string = "";
+    for i in 0..data.length() {
+        var c: int = data.char_at(i);
+        var k: int = key.char_at(i % key.length());
+        result = result + string::from_char(c ^ k);
+    }
+    return result;
+}
+
+// Random Generation
+
+/// Generate random string
+pub fn random_string(length: int, charset: string) -> string {
+    var result: string = "";
+    for i in 0..length {
+        var idx: int = math::random_int(0, charset.length() - 1);
+        result = result + charset.char_at(idx);
+    }
+    return result;
+}
+
+/// Generate UUID-like string
+pub fn uuid() -> string {
+    var hex: string = "0123456789abcdef";
+    var result: string = "";
+    
+    for i in 0..36 {
+        if i == 8 || i == 13 || i == 18 || i == 23 {
+            result = result + "-";
+        } else if i == 14 {
+            result = result + "4";
+        } else if i == 19 {
+            var r: int = math::random_int(8, 11);
+            result = result + hex.char_at(r);
+        } else {
+            var r: int = math::random_int(0, 15);
+            result = result + hex.char_at(r);
+        }
+    }
+    
+    return result;
+}
+
+// Utility Functions
+
+/// Check if string is valid base64
+pub fn is_base64(data: string) -> bool {
+    if data.length() % 4 != 0 {
+        return false;
+    }
+    for i in 0..data.length() {
+        var c: string = data.char_at(i);
+        if BASE64_CHARS.index_of(c) < 0 && c != "=" {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// Check if string is valid hex
+pub fn is_hex(data: string) -> bool {
+    for i in 0..data.length() {
+        var c: string = data.char_at(i);
+        if HEX_CHARS.index_of(c) < 0 {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// URL encode
+pub fn url_encode(data: string) -> string {
+    var result: string = "";
+    for i in 0..data.length() {
+        var c: string = data.char_at(i);
+        if (c >= "a" && c <= "z") || (c >= "A" && c <= "Z") || 
+           (c >= "0" && c <= "9") || c == "-" || c == "_" || c == "." || c == "~" {
+            result = result + c;
+        } else {
+            result = result + "%";
+            var code: int = data.char_at(i);
+            var h1: int = (code >> 4) & 0xF;
+            var h2: int = code & 0xF;
+            result = result + HEX_CHARS.char_at(h1).to_upper() + HEX_CHARS.char_at(h2).to_upper();
+        }
+    }
+    return result;
+}
+
+/// URL decode
+pub fn url_decode(data: string) -> string {
+    var result: string = "";
+    var i: int = 0;
+    while i < data.length() {
+        if data.char_at(i) == "%" && i + 2 < data.length() {
+            var h1: int = HEX_CHARS.index_of(data.char_at(i + 1).to_lower());
+            var h2: int = HEX_CHARS.index_of(data.char_at(i + 2).to_lower());
+            if h1 >= 0 && h2 >= 0 {
+                var c: int = (h1 << 4) | h2;
+                result = result + string::from_char(c);
+                i = i + 3;
+                continue;
+            }
+        }
+        result = result + data.char_at(i);
+        i = i + 1;
+    }
+    return result;
+}

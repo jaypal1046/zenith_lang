@@ -1,0 +1,390 @@
+// Zenith DateTime Module
+// Date and time handling utilities
+
+module package.datetime;
+
+// Constants
+const SECONDS_PER_MINUTE: int = 60;
+const SECONDS_PER_HOUR: int = 3600;
+const SECONDS_PER_DAY: int = 86400;
+const DAYS_PER_WEEK: int = 7;
+const MONTHS_PER_YEAR: int = 12;
+
+const MONTH_NAMES: [string] = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"
+];
+
+const MONTH_NAMES_SHORT: [string] = [
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+];
+
+const DAY_NAMES: [string] = [
+    "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"
+];
+
+const DAY_NAMES_SHORT: [string] = [
+    "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"
+];
+
+// Time Structure
+pub struct Time {
+    pub hour: int,
+    pub minute: int,
+    pub second: int,
+    pub millisecond: int
+}
+
+// Date Structure
+pub struct Date {
+    pub year: int,
+    pub month: int,
+    pub day: int
+}
+
+// DateTime Structure
+pub struct DateTime {
+    pub year: int,
+    pub month: int,
+    pub day: int,
+    pub hour: int,
+    pub minute: int,
+    pub second: int,
+    pub millisecond: int
+}
+
+// Current Time Functions
+
+/// Get current timestamp (mock implementation)
+pub fn now() -> int {
+    // In real implementation, this would return system timestamp
+    return 1700000000000;
+}
+
+/// Get current date
+pub fn today() -> Date {
+    var timestamp: int = now();
+    return from_timestamp(timestamp);
+}
+
+/// Get current time
+pub fn current_time() -> Time {
+    var timestamp: int = now();
+    var ms: int = timestamp % 1000;
+    var seconds: int = (timestamp / 1000) % SECONDS_PER_DAY;
+    
+    return Time {
+        hour: (seconds / SECONDS_PER_HOUR) % 24,
+        minute: (seconds % SECONDS_PER_HOUR) / SECONDS_PER_MINUTE,
+        second: seconds % SECONDS_PER_MINUTE,
+        millisecond: ms
+    };
+}
+
+/// Get current datetime
+pub fn current_datetime() -> DateTime {
+    var date: Date = today();
+    var time: Time = current_time();
+    
+    return DateTime {
+        year: date.year,
+        month: date.month,
+        day: date.day,
+        hour: time.hour,
+        minute: time.minute,
+        second: time.second,
+        millisecond: time.millisecond
+    };
+}
+
+// Timestamp Conversion
+
+/// Convert timestamp to Date
+pub fn from_timestamp(timestamp: int) -> Date {
+    var seconds: int = timestamp / 1000;
+    var days: int = seconds / SECONDS_PER_DAY;
+    
+    // Calculate year (starting from 1970)
+    var year: int = 1970;
+    while days >= days_in_year(year) {
+        days = days - days_in_year(year);
+        year = year + 1;
+    }
+    
+    // Calculate month
+    var month: int = 1;
+    while days >= days_in_month(year, month) {
+        days = days - days_in_month(year, month);
+        month = month + 1;
+    }
+    
+    // Calculate day
+    var day: int = days + 1;
+    
+    return Date { year: year, month: month, day: day };
+}
+
+/// Convert Date to timestamp
+pub fn to_timestamp(date: Date) -> int {
+    var days: int = 0;
+    
+    // Add days for years
+    for y in 1970..date.year {
+        days = days + days_in_year(y);
+    }
+    
+    // Add days for months
+    for m in 1..date.month {
+        days = days + days_in_month(date.year, m);
+    }
+    
+    // Add days
+    days = days + date.day - 1;
+    
+    return days * SECONDS_PER_DAY * 1000;
+}
+
+// Date Utilities
+
+/// Check if year is leap year
+pub fn is_leap_year(year: int) -> bool {
+    return (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0);
+}
+
+/// Get days in year
+pub fn days_in_year(year: int) -> int {
+    return is_leap_year(year) ? 366 : 365;
+}
+
+/// Get days in month
+pub fn days_in_month(year: int, month: int) -> int {
+    if month == 2 {
+        return is_leap_year(year) ? 29 : 28;
+    } else if month == 4 || month == 6 || month == 9 || month == 11 {
+        return 30;
+    } else {
+        return 31;
+    }
+}
+
+/// Get day of week (0 = Sunday, 6 = Saturday)
+pub fn day_of_week(date: Date) -> int {
+    var t: [int] = [0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4];
+    var y: int = date.year;
+    var m: int = date.month;
+    
+    if m < 3 {
+        y = y - 1;
+    }
+    
+    return (y + y / 4 - y / 100 + y / 400 + t[m - 1] + date.day) % 7;
+}
+
+/// Get day name
+pub fn get_day_name(day_index: int, short: bool = false) -> string {
+    if short {
+        return DAY_NAMES_SHORT[day_index % 7];
+    }
+    return DAY_NAMES[day_index % 7];
+}
+
+/// Get month name
+pub fn get_month_name(month_index: int, short: bool = false) -> string {
+    if short {
+        return MONTH_NAMES_SHORT[(month_index - 1) % 12];
+    }
+    return MONTH_NAMES[(month_index - 1) % 12];
+}
+
+// Date Arithmetic
+
+/// Add days to date
+pub fn add_days(date: Date, days: int) -> Date {
+    var new_date: Date = Date { year: date.year, month: date.month, day: date.day + days };
+    
+    while new_date.day > days_in_month(new_date.year, new_date.month) {
+        new_date.day = new_date.day - days_in_month(new_date.year, new_date.month);
+        new_date.month = new_date.month + 1;
+        
+        if new_date.month > 12 {
+            new_date.month = 1;
+            new_date.year = new_date.year + 1;
+        }
+    }
+    
+    while new_date.day < 1 {
+        new_date.month = new_date.month - 1;
+        if new_date.month < 1 {
+            new_date.month = 12;
+            new_date.year = new_date.year - 1;
+        }
+        new_date.day = new_date.day + days_in_month(new_date.year, new_date.month);
+    }
+    
+    return new_date;
+}
+
+/// Add months to date
+pub fn add_months(date: Date, months: int) -> Date {
+    var new_month: int = date.month + months;
+    var new_year: int = date.year;
+    
+    while new_month > 12 {
+        new_month = new_month - 12;
+        new_year = new_year + 1;
+    }
+    
+    while new_month < 1 {
+        new_month = new_month + 12;
+        new_year = new_year - 1;
+    }
+    
+    var max_day: int = days_in_month(new_year, new_month);
+    var new_day: int = date.day;
+    if new_day > max_day {
+        new_day = max_day;
+    }
+    
+    return Date { year: new_year, month: new_month, day: new_day };
+}
+
+/// Add years to date
+pub fn add_years(date: Date, years: int) -> Date {
+    var new_year: int = date.year + years;
+    var max_day: int = days_in_month(new_year, date.month);
+    var new_day: int = date.day;
+    if new_day > max_day {
+        new_day = max_day;
+    }
+    return Date { year: new_year, month: date.month, day: new_day };
+}
+
+/// Difference in days between two dates
+pub fn diff_days(date1: Date, date2: Date) -> int {
+    var ts1: int = to_timestamp(date1);
+    var ts2: int = to_timestamp(date2);
+    return (ts2 - ts1) / (SECONDS_PER_DAY * 1000);
+}
+
+// Formatting
+
+/// Format date to string
+pub fn format_date(date: Date, format_str: string = "YYYY-MM-DD") -> string {
+    var result: string = format_str;
+    
+    // Year
+    result = string::replace_all(result, "YYYY", string::from_int(date.year));
+    result = string::replace_all(result, "YY", string::from_int(date.year % 100));
+    
+    // Month
+    var month_str: string = string::from_int(date.month);
+    if date.month < 10 {
+        month_str = "0" + month_str;
+    }
+    result = string::replace_all(result, "MM", month_str);
+    result = string::replace_all(result, "M", string::from_int(date.month));
+    
+    // Day
+    var day_str: string = string::from_int(date.day);
+    if date.day < 10 {
+        day_str = "0" + day_str;
+    }
+    result = string::replace_all(result, "DD", day_str);
+    result = string::replace_all(result, "D", string::from_int(date.day));
+    
+    return result;
+}
+
+/// Format time to string
+pub fn format_time(time: Time, format_str: string = "HH:mm:ss") -> string {
+    var result: string = format_str;
+    
+    // Hour
+    var hour_str: string = string::from_int(time.hour);
+    if time.hour < 10 {
+        hour_str = "0" + hour_str;
+    }
+    result = string::replace_all(result, "HH", hour_str);
+    result = string::replace_all(result, "H", string::from_int(time.hour));
+    
+    // Minute
+    var min_str: string = string::from_int(time.minute);
+    if time.minute < 10 {
+        min_str = "0" + min_str;
+    }
+    result = string::replace_all(result, "mm", min_str);
+    result = string::replace_all(result, "m", string::from_int(time.minute));
+    
+    // Second
+    var sec_str: string = string::from_int(time.second);
+    if time.second < 10 {
+        sec_str = "0" + sec_str;
+    }
+    result = string::replace_all(result, "ss", sec_str);
+    result = string::replace_all(result, "s", string::from_int(time.second));
+    
+    // Millisecond
+    var ms_str: string = string::from_int(time.millisecond);
+    while ms_str.length() < 3 {
+        ms_str = "0" + ms_str;
+    }
+    result = string::replace_all(result, "SSS", ms_str);
+    
+    return result;
+}
+
+/// Format datetime to string
+pub fn format_datetime(dt: DateTime, format_str: string = "YYYY-MM-DD HH:mm:ss") -> string {
+    var date_part: string = format_date(
+        Date { year: dt.year, month: dt.month, day: dt.day },
+        "YYYY-MM-DD"
+    );
+    var time_part: string = format_time(
+        Time { hour: dt.hour, minute: dt.minute, second: dt.second, millisecond: dt.millisecond },
+        "HH:mm:ss"
+    );
+    return string::replace_all(format_str, "YYYY-MM-DD", date_part);
+}
+
+/// Parse date from string
+pub fn parse_date(date_str: string, format_str: string = "YYYY-MM-DD") -> Date {
+    // Simple parser for YYYY-MM-DD format
+    var parts: [string] = string::split(date_str, "-");
+    if parts.length() >= 3 {
+        return Date {
+            year: string::to_int(parts[0]),
+            month: string::to_int(parts[1]),
+            day: string::to_int(parts[2])
+        };
+    }
+    return Date { year: 1970, month: 1, day: 1 };
+}
+
+// Comparison
+
+/// Compare two dates
+pub fn compare_dates(date1: Date, date2: Date) -> int {
+    if date1.year != date2.year {
+        return date1.year - date2.year;
+    }
+    if date1.month != date2.month {
+        return date1.month - date2.month;
+    }
+    return date1.day - date2.day;
+}
+
+/// Check if date1 is before date2
+pub fn is_before(date1: Date, date2: Date) -> bool {
+    return compare_dates(date1, date2) < 0;
+}
+
+/// Check if date1 is after date2
+pub fn is_after(date1: Date, date2: Date) -> bool {
+    return compare_dates(date1, date2) > 0;
+}
+
+/// Check if dates are equal
+pub fn is_equal(date1: Date, date2: Date) -> bool {
+    return compare_dates(date1, date2) == 0;
+}

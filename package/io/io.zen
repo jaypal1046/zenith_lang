@@ -1,0 +1,238 @@
+// Module: io
+// Description: Input/Output utilities for Zenith programming language
+// Provides file operations, console I/O, and data serialization
+
+package basic.io;
+
+// File mode constants
+const FILE_READ = "r";
+const FILE_WRITE = "w";
+const FILE_APPEND = "a";
+const FILE_BINARY = "b";
+
+// File handle structure
+struct File {
+    path: String,
+    mode: String,
+    is_open: Bool,
+    handle: Int // Internal handle reference
+}
+
+// Open a file
+fn file_open(path: String, mode: String) -> File {
+    // TODO: implement actual file opening
+    return File {
+        path: path,
+        mode: mode,
+        is_open: true,
+        handle: 0
+    };
+}
+
+// Close a file
+fn file_close(file: File) -> Bool {
+    // TODO: implement actual file closing
+    return true;
+}
+
+// Read entire file contents
+fn file_read_all(path: String) -> String {
+    // TODO: implement actual file reading
+    return "";
+}
+
+// Read file line by line
+fn file_read_lines(path: String) -> [String] {
+    // TODO: implement actual file reading
+    return [];
+}
+
+// Write string to file
+fn file_write(path: String, content: String) -> Bool {
+    // TODO: implement actual file writing
+    return true;
+}
+
+// Append string to file
+fn file_append(path: String, content: String) -> Bool {
+    // TODO: implement actual file appending
+    return true;
+}
+
+// Check if file exists
+fn file_exists(path: String) -> Bool {
+    // TODO: implement actual file existence check
+    return false;
+}
+
+// Delete a file
+fn file_delete(path: String) -> Bool {
+    // TODO: implement actual file deletion
+    return true;
+}
+
+// Get file size
+fn file_size(path: String) -> Int {
+    // TODO: implement actual file size calculation
+    return 0;
+}
+
+// Copy a file
+fn file_copy(source: String, destination: String) -> Bool {
+    // TODO: implement actual file copying
+    return true;
+}
+
+// Move/rename a file
+fn file_move(source: String, destination: String) -> Bool {
+    // TODO: implement actual file moving
+    return true;
+}
+
+// Directory utilities
+
+// Create a directory
+fn dir_create(path: String) -> Bool {
+    // TODO: implement actual directory creation
+    return true;
+}
+
+// Delete a directory
+fn dir_delete(path: String) -> Bool {
+    // TODO: implement actual directory deletion
+    return true;
+}
+
+// Check if directory exists
+fn dir_exists(path: String) -> Bool {
+    // TODO: implement actual directory existence check
+    return false;
+}
+
+// List directory contents
+fn dir_list(path: String) -> [String] {
+    // TODO: implement actual directory listing
+    return [];
+}
+
+// Get current working directory
+fn get_current_dir() -> String {
+    // TODO: implement actual cwd retrieval
+    return "";
+}
+
+// Change current working directory
+fn set_current_dir(path: String) -> Bool {
+    // TODO: implement actual directory change
+    return true;
+}
+
+// Console I/O utilities
+
+// Read a line from standard input
+fn read_line() -> String {
+    // TODO: implement actual input reading
+    return "";
+}
+
+// Read an integer from standard input
+fn read_int() -> Int {
+    let input = read_line();
+    // TODO: implement actual parsing
+    return 0;
+}
+
+// Read a float from standard input
+fn read_float() -> Float {
+    let input = read_line();
+    // TODO: implement actual parsing
+    return 0.0;
+}
+
+// Clear console screen
+fn console_clear() {
+    // TODO: implement actual console clearing
+}
+
+// Set console color
+fn console_color(foreground: String, background: String) {
+    // TODO: implement actual color setting
+}
+
+// JSON utilities
+
+// Parse JSON string
+struct JsonValue {
+    data: String,
+    is_valid: Bool
+}
+
+fn json_parse(json_string: String) -> JsonValue {
+    // TODO: implement actual JSON parsing
+    return JsonValue {
+        data: json_string,
+        is_valid: true
+    };
+}
+
+// Convert value to JSON string
+fn json_stringify(data: String) -> String {
+    // TODO: implement actual JSON stringification
+    return data;
+}
+
+// CSV utilities
+
+// Parse CSV content
+struct CsvRow {
+    columns: [String]
+}
+
+fn csv_parse(content: String) -> [CsvRow] {
+    // TODO: implement actual CSV parsing
+    return [];
+}
+
+// Convert rows to CSV content
+fn csv_generate(rows: [CsvRow]) -> String {
+    // TODO: implement actual CSV generation
+    return "";
+}
+
+// Path utilities
+
+// Join path components
+fn path_join(parts: [String]) -> String {
+    // TODO: implement actual path joining
+    return "";
+}
+
+// Get directory name from path
+fn path_dirname(path: String) -> String {
+    // TODO: implement actual dirname extraction
+    return "";
+}
+
+// Get base name from path
+fn path_basename(path: String) -> String {
+    // TODO: implement actual basename extraction
+    return "";
+}
+
+// Get file extension
+fn path_extension(path: String) -> String {
+    // TODO: implement actual extension extraction
+    return "";
+}
+
+// Check if path is absolute
+fn path_is_absolute(path: String) -> Bool {
+    // TODO: implement actual path check
+    return false;
+}
+
+// Normalize path
+fn path_normalize(path: String) -> String {
+    // TODO: implement actual path normalization
+    return path;
+}

@@ -2,6 +2,8 @@
 #define ZENITH_WINDOWS_H
 
 #include "../../common/zenith_common.h"
+#include "../../ui/native_window.h"
+#include "../../ui/native_widget_factory.h"
 #include <windows.h>
 #include <winhttp.h>
 #include <conio.h>
@@ -9,6 +11,7 @@
 #include <thread>
 #include <chrono>
 #include <functional>
+#include <memory>
 
 namespace zenith {
 
@@ -226,7 +229,116 @@ inline std::string httpPost(const std::string& url, const std::string& json_body
 }
 
 template<typename AppType>
+inline void runNativeWindowLoop(AppType& app) {
+#ifdef _WIN32
+    // Create native window using Win32 backend
+    auto window = zenith::ui::createNativeWindow();
+    auto widgetFactory = zenith::ui::createNativeWidgetFactory();
+    
+    // Build initial UI
+    zenith::UIElement root = app.build();
+    root.measure();
+    root.arrange(0, 0);
+    
+    // Create native window
+    window->create("Zenith Application", 800, 600);
+    
+    // Store app pointer for callbacks
+    AppType* appPtr = &app;
+    
+    // Set event callback to handle native events
+    window->setEventCallback([appPtr, &root](const zenith::ui::NativeEvent& event) {
+        if (event.type == zenith::ui::EventType::Command) {
+            // Handle button clicks and other commands
+            // In a full implementation, we'd map HWND IDs to actions
+            // For now, this is a placeholder for event dispatch
+        } else if (event.type == zenith::ui::EventType::Resize) {
+            // Re-layout on resize
+            root.measure();
+            root.arrange(0, 0, event.width, event.height);
+        }
+    });
+    
+    // Create native widgets from UIElement tree
+    std::vector<std::unique_ptr<zenith::ui::NativeWidget>> widgets;
+    void* parentHandle = window->getNativeHandle();
+    
+    // Helper lambda to recursively create widgets
+    std::function<void(const zenith::UIElement&)> createWidgets = [&](const zenith::UIElement& element) {
+        std::unique_ptr<zenith::ui::NativeWidget> widget;
+        
+        if (element.type == "Button") {
+            widget = widgetFactory->createButton(element, parentHandle);
+        } else if (element.type == "TextField") {
+            widget = widgetFactory->createTextField(element, parentHandle);
+        } else if (element.type == "Checkbox") {
+            widget = widgetFactory->createCheckbox(element, parentHandle);
+        } else if (element.type == "Slider") {
+            widget = widgetFactory->createSlider(element, parentHandle);
+        } else if (element.type == "Label" || element.type == "Text") {
+            widget = widgetFactory->createLabel(element, parentHandle);
+        } else if (element.type == "Container" || element.type == "Column" || element.type == "Row") {
+            widget = widgetFactory->createContainer(element, parentHandle);
+        }
+        
+        if (widget) {
+            // Position and size based on Yoga layout
+            widget->setPosition(static_cast<int>(element.layout_x), 
+                               static_cast<int>(element.layout_y));
+            widget->setSize(static_cast<int>(element.layout_width), 
+                           static_cast<int>(element.layout_height));
+            
+            // Store widget reference
+            widgets.push_back(std::move(widget));
+        }
+        
+        // Recursively process children
+        for (const auto& child : element.children) {
+            createWidgets(*child);
+        }
+    };
+    
+    // Create all widgets
+    createWidgets(root);
+    
+    // Show window and run message loop
+    window->show();
+    
+#else
+    // Fallback to terminal mode on non-Windows platforms
+    runInteractiveLoop(app);
+#endif
+}
+
+template<typename AppType>
 inline void runInteractiveLoop(AppType& app) {
+    // Check if we should use native window mode
+    bool useNativeWindow = true;  // Default to native window on Windows
+    
+#ifdef _WIN32
+    // On Windows, prefer native window unless running in pure terminal mode
+    if (_isatty(0)) {
+        // Running in interactive terminal - can still use native window
+        runNativeWindowLoop(app);
+        return;
+    } else {
+        // Non-interactive mode (piped input) - render once to terminal
+        zenith::UIElement root = app.build();
+        root.measure();
+        root.arrange(0, 0);
+        
+        std::cout << "\n=== Rendered UI Layout Tree ===\n";
+        root.printTree(0);
+        
+        std::cout << "\n=== Terminal Visual Render (Wow Aesthetics) ===\n";
+        TerminalBuffer buffer(root.layout_width, root.layout_height);
+        root.drawToBuffer(buffer, 0, 0);
+        buffer.print();
+        std::cout << "\n";
+        return;
+    }
+#else
+    // On non-Windows platforms, use terminal mode until native backends are implemented
     if (!_isatty(0)) {
         zenith::UIElement root = app.build();
         root.measure();
@@ -242,7 +354,9 @@ inline void runInteractiveLoop(AppType& app) {
         std::cout << "\n";
         return;
     }
+#endif
 
+    // Terminal-based interactive loop (fallback)
     while (true) {
         zenith::UIElement root = app.build();
         root.measure();

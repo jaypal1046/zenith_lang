@@ -1,0 +1,30 @@
+// Package: basic
+// Description: Basic helper package for Zenith programming language
+// Version: 1.0.0
+// Author: Zenith Developer
+
+package basic;
+
+// Export testing module
+export basic.testing;
+
+// Export utils module
+export basic.utils;
+
+// Export io module
+export basic.io;
+
+// Package metadata
+const PACKAGE_NAME = "basic";
+const PACKAGE_VERSION = "1.0.0";
+const PACKAGE_DESCRIPTION = "Basic helper utilities for Zenith programming";
+
+// Initialize package
+fn init() {
+    println("basic package initialized");
+}
+
+// Get package info
+fn get_info() -> String {
+    return PACKAGE_NAME + " v" + PACKAGE_VERSION + ": " + PACKAGE_DESCRIPTION;
+}

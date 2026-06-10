@@ -1,0 +1,119 @@
+// Example: Using the io module
+// This demonstrates how to use the basic.io module for file and data operations
+
+import basic.io.{
+    // File operations
+    file_open,
+    file_close,
+    file_read_all,
+    file_write,
+    file_append,
+    file_exists,
+    file_delete,
+    file_copy,
+    file_size,
+    
+    // Directory operations
+    dir_create,
+    dir_exists,
+    dir_list,
+    get_current_dir,
+    
+    // Console I/O
+    read_line,
+    read_int,
+    
+    // Data serialization
+    json_parse,
+    json_stringify,
+    csv_parse,
+    
+    // Path utilities
+    path_join,
+    path_basename,
+    path_extension
+};
+
+fn main() {
+    println("=== Basic Package IO Example ===\n");
+    
+    // Example 1: File operations
+    println("--- File Operations ---");
+    let test_path = "test.txt";
+    
+    // Check if file exists
+    println("File exists: " + file_exists(test_path));
+    
+    // Write to file
+    println("Writing to file...");
+    file_write(test_path, "Hello, Zenith!\nThis is a test file.");
+    
+    // Read from file
+    println("Reading from file:");
+    let content = file_read_all(test_path);
+    println(content);
+    
+    // Get file size
+    println("File size: " + file_size(test_path) + " bytes");
+    
+    // Copy file
+    println("Copying file...");
+    file_copy(test_path, "test_copy.txt");
+    
+    // Delete file
+    println("Deleting file...");
+    file_delete(test_path);
+    
+    // Example 2: Directory operations
+    println("\n--- Directory Operations ---");
+    let current_dir = get_current_dir();
+    println("Current directory: " + current_dir);
+    
+    // Create directory
+    println("Creating directory...");
+    dir_create("test_dir");
+    println("Directory exists: " + dir_exists("test_dir"));
+    
+    // List directory contents
+    println("Directory contents:");
+    let contents = dir_list(current_dir);
+    for (item in contents) {
+        println("  - " + item);
+    }
+    
+    // Example 3: Path utilities
+    println("\n--- Path Utilities ---");
+    let full_path = path_join(["home", "user", "documents", "file.txt"]);
+    println("Joined path: " + full_path);
+    
+    let basename = path_basename(full_path);
+    println("Basename: " + basename);
+    
+    let extension = path_extension(full_path);
+    println("Extension: " + extension);
+    
+    // Example 4: JSON operations
+    println("\n--- JSON Operations ---");
+    let json_str = "{\"name\": \"Zenith\", \"version\": 1}";
+    println("JSON string: " + json_str);
+    
+    let parsed = json_parse(json_str);
+    println("Is valid JSON: " + parsed.is_valid);
+    
+    // Example 5: CSV operations
+    println("\n--- CSV Operations ---");
+    let csv_content = "name,age,city\nAlice,30,NYC\nBob,25,LA";
+    println("CSV content:");
+    println(csv_content);
+    
+    let rows = csv_parse(csv_content);
+    println("Parsed " + rows.len() + " rows");
+    
+    // Example 6: Console I/O (commented out for automated execution)
+    // println("\n--- Console I/O ---");
+    // println("Enter your name: ");
+    // let name = read_line();
+    // println("Hello, " + name + "!");
+    
+    println("\n=== Example Complete ===");
+}

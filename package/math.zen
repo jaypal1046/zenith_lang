@@ -1,0 +1,774 @@
+# Math module for Zenith
+# Provides mathematical functions and constants
+
+module math;
+
+# Mathematical Constants
+pub const PI: Float = 3.14159265358979323846;
+pub const E: Float = 2.71828182845904523536;
+pub const PHI: Float = 1.61803398874989484820; # Golden Ratio
+pub const SQRT2: Float = 1.41421356237309504880;
+pub const SQRT3: Float = 1.73205080756887729352;
+pub const LN2: Float = 0.69314718055994530942;
+pub const LN10: Float = 2.30258509299404568402;
+
+# Basic Arithmetic Operations
+
+# Absolute value
+pub fn abs(x: Int) -> Int {
+    if x < 0 {
+        return -x;
+    }
+    return x;
+}
+
+pub fn abs_float(x: Float) -> Float {
+    if x < 0.0 {
+        return -x;
+    }
+    return x;
+}
+
+# Power function (integer exponent)
+pub fn pow(base: Float, exp: Int) -> Float {
+    if exp == 0 {
+        return 1.0;
+    }
+    
+    let mut result = 1.0;
+    let mut base_val = base;
+    let mut exp_val = exp;
+    
+    if exp_val < 0 {
+        base_val = 1.0 / base_val;
+        exp_val = -exp_val;
+    }
+    
+    while exp_val > 0 {
+        if exp_val % 2 == 1 {
+            result *= base_val;
+        }
+        base_val *= base_val;
+        exp_val /= 2;
+    }
+    
+    return result;
+}
+
+# Square root using Newton's method
+pub fn sqrt(x: Float) -> Float {
+    if x < 0.0 {
+        return -1.0; # Error: negative input
+    }
+    if x == 0.0 {
+        return 0.0;
+    }
+    
+    let mut guess = x / 2.0;
+    let epsilon = 1e-10;
+    
+    for i in 0..100 {
+        let new_guess = (guess + x / guess) / 2.0;
+        if abs_float(new_guess - guess) < epsilon {
+            return new_guess;
+        }
+        guess = new_guess;
+    }
+    
+    return guess;
+}
+
+# Cube root
+pub fn cbrt(x: Float) -> Float {
+    if x == 0.0 {
+        return 0.0;
+    }
+    
+    let negative = x < 0.0;
+    let x_abs = abs_float(x);
+    
+    let mut guess = x_abs / 3.0;
+    let epsilon = 1e-10;
+    
+    for i in 0..100 {
+        let new_guess = (2.0 * guess + x_abs / (guess * guess)) / 3.0;
+        if abs_float(new_guess - guess) < epsilon {
+            return if negative { -new_guess } else { new_guess };
+        }
+        guess = new_guess;
+    }
+    
+    return if negative { -guess } else { guess };
+}
+
+# Natural logarithm using Taylor series
+pub fn ln(x: Float) -> Float {
+    if x <= 0.0 {
+        return -1.0; # Error: non-positive input
+    }
+    
+    # Use ln(x) = 2 * arctanh((x-1)/(x+1)) for better convergence
+    let y = (x - 1.0) / (x + 1.0);
+    let y2 = y * y;
+    
+    let mut result = 0.0;
+    let mut term = y;
+    
+    for n in 1..100 step 2 {
+        result += term / n as Float;
+        term *= y2;
+        
+        if abs_float(term / n as Float) < 1e-10 {
+            break;
+        }
+    }
+    
+    return 2.0 * result;
+}
+
+# Logarithm with custom base
+pub fn log(x: Float, base: Float) -> Float {
+    return ln(x) / ln(base);
+}
+
+# Logarithm base 10
+pub fn log10(x: Float) -> Float {
+    return ln(x) / LN10;
+}
+
+# Logarithm base 2
+pub fn log2(x: Float) -> Float {
+    return ln(x) / LN2;
+}
+
+# Exponential function using Taylor series
+pub fn exp(x: Float) -> Float {
+    let mut result = 1.0;
+    let mut term = 1.0;
+    
+    for n in 1..100 {
+        term *= x / n as Float;
+        result += term;
+        
+        if abs_float(term) < 1e-10 {
+            break;
+        }
+    }
+    
+    return result;
+}
+
+# Trigonometric Functions
+
+# Sine using Taylor series
+pub fn sin(x: Float) -> Float {
+    # Normalize to [-PI, PI]
+    let mut x_norm = x;
+    while x_norm > PI {
+        x_norm -= 2.0 * PI;
+    }
+    while x_norm < -PI {
+        x_norm += 2.0 * PI;
+    }
+    
+    let mut result = 0.0;
+    let mut term = x_norm;
+    let x2 = x_norm * x_norm;
+    
+    for n in 0..50 {
+        result += term;
+        term *= -x2 / ((2 * n + 2) as Float * (2 * n + 3) as Float);
+        
+        if abs_float(term) < 1e-10 {
+            break;
+        }
+    }
+    
+    return result;
+}
+
+# Cosine using Taylor series
+pub fn cos(x: Float) -> Float {
+    # Normalize to [-PI, PI]
+    let mut x_norm = x;
+    while x_norm > PI {
+        x_norm -= 2.0 * PI;
+    }
+    while x_norm < -PI {
+        x_norm += 2.0 * PI;
+    }
+    
+    let mut result = 0.0;
+    let mut term = 1.0;
+    let x2 = x_norm * x_norm;
+    
+    for n in 0..50 {
+        result += term;
+        term *= -x2 / ((2 * n + 1) as Float * (2 * n + 2) as Float);
+        
+        if abs_float(term) < 1e-10 {
+            break;
+        }
+    }
+    
+    return result;
+}
+
+# Tangent
+pub fn tan(x: Float) -> Float {
+    let c = cos(x);
+    if abs_float(c) < 1e-10 {
+        return 1e10; # Approaching infinity
+    }
+    return sin(x) / c;
+}
+
+# Arcsine using Taylor series
+pub fn asin(x: Float) -> Float {
+    if abs_float(x) > 1.0 {
+        return -1.0; # Error: out of domain
+    }
+    
+    let mut result = x;
+    let mut term = x;
+    let x2 = x * x;
+    
+    for n in 0..50 {
+        term *= x2 * (2 * n + 1) as Float * (2 * n + 1) as Float / 
+                ((2 * n + 1) as Float * (2 * n + 2) as Float);
+        result += term;
+        
+        if abs_float(term) < 1e-10 {
+            break;
+        }
+    }
+    
+    return result;
+}
+
+# Arccosine
+pub fn acos(x: Float) -> Float {
+    return PI / 2.0 - asin(x);
+}
+
+# Arctangent using Taylor series
+pub fn atan(x: Float) -> Float {
+    let mut result = 0.0;
+    let mut term = x;
+    let x2 = x * x;
+    
+    for n in 0..100 {
+        result += term / (2 * n + 1) as Float;
+        term *= -x2;
+        
+        if abs_float(term / (2 * n + 3) as Float) < 1e-10 {
+            break;
+        }
+    }
+    
+    return result;
+}
+
+# Arctangent2 (two-argument arctangent)
+pub fn atan2(y: Float, x: Float) -> Float {
+    if x > 0.0 {
+        return atan(y / x);
+    } else if x < 0.0 {
+        if y >= 0.0 {
+            return atan(y / x) + PI;
+        } else {
+            return atan(y / x) - PI;
+        }
+    } else {
+        if y > 0.0 {
+            return PI / 2.0;
+        } else if y < 0.0 {
+            return -PI / 2.0;
+        } else {
+            return 0.0; # Undefined, but return 0
+        }
+    }
+}
+
+# Hyperbolic Functions
+
+pub fn sinh(x: Float) -> Float {
+    return (exp(x) - exp(-x)) / 2.0;
+}
+
+pub fn cosh(x: Float) -> Float {
+    return (exp(x) + exp(-x)) / 2.0;
+}
+
+pub fn tanh(x: Float) -> Float {
+    return sinh(x) / cosh(x);
+}
+
+pub fn asinh(x: Float) -> Float {
+    return ln(x + sqrt(x * x + 1.0));
+}
+
+pub fn acosh(x: Float) -> Float {
+    if x < 1.0 {
+        return -1.0; # Error: out of domain
+    }
+    return ln(x + sqrt(x * x - 1.0));
+}
+
+pub fn atanh(x: Float) -> Float {
+    if abs_float(x) >= 1.0 {
+        return -1.0; # Error: out of domain
+    }
+    return ln((1.0 + x) / (1.0 - x)) / 2.0;
+}
+
+# Rounding Functions
+
+pub fn floor(x: Float) -> Int {
+    let int_part = x as Int;
+    if x >= 0.0 || x as Float == int_part as Float {
+        return int_part;
+    }
+    return int_part - 1;
+}
+
+pub fn ceil(x: Float) -> Int {
+    let int_part = x as Int;
+    if x <= 0.0 || x as Float == int_part as Float {
+        return int_part;
+    }
+    return int_part + 1;
+}
+
+pub fn round(x: Float) -> Int {
+    return floor(x + 0.5);
+}
+
+pub fn trunc(x: Float) -> Int {
+    return x as Int;
+}
+
+# Factorial
+pub fn factorial(n: Int) -> Int {
+    if n < 0 {
+        return -1; # Error: negative input
+    }
+    if n <= 1 {
+        return 1;
+    }
+    
+    let mut result = 1;
+    for i in 2..=n {
+        result *= i;
+    }
+    return result;
+}
+
+# Gamma function approximation (Lanczos approximation)
+pub fn gamma(x: Float) -> Float {
+    if x <= 0.0 && x as Int as Float == x {
+        return -1.0; # Error: poles at non-positive integers
+    }
+    
+    if x < 0.5 {
+        return PI / (sin(PI * x) * gamma(1.0 - x));
+    }
+    
+    x -= 1.0;
+    
+    let g = 7.0;
+    let c = [
+        0.99999999999980993,
+        676.5203681218851,
+        -1259.1392167224028,
+        771.32342877765313,
+        -176.61502916214059,
+        12.507343278686905,
+        -0.13857109526572012,
+        9.9843695780195716e-6,
+        1.5056327351493116e-7,
+    ];
+    
+    let mut sum = c[0];
+    for i in 1..g as Int + 2 {
+        sum += c[i as usize] / (x + i as Float);
+    }
+    
+    let t = x + g + 0.5;
+    return sqrt(2.0 * PI) * pow(t, x + 0.5) * exp(-t) * sum;
+}
+
+# Beta function
+pub fn beta(x: Float, y: Float) -> Float {
+    return gamma(x) * gamma(y) / gamma(x + y);
+}
+
+# Combinatorics
+
+# Binomial coefficient (n choose k)
+pub fn binomial(n: Int, k: Int) -> Int {
+    if k < 0 || k > n {
+        return 0;
+    }
+    if k == 0 || k == n {
+        return 1;
+    }
+    
+    if k > n / 2 {
+        return binomial(n, n - k);
+    }
+    
+    let mut result = 1;
+    for i in 0..k {
+        result = result * (n - i) / (i + 1);
+    }
+    return result;
+}
+
+# Permutations (nPk)
+pub fn permutations(n: Int, k: Int) -> Int {
+    if k < 0 || k > n {
+        return 0;
+    }
+    return factorial(n) / factorial(n - k);
+}
+
+# Greatest Common Divisor (Euclidean algorithm)
+pub fn gcd(a: Int, b: Int) -> Int {
+    let mut a_val = abs(a);
+    let mut b_val = abs(b);
+    
+    while b_val != 0 {
+        let temp = b_val;
+        b_val = a_val % b_val;
+        a_val = temp;
+    }
+    
+    return a_val;
+}
+
+# Least Common Multiple
+pub fn lcm(a: Int, b: Int) -> Int {
+    if a == 0 || b == 0 {
+        return 0;
+    }
+    return abs(a * b) / gcd(a, b);
+}
+
+# Check if number is prime
+pub fn is_prime(n: Int) -> Bool {
+    if n <= 1 {
+        return false;
+    }
+    if n <= 3 {
+        return true;
+    }
+    if n % 2 == 0 || n % 3 == 0 {
+        return false;
+    }
+    
+    let mut i = 5;
+    while i * i <= n {
+        if n % i == 0 || n % (i + 2) == 0 {
+            return false;
+        }
+        i += 6;
+    }
+    
+    return true;
+}
+
+# Generate prime numbers up to n using Sieve of Eratosthenes
+pub fn primes_up_to(n: Int) -> List<Int> {
+    if n < 2 {
+        return [];
+    }
+    
+    let mut is_prime_arr = [true; (n + 1) as usize];
+    is_prime_arr[0] = false;
+    is_prime_arr[1] = false;
+    
+    let limit = sqrt(n as Float) as Int;
+    for i in 2..=limit {
+        if is_prime_arr[i as usize] {
+            let mut j = i * i;
+            while j <= n {
+                is_prime_arr[j as usize] = false;
+                j += i;
+            }
+        }
+    }
+    
+    let mut result = [];
+    for i in 2..=n {
+        if is_prime_arr[i as usize] {
+            result.push(i);
+        }
+    }
+    
+    return result;
+}
+
+# Fibonacci number (iterative)
+pub fn fibonacci(n: Int) -> Int {
+    if n <= 0 {
+        return 0;
+    }
+    if n == 1 {
+        return 1;
+    }
+    
+    let mut prev = 0;
+    let mut curr = 1;
+    
+    for i in 2..=n {
+        let next = prev + curr;
+        prev = curr;
+        curr = next;
+    }
+    
+    return curr;
+}
+
+# Generate first n Fibonacci numbers
+pub fn fibonacci_sequence(n: Int) -> List<Int> {
+    if n <= 0 {
+        return [];
+    }
+    
+    let mut result = [];
+    if n >= 1 {
+        result.push(0);
+    }
+    if n >= 2 {
+        result.push(1);
+    }
+    
+    for i in 2..<n {
+        let len = result.len();
+        let next = result[len - 1] + result[len - 2];
+        result.push(next);
+    }
+    
+    return result;
+}
+
+# Random number generation (Linear Congruential Generator)
+static mut seed: Int = 12345;
+
+pub fn random() -> Float {
+    unsafe {
+        seed = (seed * 1103515245 + 12345) % 2147483648;
+        return seed as Float / 2147483648.0;
+    }
+}
+
+pub fn random_int(min: Int, max: Int) -> Int {
+    if min >= max {
+        return min;
+    }
+    return min + (random() * (max - min + 1) as Float) as Int;
+}
+
+pub fn random_float(min: Float, max: Float) -> Float {
+    return min + random() * (max - min);
+}
+
+pub fn seed_random(s: Int) {
+    unsafe {
+        seed = s;
+    }
+}
+
+# Statistical Functions
+
+# Mean (average)
+pub fn mean(values: List<Float>) -> Float {
+    if values.is_empty() {
+        return 0.0;
+    }
+    
+    let mut sum = 0.0;
+    for v in values {
+        sum += v;
+    }
+    
+    return sum / values.len() as Float;
+}
+
+# Median
+pub fn median(mut values: List<Float>) -> Float {
+    if values.is_empty() {
+        return 0.0;
+    }
+    
+    values.sort();
+    let len = values.len();
+    
+    if len % 2 == 0 {
+        return (values[len / 2 - 1] + values[len / 2]) / 2.0;
+    } else {
+        return values[len / 2];
+    }
+}
+
+# Mode
+pub fn mode(values: List<Float>) -> List<Float> {
+    if values.is_empty() {
+        return [];
+    }
+    
+    let mut counts = hash_map<Float, Int>();
+    for v in values {
+        let count = counts.get(&v).unwrap_or(0);
+        counts.insert(v, count + 1);
+    }
+    
+    let mut max_count = 0;
+    for (_, count) in counts.iter() {
+        if count > max_count {
+            max_count = count;
+        }
+    }
+    
+    let mut result = [];
+    for (value, count) in counts.iter() {
+        if count == max_count {
+            result.push(value);
+        }
+    }
+    
+    return result;
+}
+
+# Variance
+pub fn variance(values: List<Float>) -> Float {
+    if values.is_empty() {
+        return 0.0;
+    }
+    
+    let avg = mean(values);
+    let mut sum_sq_diff = 0.0;
+    
+    for v in values {
+        let diff = v - avg;
+        sum_sq_diff += diff * diff;
+    }
+    
+    return sum_sq_diff / values.len() as Float;
+}
+
+# Standard Deviation
+pub fn std_dev(values: List<Float>) -> Float {
+    return sqrt(variance(values));
+}
+
+# Correlation coefficient (Pearson)
+pub fn correlation(x_values: List<Float>, y_values: List<Float>) -> Float {
+    if x_values.len() != y_values.len() || x_values.is_empty() {
+        return 0.0;
+    }
+    
+    let n = x_values.len() as Float;
+    let mean_x = mean(x_values);
+    let mean_y = mean(y_values);
+    
+    let mut sum_xy = 0.0;
+    let mut sum_xx = 0.0;
+    let mut sum_yy = 0.0;
+    
+    for i in 0..<x_values.len() {
+        let dx = x_values[i] - mean_x;
+        let dy = y_values[i] - mean_y;
+        sum_xy += dx * dy;
+        sum_xx += dx * dx;
+        sum_yy += dy * dy;
+    }
+    
+    let denominator = sqrt(sum_xx * sum_yy);
+    if denominator == 0.0 {
+        return 0.0;
+    }
+    
+    return sum_xy / denominator;
+}
+
+# Distance Functions
+
+# Euclidean distance
+pub fn distance_euclidean(p1: List<Float>, p2: List<Float>) -> Float {
+    if p1.len() != p2.len() {
+        return -1.0; # Error: dimension mismatch
+    }
+    
+    let mut sum_sq = 0.0;
+    for i in 0..<p1.len() {
+        let diff = p1[i] - p2[i];
+        sum_sq += diff * diff;
+    }
+    
+    return sqrt(sum_sq);
+}
+
+# Manhattan distance
+pub fn distance_manhattan(p1: List<Float>, p2: List<Float>) -> Float {
+    if p1.len() != p2.len() {
+        return -1.0; # Error: dimension mismatch
+    }
+    
+    let mut sum = 0.0;
+    for i in 0..<p1.len() {
+        sum += abs_float(p1[i] - p2[i]);
+    }
+    
+    return sum;
+}
+
+# Minkowski distance
+pub fn distance_minkowski(p1: List<Float>, p2: List<Float>, p: Float) -> Float {
+    if p1.len() != p2.len() {
+        return -1.0; # Error: dimension mismatch
+    }
+    
+    let mut sum = 0.0;
+    for i in 0..<p1.len() {
+        sum += pow(abs_float(p1[i] - p2[i]), p as Int);
+    }
+    
+    return pow(sum, 1.0 / p);
+}
+
+# Angle conversion
+pub fn degrees_to_radians(degrees: Float) -> Float {
+    return degrees * PI / 180.0;
+}
+
+pub fn radians_to_degrees(radians: Float) -> Float {
+    return radians * 180.0 / PI;
+}
+
+# Clamp value between min and max
+pub fn clamp(value: Float, min_val: Float, max_val: Float) -> Float {
+    if value < min_val {
+        return min_val;
+    }
+    if value > max_val {
+        return max_val;
+    }
+    return value;
+}
+
+# Linear interpolation
+pub fn lerp(start: Float, end: Float, t: Float) -> Float {
+    return start + t * (end - start);
+}
+
+# Sign function
+pub fn sign(x: Float) -> Int {
+    if x > 0.0 {
+        return 1;
+    } else if x < 0.0 {
+        return -1;
+    }
+    return 0;
+}

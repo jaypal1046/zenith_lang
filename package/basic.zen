@@ -1,0 +1,29 @@
+// Zenith Basic Package
+// A comprehensive utility package for Zenith programming language
+
+module package;
+
+// Export all modules
+pub use package.testing;
+pub use package.utils;
+pub use package.io;
+pub use package.collections;
+pub use package.math;
+pub use package.crypto;
+pub use package.datetime;
+pub use package.validation;
+pub use package.network;
+
+// Package version
+const VERSION: string = "1.0.0";
+const NAME: string = "zenith-basic-package";
+const DESCRIPTION: string = "Essential utilities and helpers for Zenith development";
+
+// Package info
+pub fn get_package_info() -> map<string, string> {
+    var info: map<string, string> = map::new();
+    map::set(info, "name", NAME);
+    map::set(info, "version", VERSION);
+    map::set(info, "description", DESCRIPTION);
+    return info;
+}

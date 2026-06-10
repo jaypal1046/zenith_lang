@@ -1,0 +1,83 @@
+// Example: Using the utils module
+// This demonstrates how to use the basic.utils module for common operations
+
+import basic.utils.{
+    // String utilities
+    is_empty,
+    to_uppercase,
+    to_lowercase,
+    trim,
+    contains,
+    replace,
+    
+    // Numeric utilities
+    abs,
+    min,
+    max,
+    clamp,
+    is_even,
+    is_odd,
+    
+    // Array utilities
+    array_contains,
+    array_index_of,
+    
+    // Boolean utilities
+    all,
+    any,
+    negate,
+    xor
+};
+
+fn main() {
+    println("=== Basic Package Utils Example ===\n");
+    
+    // Example 1: String utilities
+    println("--- String Utilities ---");
+    let str = "  Hello World  ";
+    println("Original: '" + str + "'");
+    println("Is empty: " + is_empty(str));
+    println("Is empty string: " + is_empty(""));
+    // println("Uppercase: " + to_uppercase(str)); // TODO: implement
+    // println("Lowercase: " + to_lowercase(str)); // TODO: implement
+    // println("Trimmed: '" + trim(str) + "'"); // TODO: implement
+    
+    // Example 2: Numeric utilities
+    println("\n--- Numeric Utilities ---");
+    println("Absolute value of -5: " + abs(-5));
+    println("Min of 10 and 20: " + min(10, 20));
+    println("Max of 10 and 20: " + max(10, 20));
+    println("Clamp 15 between 0 and 10: " + clamp(15, 0, 10));
+    println("Is 4 even: " + is_even(4));
+    println("Is 7 odd: " + is_odd(7));
+    
+    // Example 3: Array utilities
+    println("\n--- Array Utilities ---");
+    let numbers: [Int] = [1, 2, 3, 4, 5];
+    println("Array contains 3: " + array_contains(numbers, 3));
+    println("Array contains 10: " + array_contains(numbers, 10));
+    println("Index of 4: " + array_index_of(numbers, 4));
+    println("Index of 10: " + array_index_of(numbers, 10));
+    
+    // Example 4: Boolean utilities
+    println("\n--- Boolean Utilities ---");
+    let bools_true: [Bool] = [true, true, true];
+    let bools_mixed: [Bool] = [true, false, true];
+    println("All true: " + all(bools_true));
+    println("All mixed: " + all(bools_mixed));
+    println("Any mixed: " + any(bools_mixed));
+    println("Negate true: " + negate(true));
+    println("XOR true, false: " + xor(true, false));
+    println("XOR true, true: " + xor(true, true));
+    
+    // Example 5: Practical usage
+    println("\n--- Practical Usage ---");
+    let age = 25;
+    let clamped_age = clamp(age, 0, 18);
+    println("Age (clamped to 0-18): " + clamped_age);
+    
+    let score = -10;
+    println("Score absolute value: " + abs(score));
+    
+    println("\n=== Example Complete ===");
+}

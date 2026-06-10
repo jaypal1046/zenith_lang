@@ -1,0 +1,130 @@
+// Module: testing
+// Description: Testing utilities for Zenith programming language
+// Provides unit testing and integration testing capabilities
+
+package basic.testing;
+
+// Test result structure
+struct TestResult {
+    name: String,
+    passed: Bool,
+    message: String,
+    duration: Int // in milliseconds
+}
+
+// Test suite structure
+struct TestSuite {
+    name: String,
+    total: Int,
+    passed: Int,
+    failed: Int,
+    results: [TestResult]
+}
+
+// Assert that a condition is true
+fn assert_true(condition: Bool, message: String) -> Bool {
+    if (condition) {
+        return true;
+    } else {
+        println("ASSERTION FAILED: " + message);
+        return false;
+    }
+}
+
+// Assert that two values are equal
+fn assert_equal(actual: Int, expected: Int, message: String) -> Bool {
+    if (actual == expected) {
+        return true;
+    } else {
+        println("ASSERTION FAILED: " + message);
+        println("  Expected: " + expected);
+        println("  Actual: " + actual);
+        return false;
+    }
+}
+
+// Assert that two strings are equal
+fn assert_string_equal(actual: String, expected: String, message: String) -> Bool {
+    if (actual == expected) {
+        return true;
+    } else {
+        println("ASSERTION FAILED: " + message);
+        println("  Expected: " + expected);
+        println("  Actual: " + actual);
+        return false;
+    }
+}
+
+// Run a single test function
+fn run_test(name: String, test_fn: Fn() -> Bool) -> TestResult {
+    let start = 0; // TODO: implement timing
+    let passed = test_fn();
+    let end = 0; // TODO: implement timing
+    let duration = end - start;
+    
+    let message = if (passed) { "PASSED" } else { "FAILED" };
+    
+    return TestResult {
+        name: name,
+        passed: passed,
+        message: message,
+        duration: duration
+    };
+}
+
+// Run a test suite
+fn run_suite(suite_name: String, tests: [(String, Fn() -> Bool)]) -> TestSuite {
+    let mut results: [TestResult] = [];
+    let mut passed_count = 0;
+    let mut failed_count = 0;
+    
+    for (test in tests) {
+        let result = run_test(test.0, test.1);
+        results.push(result);
+        
+        if (result.passed) {
+            passed_count += 1;
+        } else {
+            failed_count += 1;
+        }
+    }
+    
+    return TestSuite {
+        name: suite_name,
+        total: passed_count + failed_count,
+        passed: passed_count,
+        failed: failed_count,
+        results: results
+    };
+}
+
+// Print test suite summary
+fn print_summary(suite: TestSuite) {
+    println("========================================");
+    println("Test Suite: " + suite.name);
+    println("========================================");
+    println("Total Tests: " + suite.total);
+    println("Passed: " + suite.passed);
+    println("Failed: " + suite.failed);
+    println("========================================");
+    
+    for (result in suite.results) {
+        let status = if (result.passed) { "✓" } else { "✗" };
+        println(status + " " + result.name + " (" + result.duration + "ms)");
+    }
+}
+
+// Unit test example
+fn unit_test_example() -> Bool {
+    let a = 5;
+    let b = 5;
+    return assert_equal(a, b, "Values should be equal");
+}
+
+// Integration test example
+fn integration_test_example() -> Bool {
+    // Simulate integration test scenario
+    let data = "test_data";
+    let processed = data; // TODO: add actual processing
+    return assert_string_equal(data, processed, "Integration test should pass");
+}

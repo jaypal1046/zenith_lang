@@ -1,49 +1,51 @@
 ```
-# Zen compilation artifacts
-*.zen.o
-*.zen.bin
-*.exe
-
-# Build directories
+# Build artifacts
 build/
 dist/
-target/
 
 # Dependencies
-julia-*/
-zig*/
+.julia/
+.zig-cache/
 
-# Virtual environments
-venv/
-.venv/
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-
-# Logs
+# Logs and temp files
 *.log
+*.tmp
 
-# Environment files
+# Environment
 .env
 .env.local
 *.env.*
 
-# Editor files
+# Editors
 .vscode/
 .idea/
-*.swp
-*.swo
-*.tmp
+
+# OS generated files
+.DS_Store
+Thumbs.db
 
 # Coverage reports
 coverage/
 htmlcov/
 .coverage
 
-# OS generated files
-.DS_Store
-Thumbs.db
+# Python specific
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# Testing
+.pytest_cache/
+.mypy_cache/
 
 # Compressed files
 *.zip

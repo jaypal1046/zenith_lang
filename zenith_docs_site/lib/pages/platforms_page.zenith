@@ -1,0 +1,245 @@
+// Platforms Page - Cross-platform deployment guide
+// Built with 100% Zenith Code
+
+import 'package:zenith_ui/zenith_ui.dart';
+import '../components/navigation.dart';
+import '../components/footer.dart';
+
+class PlatformsPage extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: Navigation(),
+      body: SingleChildScrollView(
+        child: Column(
+          children: [
+            _buildHeroSection(),
+            _buildPlatformDetails(),
+            _buildDeploymentGuide(),
+          ],
+        ),
+      ),
+      footer: Footer(),
+    );
+  }
+
+  Widget _buildHeroSection() {
+    return Container(
+      padding: EdgeInsets.all(60),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+        ),
+      ),
+      child: Column(
+        children: [
+          Text(
+            'Cross-Platform Deployment',
+            style: TextStyle(
+              fontSize: 48,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+          ),
+          SizedBox(height: 16),
+          Text(
+            'Build once, deploy everywhere',
+            style: TextStyle(
+              fontSize: 20,
+              color: Colors.white.withOpacity(0.9),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPlatformDetails() {
+    return Container(
+      padding: EdgeInsets.all(60),
+      child: Column(
+        children: [
+          _buildPlatformDetail(
+            Icons.desktop_mac,
+            'Desktop Applications',
+            'Windows, macOS, Linux',
+            [
+              'Native windowing system integration',
+              'Full access to system APIs',
+              'High-performance rendering',
+              'System tray and notifications',
+            ],
+          ),
+          SizedBox(height: 32),
+          _buildPlatformDetail(
+            Icons.phone_android,
+            'Mobile Applications',
+            'iOS & Android',
+            [
+              'Native mobile UI components',
+              'Camera, GPS, sensors access',
+              'Push notifications',
+              'App store ready builds',
+            ],
+          ),
+          SizedBox(height: 32),
+          _buildPlatformDetail(
+            Icons.public,
+            'Web Applications',
+            'Modern Browsers',
+            [
+              'SEO-friendly static pre-rendering',
+              'Progressive Web App support',
+              'Responsive design',
+              'Offline capabilities',
+            ],
+          ),
+          SizedBox(height: 32),
+          _buildPlatformDetail(
+            Icons.memory,
+            'WebAssembly',
+            'WASM Runtime',
+            [
+              'Near-native performance',
+              'Browser sandbox security',
+              'Portable binary format',
+              'Interoperability with JavaScript',
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPlatformDetail(IconData icon, String title, String subtitle, List<String> features) {
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: EdgeInsets.all(32),
+        child: Row(
+          children: [
+            Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+                ),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Icon(icon, color: Colors.white, size: 40),
+            ),
+            SizedBox(width: 32),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: TextStyle(color: Color(0xFF6366F1), fontWeight: FontWeight.medium),
+                  ),
+                  SizedBox(height: 16),
+                  ...features.map((feature) => Padding(
+                    padding: EdgeInsets.only(bottom: 8),
+                    child: Row(
+                      children: [
+                        Icon(Icons.check_circle, color: Color(0xFF10B981), size: 18),
+                        SizedBox(width: 8),
+                        Text(feature),
+                      ],
+                    ),
+                  )).toList(),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDeploymentGuide() {
+    return Container(
+      padding: EdgeInsets.all(60),
+      color: Color(0xFFF8FAFC),
+      child: Column(
+        children: [
+          Text(
+            'Deployment Guide',
+            style: TextStyle(fontSize: 36, fontWeight: FontWeight.bold),
+          ),
+          SizedBox(height: 32),
+          _buildCommandCard(
+            'Desktop',
+            'zenith run myapp.zen --target desktop',
+          ),
+          SizedBox(height: 16),
+          _buildCommandCard(
+            'Android',
+            'zenith run myapp.zen --target android',
+          ),
+          SizedBox(height: 16),
+          _buildCommandCard(
+            'iOS',
+            'zenith run myapp.zen --target ios',
+          ),
+          SizedBox(height: 16),
+          _buildCommandCard(
+            'Web',
+            'zenith run myapp.zen --target web',
+          ),
+          SizedBox(height: 16),
+          _buildCommandCard(
+            'WebAssembly',
+            'zenith run myapp.zen --target wasm',
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCommandCard(String platform, String command) {
+    return Container(
+      padding: EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Color(0xFF1E293B),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              platform,
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          Container(
+            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text(
+              command,
+              style: TextStyle(
+                fontFamily: 'monospace',
+                color: Color(0xFF10B981),
+                fontSize: 14,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

@@ -33,6 +33,10 @@ zenith_docs_site/
 │   ├── cookbook/          # Code examples & recipes
 │   ├── docs/              # Documentation guides
 │   └── legal/             # Legal documents
+├── web/                   # Built output (HTML/CSS/JS)
+│   ├── main.html         # Main documentation site
+│   ├── js/               # Compiled JavaScript
+│   └── css/              # Compiled stylesheets
 ├── packages/              # Bridge packages
 │   ├── rust_bridge/       # Rust integration
 │   └── dart_bridge/       # Dart integration
@@ -52,8 +56,12 @@ cd zenith_docs_site
 zenith pub get
 
 # Run development server
-zenith run serve
+./dev-server.sh
+# Or manually:
+python3 -m http.server 8080 -d web/
 ```
+
+Then open http://localhost:8080 in your browser.
 
 ### Build for Production
 

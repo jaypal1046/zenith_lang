@@ -1,0 +1,297 @@
+// Server-Side Rendering Engine for Zenith Docs
+// Inspired by Next.js SSR architecture
+// Built with 100% Zenith Code
+
+import 'dart:io';
+import 'dart:convert';
+import 'package:path/path.dart' as path;
+
+class SSREngine {
+  final String pagesDir;
+  final String componentsDir;
+  final String layoutsDir;
+  final String outputDir;
+  
+  SSREngine({
+    required this.pagesDir,
+    required this.componentsDir,
+    required this.layoutsDir,
+    this.outputDir = 'dist',
+  });
+  
+  /// Render a page to HTML string
+  Future<String> renderPage(String pagePath, Map<String, dynamic> props) async {
+    print('Rendering page: $pagePath');
+    
+    // Load page component
+    final pageContent = await File(pagePath).readAsString();
+    
+    // Parse and execute Zenith component
+    final component = await _loadComponent(pageContent);
+    
+    // Get server-side props if available
+    final serverProps = await _getServerSideProps(pageContent, props);
+    
+    // Merge props
+    final allProps = {...props, ...serverProps};
+    
+    // Render component to HTML
+    final html = await _renderToHTML(component, allProps);
+    
+    return html;
+  }
+  
+  /// Load and instantiate a Zenith component
+  Future<dynamic> _loadComponent(String content) async {
+    // In production, this would use the Zenith runtime
+    // For now, we simulate component loading
+    print('Loading component...');
+    return null; // Placeholder
+  }
+  
+  /// Execute getServerSideProps if defined
+  Future<Map<String, dynamic>> _getServerSideProps(
+    String content, 
+    Map<String, dynamic> context,
+  ) async {
+    // Check if page exports getServerSideProps
+    if (content.contains('getServerSideProps')) {
+      print('Executing getServerSideProps...');
+      // In production, execute the actual function
+      return {};
+    }
+    return {};
+  }
+  
+  /// Render component tree to HTML string
+  Future<String> _renderToHTML(dynamic component, Map<String, dynamic> props) async {
+    // This is where the magic happens
+    // Convert Zenith widget tree to HTML string
+    
+    final buffer = StringBuffer();
+    
+    // Document template
+    buffer.writeln('<!DOCTYPE html>');
+    buffer.writeln('<html lang="en">');
+    buffer.writeln('<head>');
+    buffer.writeln('  <meta charset="UTF-8">');
+    buffer.writeln('  <meta name="viewport" content="width=device-width, initial-scale=1.0">');
+    buffer.writeln('  <title>Zenith Language</title>');
+    buffer.writeln('  <link rel="stylesheet" href="/styles/globals.css">');
+    buffer.writeln('</head>');
+    buffer.writeln('<body>');
+    
+    // Render component
+    buffer.writeln('  <div id="__zenith_root">');
+    buffer.writeln('    ${await _renderWidget(component, props)}');
+    buffer.writeln('  </div>');
+    
+    // Hydration script
+    buffer.writeln('  <script src="/runtime/hydrate.js"></script>');
+    buffer.writeln('</body>');
+    buffer.writeln('</html>');
+    
+    return buffer.toString();
+  }
+  
+  /// Render individual widget to HTML
+  Future<String> _renderWidget(dynamic widget, Map<String, dynamic> props) async {
+    // Handle different widget types
+    if (widget == null) {
+      return '<div></div>';
+    }
+    
+    // In production, this would recursively render the widget tree
+    // For now, return placeholder
+    return '<div>Component Content</div>';
+  }
+  
+  /// Generate static pages at build time
+  Future<void> generateStaticPages() async {
+    print('Generating static pages...');
+    
+    final pagesDir = Directory(this.pagesDir);
+    final outputDir = Directory(this.outputDir);
+    
+    if (!await outputDir.exists()) {
+      await outputDir.create(recursive: true);
+    }
+    
+    await for (final entity in pagesDir.list()) {
+      if (entity is File && entity.path.endsWith('.zenith')) {
+        final pageName = path.basenameWithoutExtension(entity.path);
+        
+        // Skip special pages
+        if (pageName.startsWith('_')) continue;
+        
+        print('Generating: $pageName');
+        
+        // Render page
+        final html = await renderPage(entity.path, {});
+        
+        // Write to output
+        final outputFile = File(path.join(outputDir.path, '$pageName.html'));
+        await outputFile.writeAsString(html);
+      }
+    }
+    
+    print('Static generation complete!');
+  }
+  
+  /// Start development server with hot reload
+  Future<void> startDevServer({int port = 3000}) async {
+    print('Starting development server on port $port...');
+    
+    final server = await HttpServer.bind('localhost', port);
+    
+    print('Server running at http://localhost:$port');
+    
+    await for (final request in server) {
+      try {
+        await _handleRequest(request);
+      } catch (e) {
+        print('Error handling request: $e');
+        request.response
+          ..statusCode = 500
+          ..write('Internal Server Error: $e')
+          ..close();
+      }
+    }
+  }
+  
+  /// Handle HTTP requests
+  Future<void> _handleRequest(HttpRequest request) async {
+    final url = request.uri.path;
+    print('Request: $url');
+    
+    // Serve static assets
+    if (url.startsWith('/styles/') || 
+        url.startsWith('/images/') || 
+        url.startsWith('/runtime/')) {
+      await _serveStaticFile(request, url);
+      return;
+    }
+    
+    // Route to page
+    final pagePath = _resolvePagePath(url);
+    
+    if (pagePath != null && await File(pagePath).exists()) {
+      // Render page with SSR
+      final html = await renderPage(pagePath, {});
+      
+      request.response
+        ..headers.contentType = ContentType.html
+        ..write(html)
+        ..close();
+    } else {
+      // 404
+      request.response
+        ..statusCode = 404
+        ..write('Page not found: $url')
+        ..close();
+    }
+  }
+  
+  /// Serve static files
+  Future<void> _serveStaticFile(HttpRequest request, String url) async {
+    final filePath = path.join(Directory.current.path, url.substring(1));
+    final file = File(filePath);
+    
+    if (await file.exists()) {
+      final content = await file.readAsBytes();
+      request.response
+        ..headers.contentType = _getContentType(filePath)
+        ..add('cache-control', 'public, max-age=31536000')
+        ..add(content.length)
+        ..add(content)
+        ..close();
+    } else {
+      request.response
+        ..statusCode = 404
+        ..write('File not found')
+        ..close();
+    }
+  }
+  
+  /// Get content type for file extension
+  ContentType _getContentType(String filePath) {
+    final ext = path.extension(filePath).toLowerCase();
+    switch (ext) {
+      case '.css': return ContentType('text', 'css');
+      case '.js': return ContentType('application', 'javascript');
+      case '.json': return ContentType('application', 'json');
+      case '.png': return ContentType('image', 'png');
+      case '.jpg': return ContentType('image', 'jpeg');
+      case '.svg': return ContentType('image', 'svg+xml');
+      default: return ContentType.text;
+    }
+  }
+  
+  /// Resolve URL to page file path
+  String? _resolvePagePath(String url) {
+    // Remove trailing slash
+    url = url.endsWith('/') ? url.substring(0, url.length - 1) : url;
+    
+    // Map URL to file
+    String pageName;
+    if (url == '/' || url.isEmpty) {
+      pageName = 'index';
+    } else {
+      pageName = url.substring(1); // Remove leading /
+    }
+    
+    return path.join(pagesDir, '$pageName.zenith');
+  }
+}
+
+/// Build configuration
+class BuildConfig {
+  final bool minify;
+  final bool sourceMaps;
+  final bool splitChunks;
+  final String outputDir;
+  
+  const BuildConfig({
+    this.minify = true,
+    this.sourceMaps = false,
+    this.splitChunks = true,
+    this.outputDir = 'dist',
+  });
+}
+
+/// Server configuration
+class ServerConfig {
+  final int port;
+  final String host;
+  final bool ssr;
+  final bool devMode;
+  
+  const ServerConfig({
+    this.port = 3000,
+    this.host = 'localhost',
+    this.ssr = true,
+    this.devMode = false,
+  });
+}
+
+void main(List<String> args) async {
+  print('🚀 Zenith SSR Engine Starting...\n');
+  
+  final engine = SSREngine(
+    pagesDir: 'src/pages',
+    componentsDir: 'src/components',
+    layoutsDir: 'src/layouts',
+    outputDir: 'dist',
+  );
+  
+  if (args.contains('--build')) {
+    // Static site generation
+    await engine.generateStaticPages();
+  } else if (args.contains('--dev')) {
+    // Development server with hot reload
+    await engine.startDevServer(port: 3000);
+  } else {
+    // Production server
+    await engine.startDevServer(port: 3000);
+  }
+}

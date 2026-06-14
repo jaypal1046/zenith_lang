@@ -1,0 +1,24 @@
+{
+  "name": "zenith-docs-site",
+  "version": "1.0.0",
+  "description": "Zenith Documentation Site with SSR/CSR support",
+  "scripts": {
+    "dev": "node server/ssr-server.js",
+    "start": "NODE_ENV=production node server/ssr-server.js",
+    "build": "echo 'Build completed - files ready in src/'"
+  },
+  "keywords": [
+    "zenith",
+    "ssr",
+    "csr",
+    "documentation",
+    "rust",
+    "dart",
+    "webassembly"
+  ],
+  "author": "Zenith Team",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

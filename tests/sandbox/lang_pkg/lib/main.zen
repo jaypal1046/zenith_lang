@@ -1,0 +1,12 @@
+// Test simple type inference features
+
+Void main() {
+    let count = 42;
+    let price = 19.99;
+    let message = "Hello Zenith";
+    print("=== Type Inference Tests ===");
+    print("count: " + String(count));
+    print("price: " + String(price));
+    print("message: " + message);
+    print("=== All tests passed! ===");
+}

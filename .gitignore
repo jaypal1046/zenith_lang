@@ -1,32 +1,64 @@
 ```
-# Dependencies
-node_modules/
+# ==============================================================================
+# Zenith Language Project - .gitignore
+# ==============================================================================
 
-# Build artifacts
-dist/
+# ------------------------------------------------------------------------------
+# 1. Compiled Binaries & Object Files (DO NOT UPLOAD)
+# ------------------------------------------------------------------------------
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.dylib
+*.dll
+*.exe
+*.elf
+*.out
+
+# Specific generated objects/binaries in root
+codegen_check.o
+js_codegen_check.o
+main_check.o
+semantic_check.o
+NUL.exe
+zenith.exe
+
+# ------------------------------------------------------------------------------
+# 2. Build Directories & Packages (DO NOT UPLOAD)
+# ------------------------------------------------------------------------------
 build/
+dist/
 target/
+out/
+bin/
+obj/
+*.vsix
 
-# Logs and temp files
-*.log
-*.tmp
+# ------------------------------------------------------------------------------
+# 3. Dependencies & Package Managers (DO NOT UPLOAD)
+# ------------------------------------------------------------------------------
+node_modules/
+.pnpm-store/
 
-# Environment
-.env
-.env.local
-*.env.*
-
-# Editors
-.vscode/
-.idea/
-
-# Python
+# ------------------------------------------------------------------------------
+# 4. Language & Tooling Caches (DO NOT UPLOAD)
+# ------------------------------------------------------------------------------
+.cache/
+.clangd/
+compile_commands.json
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
+.pytest_cache/
+.venv/
+venv/
 
-# Compression
+# ------------------------------------------------------------------------------
+# 5. Compressed Archives (DO NOT UPLOAD)
+# ------------------------------------------------------------------------------
 *.zip
 *.gz
 *.tar
@@ -37,25 +69,43 @@ __pycache__/
 *.rar
 *.zst
 *.lz4
-*.lzh
-*.cab
-*.arj
-*.rpm
-*.deb
-*.Z
-*.lz
-*.lzo
-*.tar.gz
-*.tar.bz2
-*.tar.xz
-*.tar.zst
 
-# Coverage
-coverage/
-htmlcov/
-.coverage
+# ------------------------------------------------------------------------------
+# 6. Logs & Temp Files (DO NOT UPLOAD)
+# ------------------------------------------------------------------------------
+*.log
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+*~
 
-# OS
+# ------------------------------------------------------------------------------
+# 7. Environment & Secrets (DO NOT UPLOAD)
+# ------------------------------------------------------------------------------
+.env
+.env.local
+*.env.*
+*.pem
+*.key
+
+# ------------------------------------------------------------------------------
+# 8. IDE & Editor Files (DO NOT UPLOAD)
+# ------------------------------------------------------------------------------
+.idea/
+*.suo
+*.user
+*.userosv
+*.sln.docstates
+
+# Optional: VS Code local settings (Uncomment if .vscode should not be uploaded)
+.vscode/
+
+# ------------------------------------------------------------------------------
+# 9. OS System Files (DO NOT UPLOAD)
+# ------------------------------------------------------------------------------
 .DS_Store
 Thumbs.db
-```
+desktop.ini
+.agents/*

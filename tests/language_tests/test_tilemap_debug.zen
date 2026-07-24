@@ -1,0 +1,65 @@
+import std.io;
+
+class TilemapDebugScene() implements Scene {
+    EntityId camera;
+    EntityId terrain;
+    EntityId player;
+
+    Void onLoad() {
+        clearColor = "black";
+        autoRenderWorld2D = true;
+        drawEntityNames = false;
+        debugDrawGrid2D = true;
+        debugDrawColliders2D = true;
+        debugDrawTransforms2D = true;
+        debugDrawCameraBounds2D = true;
+        debugDrawRuntimeStats = true;
+        debugGridCellWidth = 2.0;
+        debugGridCellHeight = 1.0;
+        debugOverlayColor = "cyan";
+
+        camera = spawnCamera2D("Camera", 8.0, 6.0, 1.0, true);
+        terrain = spawnTilemap2D("Terrain", 8.0, 6.0, 4, 3, 2.0, 1.0, "blue");
+        setTilemapCell(terrain, 0, 0, 1);
+        setTilemapCell(terrain, 1, 0, 1);
+        setTilemapCell(terrain, 2, 1, 2);
+        setTilemapPaletteColor(terrain, 2, "green");
+
+        Tilemap2DView terrain_view = tilemap2D(terrain);
+        terrain_view.anchorX = 0.5;
+        terrain_view.anchorY = 0.5;
+        terrain_view.sortOrder = -5;
+
+        player = spawnSprite("Player", 8.0, 7.0, 2.0, 2.0, "red");
+        attachBoxCollider2D(player, 2.0, 2.0, false);
+        Body2DView body = body2D(player);
+        body.vx = 1.5;
+        body.vy = 0.0;
+    }
+
+    Void onDraw(canvas: Canvas, alpha: Float) {
+        canvas.drawPoint(1.0, 1.0, "yellow");
+        canvas.drawLine(1.0, 2.0, 4.0, 2.0, "white");
+        canvas.drawFrameRect(1.0, 3.0, 3.0, 2.0, "magenta");
+        canvas.drawCircleOutline(6.0, 4.0, 1.0, "cyan");
+        canvas.drawText("tile", 1.0, 6.0, "green");
+    }
+}
+
+Void main() {
+    TilemapDebugScene scene = TilemapDebugScene();
+    scene.load();
+
+    String tile = "tile=";
+    tile = tile + scene.tilemapCell(scene.terrain, 2, 1);
+    println(tile);
+    println(scene.tilemapPaletteColor(scene.terrain, 2));
+
+    String cols = "cols=";
+    cols = cols + scene.tilemap2D(scene.terrain).columns;
+    println(cols);
+
+    String grid = "grid=";
+    grid = grid + scene.debugDrawGrid2D;
+    println(grid);
+}

@@ -21,6 +21,7 @@ private:
 
     void indent();
     std::string mapType(TypeNode* type);
+    std::string mapParameterType(TypeNode* type);
     std::string mapTypeForCFFI(TypeNode* type, bool is_return);
     
     // Visitor methods for Code Gen

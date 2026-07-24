@@ -1,0 +1,242 @@
+import std.io;
+
+class StreamingScene() implements Scene {
+    EntityId templateRoot;
+    EntityId templateChild;
+    EntityId cloneRoot;
+    EntityId cameraClone;
+    EntityId prefabRoot;
+    EntityId maskTarget;
+    EntityId actor3D;
+    EntityId target3D;
+    EntityId nestedOuterRoot;
+    EntityId nestedInnerRoot;
+    EntityId nestedDynamicChild;
+    String streamInstance;
+    String nestedStreamInstance;
+
+    Void buildEnemy(root: EntityId) {
+        Transform2DView transform = transform2D(root);
+        transform.x = 6.0;
+        transform.y = 5.0;
+
+        Sprite2DView sprite = sprite2D(root);
+        sprite.width = 2.0;
+        sprite.height = 2.0;
+        sprite.color = "green";
+
+        attachBoxCollider2D(root, 2.0, 2.0, false);
+        setEntityLayerMask(root, 2, 7);
+    }
+
+    Void loadArena(instanceName: String) {
+        EntityId root = instantiatePrefab("enemy", instanceName + "_root");
+        EntityId marker = createEntity(instanceName + "_marker");
+        setParent(marker, root);
+        Transform2DView marker_transform = transform2D(marker);
+        marker_transform.x = 7.0;
+        marker_transform.y = 5.0;
+    }
+
+    Void loadPropCluster(instanceName: String) {
+        EntityId root = instantiatePrefab("enemy", instanceName + "_root");
+        EntityId beacon = createEntity(instanceName + "_beacon");
+        setParent(beacon, root);
+        transform2D(beacon).x = 8.0;
+        transform2D(beacon).y = 5.0;
+    }
+
+    Void loadArenaNested(instanceName: String) {
+        EntityId root = instantiatePrefab("enemy", instanceName + "_root");
+        EntityId marker = createEntity(instanceName + "_marker");
+        setParent(marker, root);
+        transform2D(marker).x = 5.0;
+        transform2D(marker).y = 5.0;
+
+        loadSceneStream("prop_cluster", instanceName + "_props");
+        EntityId propRoot = findEntityByName(instanceName + "_props_root");
+        if (isEntityAlive(propRoot)) {
+            setParent(propRoot, root);
+        }
+    }
+
+    Void onLoad() {
+        registerPrefabCallback("enemy", "buildEnemy");
+        registerSceneStreamCallback("arena", "loadArena");
+        registerSceneStreamCallback("prop_cluster", "loadPropCluster");
+        registerSceneStreamCallback("arena_nested", "loadArenaNested");
+
+        templateRoot = instantiatePrefab("enemy", "TemplateRoot");
+        templateChild = createEntity("TemplateChild");
+        setParent(templateChild, templateRoot);
+        transform2D(templateChild).x = 7.0;
+        transform2D(templateChild).y = 5.0;
+
+        cloneRoot = instantiateArchetype(templateRoot, "CloneRoot");
+        EntityId templateCamera = spawnCamera2D("TemplateCamera", 0.0, 0.0, 1.0, true);
+        cameraClone = instantiateArchetype(templateCamera, "CameraClone");
+        prefabRoot = instantiatePrefab("enemy", "PrefabRoot");
+
+        maskTarget = spawnSprite("MaskTarget", 6.0, 5.0, 2.0, 2.0, "red");
+        attachBoxCollider2D(maskTarget, 2.0, 2.0, false);
+
+        setEntityLayerMask(prefabRoot, 1, 4);
+        setEntityLayerMask(maskTarget, 2, 1);
+
+        streamInstance = "arena_A";
+        loadSceneStream("arena", streamInstance);
+
+        nestedStreamInstance = "arena_nested_A";
+        loadSceneStream("arena_nested", nestedStreamInstance);
+        nestedOuterRoot = findEntityByName(nestedStreamInstance + "_root");
+        nestedInnerRoot = findEntityByName(nestedStreamInstance + "_props_root");
+        nestedDynamicChild = createEntity("NestedDynamicChild");
+        sprite2D(nestedDynamicChild).width = 1.0;
+        sprite2D(nestedDynamicChild).height = 1.0;
+        if (isEntityAlive(nestedOuterRoot)) {
+            setParent(nestedDynamicChild, nestedOuterRoot);
+        }
+
+        actor3D = spawnMesh("Actor3D", "", "", 0.0, 0.0, 0.0);
+        target3D = spawnMesh("Target3D", "", "", 0.0, 0.0, 0.0);
+        attachBoxCollider3D(actor3D, 2.0, 2.0, 2.0, false);
+        attachBoxCollider3D(target3D, 2.0, 2.0, 2.0, false);
+        setEntityLayerMask(actor3D, 8, 32);
+        setEntityLayerMask(target3D, 16, 8);
+    }
+}
+
+Void main() {
+    StreamingScene scene = StreamingScene();
+    scene.load();
+
+    String prefab_ready = "prefab_ready=";
+    prefab_ready = prefab_ready + scene.hasPrefab("enemy");
+    println(prefab_ready);
+
+    String stream_ready = "stream_ready=";
+    stream_ready = stream_ready + scene.hasSceneStream("arena");
+    println(stream_ready);
+
+    String clone_children = "clone_children=";
+    clone_children = clone_children + scene.childCount(scene.cloneRoot);
+    println(clone_children);
+
+    String clone_layer = "clone_layer=";
+    clone_layer = clone_layer + scene.entityLayer(scene.cloneRoot);
+    println(clone_layer);
+
+    String clone_camera_primary = "clone_camera_primary=";
+    clone_camera_primary = clone_camera_primary + scene.camera2D(scene.cameraClone).primary;
+    println(clone_camera_primary);
+
+    String stream_loaded = "stream_loaded=";
+    stream_loaded = stream_loaded + scene.isSceneStreamLoaded(scene.streamInstance);
+    println(stream_loaded);
+
+    String stream_entities = "stream_entities=";
+    stream_entities = stream_entities + scene.sceneStreamEntityCount(scene.streamInstance);
+    println(stream_entities);
+
+    String nested_loaded = "nested_loaded=";
+    nested_loaded = nested_loaded + scene.isSceneStreamLoaded(scene.nestedStreamInstance);
+    println(nested_loaded);
+
+    String nested_outer_entities = "nested_outer_entities=";
+    nested_outer_entities = nested_outer_entities + scene.sceneStreamEntityCount(scene.nestedStreamInstance);
+    println(nested_outer_entities);
+
+    String nested_inner_entities = "nested_inner_entities=";
+    nested_inner_entities = nested_inner_entities + scene.sceneStreamEntityCount(scene.nestedStreamInstance + "_props");
+    println(nested_inner_entities);
+
+    String mask_before = "mask_before=";
+    mask_before = mask_before + scene.canEntitiesInteract(scene.prefabRoot, scene.maskTarget);
+    println(mask_before);
+
+    scene.setEntityLayerMask(scene.maskTarget, 4, 1);
+
+    String mask_after = "mask_after=";
+    mask_after = mask_after + scene.canEntitiesInteract(scene.prefabRoot, scene.maskTarget);
+    println(mask_after);
+
+    String overlap_after = "overlap_after=";
+    overlap_after = overlap_after + scene.overlaps2D(scene.prefabRoot, scene.maskTarget);
+    println(overlap_after);
+
+    String mask3d_before = "mask3d_before=";
+    mask3d_before = mask3d_before + scene.overlaps3D(scene.actor3D, scene.target3D);
+    println(mask3d_before);
+
+    scene.setEntityLayerMask(scene.target3D, 32, 8);
+
+    String mask3d_after = "mask3d_after=";
+    mask3d_after = mask3d_after + scene.overlaps3D(scene.actor3D, scene.target3D);
+    println(mask3d_after);
+
+    RaycastHit2DResult miss = scene.raycast2DMask(0.0, 5.0, 1.0, 0.0, 20.0, 32);
+    RaycastHit2DResult hit = scene.raycast2DMask(0.0, 5.0, 1.0, 0.0, 20.0, 4);
+
+    String ray_miss = "ray_miss=";
+    ray_miss = ray_miss + miss.hit;
+    println(ray_miss);
+
+    String ray_hit = "ray_hit=";
+    ray_hit = ray_hit + hit.hit;
+    println(ray_hit);
+
+    String ray_name = "ray_name=";
+    ray_name = ray_name + scene.entityName(hit.entity);
+    println(ray_name);
+
+    RaycastHit3DResult miss3d = scene.raycast3DMask(-5.0, 0.0, 0.0, 1.0, 0.0, 0.0, 20.0, 16);
+    RaycastHit3DResult hit3d = scene.raycast3DMask(-5.0, 0.0, 0.0, 1.0, 0.0, 0.0, 20.0, 32);
+
+    String ray3d_miss = "ray3d_miss=";
+    ray3d_miss = ray3d_miss + miss3d.hit;
+    println(ray3d_miss);
+
+    String ray3d_hit = "ray3d_hit=";
+    ray3d_hit = ray3d_hit + hit3d.hit;
+    println(ray3d_hit);
+
+    String unload = "stream_unload=";
+    unload = unload + scene.unloadSceneStream(scene.streamInstance);
+    println(unload);
+
+    String stream_after = "stream_after=";
+    stream_after = stream_after + scene.isSceneStreamLoaded(scene.streamInstance);
+    println(stream_after);
+
+    String nested_after_adopt = "nested_after_adopt=";
+    nested_after_adopt = nested_after_adopt + scene.sceneStreamEntityCount(scene.nestedStreamInstance);
+    println(nested_after_adopt);
+
+    String nested_outer_unload = "nested_outer_unload=";
+    nested_outer_unload = nested_outer_unload + scene.unloadSceneStream(scene.nestedStreamInstance);
+    println(nested_outer_unload);
+
+    String nested_outer_after = "nested_outer_after=";
+    nested_outer_after = nested_outer_after + scene.isSceneStreamLoaded(scene.nestedStreamInstance);
+    println(nested_outer_after);
+
+    String nested_child_after = "nested_child_after=";
+    nested_child_after = nested_child_after + scene.isEntityAlive(scene.nestedDynamicChild);
+    println(nested_child_after);
+
+    String nested_inner_after_outer = "nested_inner_after_outer=";
+    nested_inner_after_outer = nested_inner_after_outer + scene.isSceneStreamLoaded(scene.nestedStreamInstance + "_props");
+    println(nested_inner_after_outer);
+
+    String nested_inner_root_after_outer = "nested_inner_root_after_outer=";
+    nested_inner_root_after_outer = nested_inner_root_after_outer + scene.isEntityAlive(scene.nestedInnerRoot);
+    println(nested_inner_root_after_outer);
+
+    String nested_inner_unload = "nested_inner_unload=";
+    nested_inner_unload = nested_inner_unload + scene.unloadSceneStream(scene.nestedStreamInstance + "_props");
+    println(nested_inner_unload);
+
+    String nested_inner_final = "nested_inner_final=";
+    nested_inner_final = nested_inner_final + scene.isSceneStreamLoaded(scene.nestedStreamInstance + "_props");
+    println(nested_inner_final);
+}

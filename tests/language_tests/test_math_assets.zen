@@ -1,0 +1,35 @@
+import std.io;
+
+Void main() {
+    let move2 = Vec2(3, 4);
+    let lift3 = Vec3(1, 2, 3);
+    let tint = Vec4(1.0, 0.5, 0.25, 1.0);
+    let transform = Mat4(
+        1, 0, 0, 0,
+        0, 1, 0, 0,
+        0, 0, 1, 0,
+        0, 0, 0, 1
+    );
+
+    let offset = move2 + Vec2(1, 2);
+    let scaled = lift3 * 2;
+    let normalized = tint.normalized();
+    let projected = transform * normalized;
+
+    let tex = texture("asset://textures/player.png");
+    let snd = audio("asset://audio/jump.wav");
+    let msh = mesh("asset://meshes/player.mesh");
+    let shd = shader("asset://shaders/lit.shader");
+    let mat = material("asset://materials/player.mat", "asset://shaders/lit.shader");
+
+    println("move2.x = " + move2.x);
+    println("offset.y = " + offset.y);
+    println("scaled.z = " + scaled.z);
+    println("projected.w = " + projected.w);
+    println("move2.length = " + move2.length());
+    println("tex = " + tex.path);
+    println("snd = " + snd.path);
+    println("msh = " + msh.path);
+    println("shd = " + shd.path);
+    println("mat.shader = " + mat.shaderPath);
+}

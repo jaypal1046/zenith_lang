@@ -1,0 +1,232 @@
+import std.io;
+
+@library("builtin")
+foreign "C" {
+    Bool isKeyPressed(String key);
+    Float getAxis(String negativeKey, String positiveKey);
+}
+
+class CodeFirstScene() implements Scene {
+    EntityId player;
+    EntityId camera;
+    EntityId reticle;
+    EntityId playerHum;
+    EntityId listener;
+    Float elapsed = 0.0;
+
+    Void onLoad() {
+        name = "CodeFirstScene";
+        clearColor = "black";
+        fixedDeltaTime = 0.0166667;
+        autoRenderWorld2D = true;
+        drawEntityNames = false;
+        player = spawnCharacter2D("Player", "assets/player.png", 10.0, 9.0, 6.0, 3.0, "green");
+        setEntityTag(player, "hero");
+        camera = spawnCamera2D("MainCamera", 10.0, 9.0, 1.0, true);
+        reticle = spawnSprite("Reticle", 13.0, 5.0, 2.0, 1.0, "white");
+        playerHum = spawnAudioSource2D("PlayerHum", "assets/player_hum.wav", 10.0, 9.0, true);
+        listener = spawnAudioListener2D("MainListener", 10.0, 9.0, true);
+        setParent(reticle, player);
+        setParent(playerHum, player);
+        setParent(listener, camera);
+        attachBody2D(player, 1.0, 0.0, 0.2, 0.0);
+        attachCapsuleCollider2D(player, 4.2, 1.4, false);
+        attachCircleCollider2D(playerHum, 1.5, true);
+        Character2DView player_character = character2D(player);
+        AudioSource2DView hum_audio = audioSource2D(playerHum);
+        AudioListener2DView main_listener = audioListener2D(listener);
+        CapsuleCollider2DView player_hitbox = capsuleCollider2D(player);
+        CircleCollider2DView hum_trigger = circleCollider2D(playerHum);
+        player_character.moveSpeed = 20.0;
+        player_character.jumpForce = 14.0;
+        player_character.isGrounded = true;
+        player_hitbox.offsetY = 0.1;
+        player_hitbox.height = 4.4;
+        player_hitbox.radius = 1.5;
+        hum_trigger.offsetX = 0.75;
+        hum_trigger.radius = 1.25;
+        hum_audio.volume = 0.55;
+        hum_audio.pitch = 0.95;
+        hum_audio.loop = true;
+        main_listener.gain = 0.9;
+        sprite2D(player).anchorX = 0.5;
+        sprite2D(player).anchorY = 0.5;
+        sprite2D(player).sortOrder = 1;
+        camera2D(camera).viewportWidth = 1.0;
+        camera2D(camera).viewportHeight = 1.0;
+        println("Scene loaded from pure Zenith code");
+    }
+
+    Void onFrame(dt: Float) {
+        elapsed = elapsed + dt;
+        Float axis_x = getAxis("a", "d");
+        Float axis_y = getAxis("w", "s");
+
+        if (isKeyPressed("ArrowLeft")) {
+            axis_x = axis_x - 1.0;
+        }
+        if (isKeyPressed("ArrowRight")) {
+            axis_x = axis_x + 1.0;
+        }
+        if (isKeyPressed("ArrowUp")) {
+            axis_y = axis_y - 1.0;
+        }
+        if (isKeyPressed("ArrowDown")) {
+            axis_y = axis_y + 1.0;
+        }
+
+        Body2DView player_body = body2D(player);
+        Character2DView player_character = character2D(player);
+        Transform2DView player_transform = transform2D(player);
+        Transform2DView reticle_transform = transform2D(reticle);
+        Camera2DView main_camera = camera2D(camera);
+        AudioSource2DView hum_audio = audioSource2D(playerHum);
+        AudioListener2DView main_listener = audioListener2D(listener);
+
+        player_body.vx = axis_x * player_character.moveSpeed;
+        player_body.vy = axis_y * player_character.moveSpeed;
+        player_transform.rotation += axis_x * 0.05;
+        reticle_transform.x = player_transform.x + 4.0;
+        reticle_transform.y = player_transform.y - 3.0;
+        hum_audio.x = player_transform.x;
+        hum_audio.y = player_transform.y;
+        main_camera.zoom = 1.0 + (player_body.vx / 160.0);
+        main_listener.x = main_camera.x;
+        main_listener.y = main_camera.y;
+
+        if (axis_x < 0.0) {
+            player_character.facingRight = false;
+        }
+        if (axis_x > 0.0) {
+            player_character.facingRight = true;
+        }
+
+        if (axis_x < 0.0) {
+            playAudio(playerHum);
+            hum_audio.pitch = 1.05;
+        } else {
+            if (axis_x > 0.0) {
+                playAudio(playerHum);
+                hum_audio.pitch = 1.05;
+            } else {
+                if (axis_y < 0.0) {
+                    playAudio(playerHum);
+                    hum_audio.pitch = 1.05;
+                } else {
+                    if (axis_y > 0.0) {
+                        playAudio(playerHum);
+                        hum_audio.pitch = 1.05;
+                    } else {
+                        stopAudio(playerHum);
+                        hum_audio.pitch = 0.9;
+                    }
+                }
+            }
+        }
+
+        if (isKeyPressed("Space")) {
+            player_character.color = "yellow";
+        } else {
+            player_character.color = "green";
+        }
+    }
+
+    Void onFixedUpdate(dt: Float) {
+        followPrimaryCamera2D(player, 0.0, 0.0, 0.2);
+    }
+
+    Void onDraw(canvas: Canvas, alpha: Float) {
+        String title = "Zenith Scene Runtime";
+        String alpha_text = "Interpolation alpha: ";
+        alpha_text = alpha_text + alpha;
+
+        String time_text = "Elapsed: ";
+        time_text = time_text + elapsed;
+
+        Transform2DView player_transform = transform2D(player);
+        Body2DView player_body = body2D(player);
+        Character2DView player_character = character2D(player);
+        Camera2DView main_camera = camera2D(camera);
+        AudioSource2DView hum_audio = audioSource2D(playerHum);
+        AudioListener2DView main_listener = audioListener2D(listener);
+        CapsuleCollider2DView player_hitbox = capsuleCollider2D(player);
+        CircleCollider2DView hum_trigger = circleCollider2D(playerHum);
+        RaycastHit2DResult pick = raycast2D(main_camera.x - 12.0, main_camera.y, 1.0, 0.0, 24.0);
+
+        String position_text = "Player X: ";
+        position_text = position_text + player_transform.x;
+        position_text = position_text + ", Y: ";
+        position_text = position_text + player_transform.y;
+
+        String velocity_text = "Velocity X: ";
+        velocity_text = velocity_text + player_body.vx;
+        velocity_text = velocity_text + ", Y: ";
+        velocity_text = velocity_text + player_body.vy;
+
+        String tag_text = "Tag: ";
+        tag_text = tag_text + entityTag(player);
+
+        String texture_text = "Texture: ";
+        texture_text = texture_text + player_character.texturePath;
+
+        String child_text = "Children: ";
+        child_text = child_text + childCount(player);
+
+        String move_text = "Move Speed / Facing: ";
+        move_text = move_text + player_character.moveSpeed;
+        move_text = move_text + " / ";
+        move_text = move_text + player_character.facingRight;
+
+        String audio_text = "Audio Clip / Playing: ";
+        audio_text = audio_text + hum_audio.clipPath;
+        audio_text = audio_text + " / ";
+        audio_text = audio_text + hum_audio.isPlaying;
+
+        String listener_text = "Listener Gain / Primary: ";
+        listener_text = listener_text + main_listener.gain;
+        listener_text = listener_text + " / ";
+        listener_text = listener_text + main_listener.primary;
+
+        String zoom_text = "Camera Zoom: ";
+        zoom_text = zoom_text + main_camera.zoom;
+
+        String collider_text = "Capsule / Trigger: ";
+        collider_text = collider_text + player_hitbox.height;
+        collider_text = collider_text + " x ";
+        collider_text = collider_text + player_hitbox.radius;
+        collider_text = collider_text + " / ";
+        collider_text = collider_text + hum_trigger.radius;
+
+        String overlap_text = "Overlap / Contains: ";
+        overlap_text = overlap_text + overlaps2D(player, playerHum);
+        overlap_text = overlap_text + " / ";
+        overlap_text = overlap_text + containsPoint2D(player, player_transform.x, player_transform.y);
+
+        String ray_text = "Ray Hit / Distance: ";
+        ray_text = ray_text + pick.hit;
+        ray_text = ray_text + " / ";
+        ray_text = ray_text + pick.distance;
+
+        canvas.drawText(title, 2.0, 1.0, "yellow");
+        canvas.drawText(alpha_text, 2.0, 3.0, "cyan");
+        canvas.drawText(time_text, 2.0, 5.0, "white");
+        canvas.drawText(position_text, 2.0, 7.0, "green");
+        canvas.drawText(velocity_text, 2.0, 9.0, "magenta");
+        canvas.drawText(tag_text, 2.0, 11.0, "white");
+        canvas.drawText(texture_text, 2.0, 13.0, "cyan");
+        canvas.drawText(child_text, 2.0, 15.0, "yellow");
+        canvas.drawText(move_text, 2.0, 17.0, "green");
+        canvas.drawText(audio_text, 2.0, 19.0, "cyan");
+        canvas.drawText(listener_text, 2.0, 21.0, "yellow");
+        canvas.drawText(zoom_text, 2.0, 23.0, "green");
+        canvas.drawText(collider_text, 2.0, 25.0, "magenta");
+        canvas.drawText(overlap_text, 2.0, 27.0, "white");
+        canvas.drawText(ray_text, 2.0, 29.0, "cyan");
+        canvas.drawText("Move with WASD or arrows. Space flashes yellow.", 2.0, 32.0, "white");
+    }
+}
+
+Void main() {
+    CodeFirstScene scene = CodeFirstScene();
+    scene.run();
+}

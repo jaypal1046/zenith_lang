@@ -1,0 +1,528 @@
+import std.io;
+
+@library("builtin")
+foreign "C" {
+    Bool isKeyPressed(String key);
+    Bool wasKeyPressed(String key);
+    Float getAxis(String negativeKey, String positiveKey);
+}
+
+class PlayableSliceScene() implements Scene {
+    EntityId arena;
+    EntityId player;
+    EntityId camera;
+    EntityId listener;
+    EntityId humAudio;
+    EntityId pickupAudio;
+    EntityId exitGate;
+    EntityId battery;
+    EntityId wallNorth;
+    EntityId wallSouth;
+    EntityId wallWest;
+    EntityId wallEast;
+    EntityId blockA;
+    EntityId blockB;
+
+    Float startX = 8.0;
+    Float startY = 8.0;
+    Float playerSpeed = 18.0;
+    Float moveX = 0.0;
+    Float moveY = 0.0;
+    Float lookX = 1.0;
+    Float lookY = 0.0;
+    Float elapsed = 0.0;
+    Float fixedElapsed = 0.0;
+
+    Bool batteryCollected = false;
+    Bool exitUnlocked = false;
+    Bool victory = false;
+
+    Int inspectSlot = 0;
+    String inspectorStatus = "player";
+    String status = "Collect the battery, then reach the exit.";
+    String collisionStatus = "Idle";
+
+    EntityId spawnWallEntity(name: String, x: Float, y: Float, w: Float, h: Float, color: String) {
+        EntityId wall = spawnSprite(name, x, y, w, h, color);
+        attachBoxCollider2D(wall, w, h, false);
+        setEntityLayerMask(wall, 1, 2);
+        sprite2D(wall).sortOrder = 2;
+        return wall;
+    }
+
+    Void configureArenaTiles() {
+        fillTilemap(arena, 1);
+        setTilemapPaletteColor(arena, 1, "#122033");
+        setTilemapPaletteColor(arena, 2, "#17344f");
+        setTilemapPaletteColor(arena, 3, "#214d24");
+
+        Int col = 0;
+        while (col < 16) {
+            setTilemapCell(arena, col, 1, 2);
+            if (col > 8) {
+                setTilemapCell(arena, col, 2, 2);
+            }
+            col = col + 1;
+        }
+
+        setTilemapCell(arena, 13, 1, 3);
+        setTilemapCell(arena, 14, 1, 3);
+        setTilemapCell(arena, 13, 2, 3);
+        setTilemapCell(arena, 14, 2, 3);
+        setTilemapCell(arena, 7, 5, 2);
+        setTilemapCell(arena, 8, 5, 2);
+        setTilemapCell(arena, 9, 5, 2);
+        setTilemapCell(arena, 11, 8, 2);
+        setTilemapCell(arena, 12, 8, 2);
+
+        Tilemap2DView arenaView = tilemap2D(arena);
+        arenaView.sortOrder = -8;
+    }
+
+    Void resetRound() {
+        Body2DView playerBody = body2D(player);
+        Character2DView playerCharacter = character2D(player);
+        Sprite2DView exitSprite = sprite2D(exitGate);
+        Sprite2DView batterySprite = sprite2D(battery);
+        CircleCollider2DView batteryTrigger = circleCollider2D(battery);
+        AudioSource2DView hum = audioSource2D(humAudio);
+        AudioSource2DView pickup = audioSource2D(pickupAudio);
+
+        playerBody.x = startX;
+        playerBody.y = startY;
+        playerBody.vx = 0.0;
+        playerBody.vy = 0.0;
+        playerCharacter.color = "#8ef9f3";
+        playerCharacter.facingRight = true;
+
+        hum.x = startX;
+        hum.y = startY;
+        hum.loop = true;
+        hum.volume = 0.55;
+        hum.pitch = 0.95;
+
+        pickup.x = startX;
+        pickup.y = startY;
+        pickup.volume = 0.9;
+
+        batteryCollected = false;
+        exitUnlocked = false;
+        victory = false;
+        moveX = 0.0;
+        moveY = 0.0;
+        lookX = 1.0;
+        lookY = 0.0;
+        collisionStatus = "Idle";
+        status = "Collect the battery, then reach the exit.";
+
+        batterySprite.visible = true;
+        batteryTrigger.enabled = true;
+        exitSprite.color = "#ffb347";
+
+        inspectSlot = 0;
+        inspectorStatus = "player";
+        inspectEntity(player);
+
+        stopAudio(humAudio);
+        stopAudio(pickupAudio);
+    }
+
+    Void cycleInspectorTarget() {
+        inspectSlot = inspectSlot + 1;
+        if (inspectSlot > 2) {
+            inspectSlot = 0;
+        }
+
+        if (inspectSlot == 0) {
+            inspectEntity(player);
+            inspectorStatus = "player";
+        } else {
+            if (inspectSlot == 1) {
+                inspectEntity(battery);
+                inspectorStatus = "battery";
+            } else {
+                inspectEntity(exitGate);
+                inspectorStatus = "exit";
+            }
+        }
+    }
+
+    Bool playerTouchesSolid() {
+        if (overlaps2D(player, wallNorth)) {
+            return true;
+        }
+        if (overlaps2D(player, wallSouth)) {
+            return true;
+        }
+        if (overlaps2D(player, wallWest)) {
+            return true;
+        }
+        if (overlaps2D(player, wallEast)) {
+            return true;
+        }
+        if (overlaps2D(player, blockA)) {
+            return true;
+        }
+        if (overlaps2D(player, blockB)) {
+            return true;
+        }
+        return false;
+    }
+
+    Void movePlayerBy(deltaX: Float, deltaY: Float) {
+        Body2DView playerBody = body2D(player);
+        Float originalX = playerBody.x;
+        Float originalY = playerBody.y;
+
+        collisionStatus = "Clear";
+
+        if (deltaX != 0.0) {
+            playerBody.x = originalX + deltaX;
+            if (playerTouchesSolid()) {
+                playerBody.x = originalX;
+                collisionStatus = "Blocked X";
+            }
+        }
+
+        if (deltaY != 0.0) {
+            playerBody.y = originalY + deltaY;
+            if (playerTouchesSolid()) {
+                playerBody.y = originalY;
+                if (collisionStatus == "Blocked X") {
+                    collisionStatus = "Corner";
+                } else {
+                    collisionStatus = "Blocked Y";
+                }
+            }
+        }
+
+        if (deltaX == 0.0) {
+            if (deltaY == 0.0) {
+                collisionStatus = "Idle";
+            }
+        }
+    }
+
+    Void updateObjectiveState() {
+        if (batteryCollected == false) {
+            if (overlaps2D(player, battery)) {
+                batteryCollected = true;
+                exitUnlocked = true;
+                sprite2D(battery).visible = false;
+                circleCollider2D(battery).enabled = false;
+                sprite2D(exitGate).color = "#7cff6b";
+                status = "Battery secured. Reach the exit.";
+
+                Body2DView playerBody = body2D(player);
+                AudioSource2DView pickup = audioSource2D(pickupAudio);
+                pickup.x = playerBody.x;
+                pickup.y = playerBody.y;
+                playAudio(pickupAudio);
+            }
+        }
+
+        if (overlaps2D(player, exitGate)) {
+            if (exitUnlocked) {
+                if (victory == false) {
+                    victory = true;
+                    status = "Exit reached. Press R to restart.";
+                    character2D(player).color = "#ffffff";
+                    stopAudio(humAudio);
+                }
+            } else {
+                status = "Exit locked. Collect the battery first.";
+            }
+        }
+    }
+
+    Void normalizeMoveInput() {
+        if (moveX != 0.0) {
+            if (moveY != 0.0) {
+                moveX = moveX * 0.7071;
+                moveY = moveY * 0.7071;
+            }
+        }
+    }
+
+    Void onLoad() {
+        name = "PlayableSliceScene";
+        clearColor = "#08121d";
+        fixedDeltaTime = 0.0166667;
+        autoRenderWorld2D = true;
+        autoSimulatePhysics = false;
+        drawEntityNames = false;
+        debugDrawGrid2D = true;
+        debugDrawColliders2D = true;
+        debugDrawTransforms2D = true;
+        debugDrawCameraBounds2D = true;
+        debugDrawRuntimeStats = true;
+        debugGridCellWidth = 4.0;
+        debugGridCellHeight = 4.0;
+        debugOverlayColor = "#7de2ff";
+        debugOverlayEnabled = true;
+        minimalInspectorEnabled = true;
+
+        TextureHandleView playerTexture = loadTexture("assets/game_sdk/player_runner.png");
+        TextureHandleView exitTexture = loadTexture("assets/game_sdk/exit_gate.png");
+        TextureHandleView batteryTexture = loadTexture("assets/game_sdk/battery_cell.png");
+        AudioHandleView humClip = loadAudio("assets/game_sdk/runner_loop.wav", false);
+        AudioHandleView pickupClip = loadAudio("assets/game_sdk/battery_pickup.wav", false);
+
+        createAssetBundle("playable_slice");
+        addAssetToBundle("playable_slice", playerTexture.path);
+        addAssetToBundle("playable_slice", exitTexture.path);
+        addAssetToBundle("playable_slice", batteryTexture.path);
+        addAssetToBundle("playable_slice", humClip.path);
+        addAssetToBundle("playable_slice", pickupClip.path);
+        setAssetMemoryBudget("texture", 524288);
+        setAssetMemoryBudget("audio", 262144);
+        setAssetHotReload(true);
+
+        arena = spawnTilemap2D("Arena", 0.0, 0.0, 16, 12, 4.0, 4.0, "#122033");
+        configureArenaTiles();
+
+        wallNorth = spawnWallEntity("WallNorth", 32.0, 2.0, 64.0, 4.0, "#314b63");
+        wallSouth = spawnWallEntity("WallSouth", 32.0, 46.0, 64.0, 4.0, "#314b63");
+        wallWest = spawnWallEntity("WallWest", 2.0, 24.0, 4.0, 48.0, "#314b63");
+        wallEast = spawnWallEntity("WallEast", 62.0, 24.0, 4.0, 48.0, "#314b63");
+        blockA = spawnWallEntity("BlockA", 28.0, 24.0, 8.0, 12.0, "#35506a");
+        blockB = spawnWallEntity("BlockB", 46.0, 32.0, 12.0, 8.0, "#35506a");
+
+        player = spawnCharacter2D("Runner", "", startX, startY, 4.0, 4.0, "#8ef9f3");
+        character2D(player).texture = playerTexture;
+        character2D(player).moveSpeed = playerSpeed;
+        attachCapsuleCollider2D(player, 5.0, 1.5, false);
+        setEntityTag(player, "player");
+        setEntityLayerMask(player, 2, 5);
+        body2D(player).gravityScale = 0.0;
+        body2D(player).friction = 0.0;
+        sprite2D(player).sortOrder = 4;
+
+        exitGate = spawnSprite("ExitGate", 56.0, 8.0, 6.0, 6.0, "#ffb347");
+        sprite2D(exitGate).texture = exitTexture;
+        sprite2D(exitGate).sortOrder = 3;
+        attachBoxCollider2D(exitGate, 6.0, 6.0, true);
+        setEntityTag(exitGate, "goal");
+        setEntityLayerMask(exitGate, 4, 2);
+
+        battery = spawnSprite("BatteryCell", 30.0, 8.0, 4.0, 4.0, "#ffe066");
+        sprite2D(battery).texture = batteryTexture;
+        sprite2D(battery).sortOrder = 3;
+        attachCircleCollider2D(battery, 2.5, true);
+        setEntityTag(battery, "pickup");
+        setEntityLayerMask(battery, 4, 2);
+
+        camera = spawnCamera2D("ArenaCamera", startX, startY, 1.0, true);
+        listener = spawnAudioListener2D("ArenaListener", startX, startY, true);
+        humAudio = spawnAudioSource2D("RunnerHum", "", startX, startY, false);
+        pickupAudio = spawnAudioSource2D("PickupChime", "", startX, startY, false);
+
+        audioSource2D(humAudio).clip = humClip;
+        audioSource2D(pickupAudio).clip = pickupClip;
+        audioListener2D(listener).gain = 0.95;
+
+        inspectEntity(player);
+        resetRound();
+    }
+
+    Void onFrame(dt: Float) {
+        elapsed = elapsed + dt;
+
+        if (wasKeyPressed("R")) {
+            resetRound();
+        }
+
+        if (wasKeyPressed("Space")) {
+            if (debugOverlayEnabled) {
+                debugOverlayEnabled = false;
+            } else {
+                debugOverlayEnabled = true;
+            }
+        }
+
+        if (wasKeyPressed("Tab")) {
+            cycleInspectorTarget();
+        }
+
+        moveX = getAxis("a", "d");
+        moveY = getAxis("w", "s");
+
+        if (isKeyPressed("ArrowLeft")) {
+            moveX = moveX - 1.0;
+        }
+        if (isKeyPressed("ArrowRight")) {
+            moveX = moveX + 1.0;
+        }
+        if (isKeyPressed("ArrowUp")) {
+            moveY = moveY - 1.0;
+        }
+        if (isKeyPressed("ArrowDown")) {
+            moveY = moveY + 1.0;
+        }
+
+        if (victory) {
+            moveX = 0.0;
+            moveY = 0.0;
+        }
+
+        normalizeMoveInput();
+
+        if (moveX != 0.0) {
+            lookX = moveX;
+            lookY = moveY;
+            if (victory == false) {
+                playAudio(humAudio);
+            }
+        } else {
+            if (moveY != 0.0) {
+                lookX = moveX;
+                lookY = moveY;
+                if (victory == false) {
+                    playAudio(humAudio);
+                }
+            } else {
+                stopAudio(humAudio);
+            }
+        }
+
+        Body2DView playerBody = body2D(player);
+        AudioSource2DView hum = audioSource2D(humAudio);
+        hum.x = playerBody.x;
+        hum.y = playerBody.y;
+
+        Camera2DView mainCamera = camera2D(camera);
+        AudioListener2DView mainListener = audioListener2D(listener);
+        mainListener.x = mainCamera.x;
+        mainListener.y = mainCamera.y;
+
+        if (exitUnlocked) {
+            mainCamera.zoom = 1.05;
+        } else {
+            mainCamera.zoom = 1.0;
+        }
+    }
+
+    Void onFixedUpdate(dt: Float) {
+        fixedElapsed = fixedElapsed + dt;
+
+        Body2DView playerBody = body2D(player);
+        Float desiredVx = 0.0;
+        Float desiredVy = 0.0;
+
+        if (victory == false) {
+            desiredVx = moveX * playerSpeed;
+            desiredVy = moveY * playerSpeed;
+        }
+
+        playerBody.vx = desiredVx;
+        playerBody.vy = desiredVy;
+
+        movePlayerBy(desiredVx * dt, 0.0);
+        movePlayerBy(0.0, desiredVy * dt);
+        updateObjectiveState();
+        followPrimaryCamera2D(player, 0.0, 0.0, 0.18);
+    }
+
+    Void onDraw(canvas: Canvas, alpha: Float) {
+        Body2DView playerBody = body2D(player);
+        Camera2DView mainCamera = camera2D(camera);
+        RaycastHit2DResult lookHit = raycast2DMask(playerBody.x, playerBody.y, lookX, lookY, 18.0, 1);
+
+        String hitName = "none";
+        if (lookHit.hit) {
+            hitName = entityName(lookHit.entity);
+        }
+
+        String title = "Zenith Playable Slice";
+        String statusText = "Status: ";
+        statusText = statusText + status;
+
+        String positionText = "Player: ";
+        positionText = positionText + playerBody.x;
+        positionText = positionText + ", ";
+        positionText = positionText + playerBody.y;
+
+        String velocityText = "Velocity: ";
+        velocityText = velocityText + playerBody.vx;
+        velocityText = velocityText + ", ";
+        velocityText = velocityText + playerBody.vy;
+
+        String objectiveText = "Battery / Exit / Win: ";
+        objectiveText = objectiveText + batteryCollected;
+        objectiveText = objectiveText + " / ";
+        objectiveText = objectiveText + exitUnlocked;
+        objectiveText = objectiveText + " / ";
+        objectiveText = objectiveText + victory;
+
+        String collisionText = "Collision: ";
+        collisionText = collisionText + collisionStatus;
+
+        String rayText = "Ray Hit: ";
+        rayText = rayText + hitName;
+        rayText = rayText + " @ ";
+        rayText = rayText + lookHit.distance;
+
+        String inspectorText = "Inspector Target: ";
+        inspectorText = inspectorText + inspectorStatus;
+
+        String assetText = "Bundle Assets / Hot Reload: ";
+        assetText = assetText + assetBundleAssetCount("playable_slice");
+        assetText = assetText + " / ";
+        assetText = assetText + assetHotReloadEnabled();
+
+        String memoryText = "Texture Memory: ";
+        memoryText = memoryText + assetMemoryUsage("texture");
+        memoryText = memoryText + " / ";
+        memoryText = memoryText + assetMemoryBudget("texture");
+
+        String timingText = "Elapsed / Fixed / Alpha: ";
+        timingText = timingText + elapsed;
+        timingText = timingText + " / ";
+        timingText = timingText + fixedElapsed;
+        timingText = timingText + " / ";
+        timingText = timingText + alpha;
+
+        String cameraText = "Camera / Interact: ";
+        cameraText = cameraText + mainCamera.x;
+        cameraText = cameraText + ", ";
+        cameraText = cameraText + mainCamera.y;
+        cameraText = cameraText + " / ";
+        cameraText = cameraText + canEntitiesInteract(player, exitGate);
+
+        canvas.drawText(title, 2.0, 1.0, "yellow");
+        canvas.drawText(statusText, 2.0, 3.0, "white");
+        canvas.drawText(positionText, 2.0, 5.0, "#8ef9f3");
+        canvas.drawText(velocityText, 2.0, 7.0, "#7de2ff");
+        canvas.drawText(objectiveText, 2.0, 9.0, "#ffe066");
+        canvas.drawText(collisionText, 2.0, 11.0, "#ff8fab");
+        canvas.drawText(rayText, 2.0, 13.0, "#c4b5fd");
+        canvas.drawText(inspectorText, 2.0, 15.0, "#ffd6a5");
+        canvas.drawText(assetText, 2.0, 17.0, "#b8f2e6");
+        canvas.drawText(memoryText, 2.0, 19.0, "#bde0fe");
+        canvas.drawText(timingText, 2.0, 21.0, "#ffffff");
+        canvas.drawText(cameraText, 2.0, 23.0, "#9bf6ff");
+        canvas.drawText("WASD/Arrows move. Space toggles debug. Tab cycles inspector. R resets.", 2.0, 26.0, "white");
+
+        canvas.drawLine(
+            playerBody.x,
+            playerBody.y,
+            playerBody.x + (lookX * 6.0),
+            playerBody.y + (lookY * 6.0),
+            "white");
+
+        if (lookHit.hit) {
+            canvas.drawPoint(lookHit.pointX, lookHit.pointY, "#ff6b6b");
+        }
+
+        if (!batteryCollected) {
+            canvas.drawCircleOutline(transform2D(battery).x, transform2D(battery).y, 3.0, "#ffe066");
+        }
+
+        canvas.drawFrameRect(transform2D(exitGate).x - 3.0, transform2D(exitGate).y - 3.0, 6.0, 6.0, sprite2D(exitGate).color);
+    }
+}
+
+Void main() {
+    PlayableSliceScene scene = PlayableSliceScene();
+    scene.run();
+}

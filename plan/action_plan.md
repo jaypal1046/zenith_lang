@@ -1,93 +1,262 @@
-# Zenith Compiler Action Plan
+# Zenith Action Plan
 
-This document outlines the roadmap for the next development phases of the **Zenith** programming language and compilation toolchain.
+Last updated: July 23, 2026
 
----
+This is the execution roadmap for Zenith after the game-first repo pivot. The purpose of this document is to keep day-to-day development aligned with the main direction in `plan/game_sdk_pivot.md`.
 
-## Current Status
-* **Core Language:** Turing-complete syntax, Kotlin-style primary constructors, and Dart-style UI tree composition.
-* **Compiler Pipeline:** Decoupled lexer, recursive-descent AST parser, transpiler mapping directly to standalone C++17.
-* **Static Type System:** Compile-time validation of prompt templates, variable assignment constraints, constructor signatures, and list container generics.
-* **Agentic Runtime:** Self-contained WinHTTP-based client querying local LLM providers (Ollama) with automatic simulated fallback.
-* **Layout Engine:** Recursive flex-box layout engine computing exact absolute bounding boxes (`x`, `y`, `width`, `height`) for nested `Column` and `Row` elements.
+## Main Identity
 
----
+Zenith is a game SDK and language first.
 
-## Phase 1: Diagnostics and Multi-File Support (COMPLETED)
-* **Status:** Fully implemented.
-  * **1.1 Error Location Reporting:** Token tracks line/col, syntax errors, and semantic errors report precise diagnostics.
-  * **1.2 Multi-File Compiling and Imports:** Added inlining of `.zen` modules recursively, supporting multi-file codebases.
+The core of the project is:
 
----
+- language frontend and static analysis
+- native-first code generation
+- explicit scene/entity/runtime APIs
+- 2D and 3D gameplay systems
+- typed resources and asset workflow
+- fast developer iteration through watch/dev/hot-reload loops
 
-## Phase 2: OOP Extensions and Reactive State (COMPLETED)
-* **Status:** Fully implemented.
-  * **2.1 Interface & Inheritance Checks:** Interfaces are fully parsed, validated for signature completion, tested via polymorphic assignee checks (`isAssignable`), and compiled with virtual/pure-virtual functions.
-  * **2.2 Reactive State Binding (`setState`):** Transpiled to automatic re-evaluation of layout rendering blocks when bound state changes.
+The following are no longer main roadmap drivers:
 
----
+- app-framework positioning
+- web-framework positioning
+- UI/widget-first language messaging
+- SSR/site-oriented product storytelling
+- low-code or no-code workflow goals
 
-## Phase 3: Graphics Rendering, Web Targets, and Android Native (COMPLETED)
+Web, app-shell, and UI-oriented surfaces can remain in the repo, but they should be treated as optional or compatibility lanes unless they directly support the game SDK direction.
 
-### 3.1 Terminal Frame Buffer Renderer (COMPLETED)
-* **Goal:** Draw actual boxes and text inside the terminal window using computed layout coordinates.
-* **Action Items:**
-  * Create a 2D text buffer grid in C++ (implemented using character-style grid separating styles from symbols).
-  * Map layout boxes to grid coordinates and draw double-line borders (`┌`, `─`, `┐`, `│`) for `Column` and `Row` bounds.
-  * Applied semantic ANSI escape color palettes for high-fidelity interactive terminal display.
+## Current Baseline
 
-### 3.2 Target-Specific Web Generation (WASM/JS) (COMPLETED)
-* **Goal:** Target web platforms by generating JavaScript or WebAssembly.
-* **Action Items:**
-  * Implement an alternative code generator backend (`WASMCodeGenerator` and `JSCodeGenerator`).
-  * Compile Zenith UI components directly to HTML DOM nodes.
-  * Implement split-screen interactive logs and live reactivity showcase.
+Already present in the repo:
 
-### 3.3 Android Native C++ Target (COMPLETED)
-* **Goal:** Cross-compile and run native Zenith apps directly on Android via NDK.
-* **Action Items:**
-  * Refactored Agentic Runtime to conditionally compile using POSIX sockets (`posix_post`) on Linux/Android.
-  * Automated toolchain selection, ABI detection, compilation, deployment, and execution via `build_android.bat`.
+- compiler frontend with lexer, parser, semantic analysis, and formatter
+- native, JS, and WASM code generators
+- game runtime headers under `include/zenith/game/`
+- scene, physics, resource, material-property, and productivity-layer work
+- profile-aware compile/dev/watch flow
+- typed language-side math and compile-time asset references
 
----
+What still needs the most attention:
 
-## Phase 4: Production Runtime, Keyboard Interaction, and Real Networking (COMPLETED)
-* **Status:** Fully implemented.
-  * **4.1 Cross-Platform Network Runtime:** Integrated `libcurl` conditionally (alongside `WinHTTP` on Windows desktop and custom socket channels on Android) with robust JSON parser logic.
-  * **4.2 Interactive Terminal Loop:** Added collection of clickables, keyboard callback selection loops, reactive state re-renders, and TTY validation.
-  * **4.3 Styling Attributes Compilation:** Integrated properties (`color`, `fontWeight`, `padding`) into both the C++ terminal renderer and the web CSS outputs.
+- cleaning up helper-style runtime paths into more direct data-oriented structures
+- expanding the gameplay runtime until a small playable slice feels natural
+- keeping docs and examples centered on gameplay instead of apps/widgets
 
----
+## Active Priorities
 
-## Phase 5: Production Tooling, Type System, and Standard Library (ROADMAP)
+### Priority 1: Language and Runtime Core
 
-### 5.1 Advanced Type Inference & Generics
-* **Goal:** Extend validation capabilities of the compiler frontend and allow type-safe expressions with minimal boilerplate.
-* **Action Items:**
-  - Implement Hindley-Milner / constraint-based type inference to allow developers to omit type definitions where possible.
-  - Implement templates/generics for standard container collections (e.g. `List<T>`, `Map<K, V>`).
+Goal: make Zenith feel like a real gameplay language, not a syntax layer over helper APIs.
 
-### 5.2 Yoga & CSS Flexbox Layout Engine Integration
-* **Goal:** Adopt physical flexbox alignment and responsive coordinates on native and web platforms.
-* **Action Items:**
-  - Link the C-based Yoga layout engine into the C++ runtime for native targets.
-  - Expose comprehensive padding, margins, flex-grow, flex-direction, and alignment properties in the Zenith AST.
-  - Standardize CSS Flexbox mapping on web targets to align with Yoga's rendering outputs.
+Focus:
 
-### 5.3 Rich Component Library
-* **Goal:** Provide a comprehensive set of widgets for rich client user interfaces.
-* **Action Items:**
-  - Standardize native rendering and web mapping for `Image` and `Video` components.
-  - Implement `Scrolling` (scroll view container) components with dynamic boundary constraints.
-  - Add standard user input fields (text inputs, checkboxes, forms) with interactive state callbacks.
+- first-class math/value types
+- typed resource handles
+- compile-time asset references
+- explicit scene and component interaction
+- direct property access in code
 
-### 5.4 Developer Tooling (LSP & DAP)
-* **Goal:** Build rich IDE development support for modern editors.
-* **Action Items:**
-  - Build a Language Server Protocol (LSP) implementation for auto-completions, syntax highlighting, diagnostics, and jump-to-definition.
-  - Build a Debug Adapter Protocol (DAP) layer to support standard step-by-step debugger engines.
+Success looks like:
 
-### 5.5 Centralized Package Registry
-* **Goal:** Enable an ecosystem of reusable modular code.
-* **Action Items:**
-  - Create a CLI registry client (similar to cargo/npm) to retrieve, resolve, and link third-party modules.
+- common gameplay code reads clearly without engine magic
+- runtime-heavy code avoids string lookups in hot paths
+- both native and web targets preserve the same language meaning for core value types
+
+### Priority 2: World and Data Model
+
+Goal: push the runtime toward a stronger shared 2D/3D world model.
+
+Focus:
+
+- entity IDs and hierarchy
+- layer and mask rules
+- scene streaming
+- prefab/archetype instancing
+- better ECS/data-oriented storage cleanup
+
+Success looks like:
+
+- 2D and 3D systems share vocabulary and lifecycle
+- runtime state is inspectable from code without editor-only assumptions
+- hot component paths become less helper-driven and more direct
+
+### Priority 3: Simulation and Character Work
+
+Goal: make gameplay movement and collision feel trustworthy.
+
+Focus:
+
+- stronger 2D and 3D body behavior
+- capsule/box/sphere collider coverage
+- overlap and ray query APIs
+- full character-controller work, especially 3D movement/collision quality
+
+Success looks like:
+
+- a small sample game can move, collide, jump, and query the world using only code-first APIs
+- player control does not depend on UI tooling or hidden setup
+
+### Priority 4: Rendering and Visualization
+
+Goal: support practical gameplay rendering without losing the code-first shape.
+
+Focus:
+
+- sprites
+- tilemaps
+- mesh rendering
+- materials and shaders
+- debug draw
+- broader runtime visualization tools
+
+Success looks like:
+
+- 2D and 3D samples can render meaningful gameplay state
+- runtime debug information is available without requiring a heavyweight editor
+
+### Priority 5: Asset Pipeline and Memory Discipline
+
+Goal: treat resources as first-class runtime systems.
+
+Focus:
+
+- import commands and metadata baking
+- bundle/group workflow
+- hot reload
+- memory budgets
+- typed material/resource properties
+
+Success looks like:
+
+- assets are addressable from code through stable handles
+- build-time asset validation catches obvious mistakes early
+- development reload loops are fast and visible
+
+### Priority 6: Productivity Layer
+
+Goal: make Zenith pleasant without becoming tool-owned.
+
+Focus:
+
+- CLI game scaffolding
+- gameplay test harness
+- optional debug overlay
+- optional minimal inspector
+- dev/watch flow
+
+Success looks like:
+
+- tooling saves time but is never required to understand the project
+- the runtime still makes sense when used only from source code
+
+## Optional and Secondary Work
+
+These areas should stay behind the core gameplay/runtime lanes:
+
+- DOM/web generation as headline marketing
+- app-style widget systems as main language examples
+- SSR/server-style demos
+- app/demo shells that are not needed for gameplay runtime validation
+
+Allowed work in these areas:
+
+- compatibility fixes
+- regression prevention
+- optional target maintenance
+- isolated experiments that do not drive the language identity
+
+Not recommended:
+
+- expanding the main README around widgets or app UX
+- making web/app demos the canonical examples for Zenith
+- building new roadmap phases around app-shell breadth before gameplay depth
+
+## Immediate Execution Plan
+
+### Phase 1: Repo Narrative Cleanup
+
+Goal: make the repo say what the product is.
+
+Tasks:
+
+- keep the README game-first
+- keep roadmap docs aligned with the pivot
+- move app/web/UI-first messaging into clearly secondary sections
+- prefer gameplay/runtime examples over widget examples
+
+Deliverable:
+
+- top-level docs consistently describe Zenith as a game SDK and language
+
+### Phase 2: Minimal Playable Slice
+
+Goal: prove the current runtime shape with a real game loop.
+
+Tasks:
+
+- one small playable sample
+- scene setup through code
+- movement and collision
+- resource loading
+- camera behavior
+- debug visibility
+
+Deliverable:
+
+- a small game sample that uses only code-first gameplay APIs
+
+### Phase 3: Runtime Hardening
+
+Goal: reduce fragility and improve performance.
+
+Tasks:
+
+- typed handle propagation in hot paths
+- ECS/data-oriented cleanup
+- fewer helper-only indirection layers
+- more consistent 2D/3D API surface
+
+Deliverable:
+
+- cleaner runtime ownership and more predictable gameplay update paths
+
+### Phase 4: Tooling Polish
+
+Goal: improve iteration speed without shifting ownership away from code.
+
+Tasks:
+
+- stronger dev/watch workflows
+- asset-db integration
+- better gameplay test ergonomics
+- optional runtime inspection tools
+
+Deliverable:
+
+- fast iteration tooling that helps, but does not define, the engine
+
+## Decision Rules
+
+When choosing between tasks, prefer the one that:
+
+1. improves the code-first gameplay/runtime path
+2. strengthens shared 2D/3D concepts
+3. reduces hidden behavior
+4. improves resource or performance visibility
+5. keeps tooling optional
+
+Defer work that primarily:
+
+1. improves app-shell polish
+2. makes widget syntax a larger part of the identity
+3. adds web/app breadth without improving the gameplay core
+
+## Short Version
+
+Build the language and runtime around games.
+
+Keep scenes, characters, cameras, physics, rendering, and resources explicit in code.
+
+Let tooling reduce friction, but never let tooling become the source of truth.

@@ -20,6 +20,139 @@ static std::string cppIdentifier(const std::string& identifier) {
     return reserved.count(identifier) ? identifier + "_zen" : identifier;
 }
 
+static std::string mapBuiltinInterfaceBase(const std::string& interface_name) {
+    if (interface_name == "Scene") {
+        return "zenith::game::Scene";
+    }
+    return interface_name;
+}
+
+static bool classImplementsInterface(const ClassDeclNode* node, const std::string& interface_name) {
+    for (const auto& implemented : node->implemented_interfaces) {
+        if (implemented == interface_name) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool isMathConstructorName(const std::string& name) {
+    return name == "Vec2" || name == "Vec3" || name == "Vec4" || name == "Mat4";
+}
+
+static bool isCompileTimeAssetConstructorName(const std::string& name) {
+    return name == "texture" || name == "audio" || name == "mesh" || name == "shader" || name == "material";
+}
+
+static std::string compileTimeAssetConstructorType(const std::string& name) {
+    if (name == "texture") return "TextureHandleView";
+    if (name == "audio") return "AudioHandleView";
+    if (name == "mesh") return "MeshHandleView";
+    if (name == "shader") return "ShaderHandleView";
+    if (name == "material") return "MaterialHandleView";
+    return "";
+}
+
+static bool isNumericTypeName(const std::string& type_name) {
+    return type_name == "Int" || type_name == "Float";
+}
+
+static bool isVectorTypeName(const std::string& type_name) {
+    return type_name == "Vec2" || type_name == "Vec3" || type_name == "Vec4";
+}
+
+static bool isMatrixTypeName(const std::string& type_name) {
+    return type_name == "Mat4";
+}
+
+static bool isMathValueTypeName(const std::string& type_name) {
+    return isVectorTypeName(type_name) || isMatrixTypeName(type_name);
+}
+
+static std::string inferMathBinaryResult(const std::string& left_type, const std::string& op, const std::string& right_type) {
+    if (op == "+" || op == "-") {
+        if (left_type == right_type && isMathValueTypeName(left_type)) {
+            return left_type;
+        }
+        return "";
+    }
+
+    if (op == "*") {
+        if (isVectorTypeName(left_type) && isNumericTypeName(right_type)) return left_type;
+        if (isNumericTypeName(left_type) && isVectorTypeName(right_type)) return right_type;
+        if (left_type == "Mat4" && right_type == "Mat4") return "Mat4";
+        if (left_type == "Mat4" && right_type == "Vec4") return "Vec4";
+        if (left_type == "Mat4" && isNumericTypeName(right_type)) return "Mat4";
+        return "";
+    }
+
+    if (op == "/") {
+        if (isVectorTypeName(left_type) && isNumericTypeName(right_type)) return left_type;
+        if (left_type == "Mat4" && isNumericTypeName(right_type)) return "Mat4";
+        return "";
+    }
+
+    return "";
+}
+
+static std::string inferGeneratedExpressionType(const ExprNode* expr) {
+    if (!expr) return "";
+    if (auto* id = dynamic_cast<const IdentifierNode*>(expr)) return id->type_hint;
+    if (auto* str = dynamic_cast<const StringLiteralNode*>(expr)) return "String";
+    if (auto* num = dynamic_cast<const NumberLiteralNode*>(expr)) return num->is_float ? "Float" : "Int";
+    if (dynamic_cast<const BoolLiteralNode*>(expr)) return "Bool";
+    if (auto* list = dynamic_cast<const ListLiteralNode*>(expr)) return list->elements.empty() ? "List<Void>" : "List";
+    if (auto* map = dynamic_cast<const MapLiteralNode*>(expr)) return map->entries.empty() ? "Map<Void,Void>" : "Map";
+    if (auto* ui = dynamic_cast<const UIComponentNode*>(expr)) {
+        if (isMathConstructorName(ui->component_type)) return ui->component_type;
+        if (isCompileTimeAssetConstructorName(ui->component_type)) return compileTimeAssetConstructorType(ui->component_type);
+        return "";
+    }
+    if (auto* prop = dynamic_cast<const PropertyAccessNode*>(expr)) {
+        const std::string object_type = inferGeneratedExpressionType(prop->object.get());
+        if (isVectorTypeName(object_type)) return "Float";
+        if (object_type == "Mat4") return "Float";
+        if (object_type.rfind("List<", 0) == 0 || object_type == "List") {
+            if (prop->property_name == "size" || prop->property_name == "length") return "Int";
+        }
+        if (object_type.rfind("Map<", 0) == 0 || object_type == "Map") {
+            if (prop->property_name == "size" || prop->property_name == "length") return "Int";
+        }
+        return "";
+    }
+    if (auto* call = dynamic_cast<const MethodCallNode*>(expr)) {
+        const std::string object_type = inferGeneratedExpressionType(call->object.get());
+        if (call->method_name == "length" && call->arguments.empty()) {
+            if (isVectorTypeName(object_type)) return "Float";
+            return "Int";
+        }
+        if (call->method_name == "lengthSquared" && call->arguments.empty() && isVectorTypeName(object_type)) return "Float";
+        if (call->method_name == "normalized" && call->arguments.empty() && isVectorTypeName(object_type)) return object_type;
+        return "";
+    }
+    if (auto* binary = dynamic_cast<const BinaryExprNode*>(expr)) {
+        const std::string left_type = inferGeneratedExpressionType(binary->left.get());
+        const std::string right_type = inferGeneratedExpressionType(binary->right.get());
+        if (binary->op == "=" || binary->op == "+=" || binary->op == "-=" || binary->op == "*=" || binary->op == "/=") {
+            return left_type;
+        }
+        if (binary->op == "+" && (binary->is_string_concat || left_type == "String" || right_type == "String")) {
+            return "String";
+        }
+        const std::string math_result = inferMathBinaryResult(left_type, binary->op, right_type);
+        if (!math_result.empty()) return math_result;
+        if (isNumericTypeName(left_type) && isNumericTypeName(right_type)) {
+            return left_type == "Float" || right_type == "Float" ? "Float" : "Int";
+        }
+        if (binary->op == "==" || binary->op == "!=" || binary->op == "<" || binary->op == ">" ||
+            binary->op == "<=" || binary->op == ">=") {
+            return "Bool";
+        }
+        return "";
+    }
+    return "";
+}
+
 void CodeGenerator::indent() {
     for (int i = 0; i < indent_level * 4; ++i) {
         output << " ";
@@ -34,6 +167,44 @@ std::string CodeGenerator::mapType(TypeNode* type) {
     else if (base == "Float") base = "float";
     else if (base == "Bool") base = "bool";
     else if (base == "Void") base = "void";
+    else if (base == "Canvas") base = "zenith::Canvas";
+    else if (base == "EntityId") base = "zenith::game::EntityId";
+    else if (base == "Scene") base = "zenith::game::Scene";
+    else if (base == "Transform2DView") base = "zenith::game::Transform2DView";
+    else if (base == "Body2DView") base = "zenith::game::Body2DView";
+    else if (base == "BoxCollider2DView") base = "zenith::game::BoxCollider2DView";
+    else if (base == "CircleCollider2DView") base = "zenith::game::CircleCollider2DView";
+    else if (base == "CapsuleCollider2DView") base = "zenith::game::CapsuleCollider2DView";
+    else if (base == "Camera2DView") base = "zenith::game::Camera2DView";
+    else if (base == "AudioListener2DView") base = "zenith::game::AudioListener2DView";
+    else if (base == "TextureHandleView") base = "zenith::game::TextureHandleView";
+    else if (base == "AudioHandleView") base = "zenith::game::AudioHandleView";
+    else if (base == "MeshHandleView") base = "zenith::game::MeshHandleView";
+    else if (base == "ShaderHandleView") base = "zenith::game::ShaderHandleView";
+    else if (base == "MaterialHandleView") base = "zenith::game::MaterialHandleView";
+    else if (base == "Vec2") base = "zenith::physics::Vec2";
+    else if (base == "Vec3") base = "zenith::physics::Vec3";
+    else if (base == "Vec4") base = "zenith::physics::Vec4";
+    else if (base == "Mat4") base = "zenith::physics::Mat4";
+    else if (base == "Sprite2DView") base = "zenith::game::Sprite2DView";
+    else if (base == "Tilemap2DView") base = "zenith::game::Tilemap2DView";
+    else if (base == "Character2DView") base = "zenith::game::Character2DView";
+    else if (base == "AudioSource2DView") base = "zenith::game::AudioSource2DView";
+    else if (base == "RaycastHit2DResult") base = "zenith::game::RaycastHit2DResult";
+    else if (base == "Transform3DView") base = "zenith::game::Transform3DView";
+    else if (base == "Body3DView") base = "zenith::game::Body3DView";
+    else if (base == "BoxCollider3DView") base = "zenith::game::BoxCollider3DView";
+    else if (base == "SphereCollider3DView") base = "zenith::game::SphereCollider3DView";
+    else if (base == "Camera3DView") base = "zenith::game::Camera3DView";
+    else if (base == "AudioListener3DView") base = "zenith::game::AudioListener3DView";
+    else if (base == "PointLight3DView") base = "zenith::game::PointLight3DView";
+    else if (base == "DirectionalLight3DView") base = "zenith::game::DirectionalLight3DView";
+    else if (base == "Mesh3DView") base = "zenith::game::Mesh3DView";
+    else if (base == "MaterialPropertyView") base = "zenith::game::MaterialPropertyView";
+    else if (base == "MaterialPropertyOptionView") base = "zenith::game::MaterialPropertyOptionView";
+    else if (base == "Character3DView") base = "zenith::game::Character3DView";
+    else if (base == "AudioSource3DView") base = "zenith::game::AudioSource3DView";
+    else if (base == "RaycastHit3DResult") base = "zenith::game::RaycastHit3DResult";
     else if (base == "UI") base = "zenith::UIElement";
     else if (base == "List") base = "std::vector";
     else if (base == "Map") base = "std::unordered_map";
@@ -63,6 +234,13 @@ std::string CodeGenerator::mapType(TypeNode* type) {
     return base;
 }
 
+std::string CodeGenerator::mapParameterType(TypeNode* type) {
+    if (type && type->type_name == "Canvas") {
+        return "zenith::Canvas&";
+    }
+    return mapType(type);
+}
+
 std::string CodeGenerator::mapTypeForCFFI(TypeNode* type, bool is_return) {
     if (!type) return "void";
     std::string base = type->type_name;
@@ -74,6 +252,17 @@ std::string CodeGenerator::mapTypeForCFFI(TypeNode* type, bool is_return) {
     else if (base == "Float") base = "float";
     else if (base == "Bool") base = "bool";
     else if (base == "Void") base = "void";
+    else if (base == "TextureHandleView") base = "zenith::game::TextureHandleView";
+    else if (base == "AudioHandleView") base = "zenith::game::AudioHandleView";
+    else if (base == "MeshHandleView") base = "zenith::game::MeshHandleView";
+    else if (base == "ShaderHandleView") base = "zenith::game::ShaderHandleView";
+    else if (base == "MaterialHandleView") base = "zenith::game::MaterialHandleView";
+    else if (base == "Vec2") base = "zenith::physics::Vec2";
+    else if (base == "Vec3") base = "zenith::physics::Vec3";
+    else if (base == "Vec4") base = "zenith::physics::Vec4";
+    else if (base == "Mat4") base = "zenith::physics::Mat4";
+    else if (base == "RaycastHit2DResult") base = "zenith::game::RaycastHit2DResult";
+    else if (base == "RaycastHit3DResult") base = "zenith::game::RaycastHit3DResult";
     else if (base == "UI") base = "zenith::UIElement";
     else if (base == "List") base = "std::vector";
     else if (base == "Map") base = "std::unordered_map";
@@ -155,6 +344,7 @@ std::string CodeGenerator::generateExpression(ExprNode* expr) {
         return generateExpression(prop->object.get()) + "." + cppIdentifier(prop->property_name);
     }
     if (auto* call = dynamic_cast<MethodCallNode*>(expr)) {
+        const std::string object_type = inferGeneratedExpressionType(call->object.get());
         if (call->method_name == "run" && call->arguments.empty()) {
             return "zenith::runGameLoop(" + generateExpression(call->object.get()) + ")";
         }
@@ -179,7 +369,9 @@ std::string CodeGenerator::generateExpression(ExprNode* expr) {
         }
         std::string m_name = call->method_name;
         if (m_name == "push") m_name = "push_back";
-        if (m_name == "length") m_name = "size";
+        if (m_name == "length" && (object_type.rfind("List<", 0) == 0 || object_type.rfind("Map<", 0) == 0 || object_type == "List" || object_type == "Map")) {
+            m_name = "size";
+        }
         std::string res = generateExpression(call->object.get()) + "." + m_name + "(";
         for (size_t i = 0; i < call->arguments.size(); ++i) {
             res += generateExpression(call->arguments[i].get());
@@ -249,6 +441,34 @@ std::string CodeGenerator::generateExpression(ExprNode* expr) {
     }
 
     if (auto* ui = dynamic_cast<UIComponentNode*>(expr)) {
+        if (isMathConstructorName(ui->component_type)) {
+            std::string res = "zenith::physics::" + ui->component_type + "(";
+            for (size_t i = 0; i < ui->children.size(); ++i) {
+                res += generateExpression(ui->children[i].get());
+                if (i < ui->children.size() - 1) res += ", ";
+            }
+            res += ")";
+            return res;
+        }
+        if (isCompileTimeAssetConstructorName(ui->component_type)) {
+            if (ui->component_type == "texture") {
+                return "zenith::game::TextureHandleView{" + generateExpression(ui->children[0].get()) + ", 0, 0, false, 0, 0, 0, 0}";
+            }
+            if (ui->component_type == "audio") {
+                return "zenith::game::AudioHandleView{" + generateExpression(ui->children[0].get()) + ", 0, 0, false, 0.0f, false}";
+            }
+            if (ui->component_type == "mesh") {
+                return "zenith::game::MeshHandleView{" + generateExpression(ui->children[0].get()) + ", 0, 0, false, 0, 0, 0, 0}";
+            }
+            if (ui->component_type == "shader") {
+                return "zenith::game::ShaderHandleView{" + generateExpression(ui->children[0].get()) + ", 0, 0, false, 0}";
+            }
+            if (ui->component_type == "material") {
+                std::string shader_path = ui->children.size() > 1 ? generateExpression(ui->children[1].get()) : "\"\"";
+                return "zenith::game::MaterialHandleView{" + generateExpression(ui->children[0].get()) + ", 0, 0, false, " + shader_path + ", 0}";
+            }
+        }
+
         std::string res;
         bool is_class = class_names.count(ui->component_type) > 0;
         bool is_fn = function_names.count(ui->component_type) > 0;
@@ -485,7 +705,7 @@ void CodeGenerator::generateStatement(ASTNode* stmt) {
         output << "auto " << cppIdentifier(local_function->function_name) << " = [&](";
         for (size_t i = 0; i < local_function->parameters.size(); ++i) {
             auto& param = local_function->parameters[i];
-            output << mapType(param->type.get()) << " " << cppIdentifier(param->var_name);
+            output << mapParameterType(param->type.get()) << " " << cppIdentifier(param->var_name);
             if (param->initializer) {
                 output << " = " << generateExpression(param->initializer.get());
             }
@@ -510,7 +730,7 @@ void CodeGenerator::generateAgenticFunction(AgenticFunctionNode* node) {
     output << mapType(node->return_type.get()) << " " << node->function_name << "(";
     
     for (size_t i = 0; i < node->parameters.size(); ++i) {
-        output << mapType(node->parameters[i]->type.get()) << " " << node->parameters[i]->var_name;
+        output << mapParameterType(node->parameters[i]->type.get()) << " " << node->parameters[i]->var_name;
         if (i < node->parameters.size() - 1) output << ", ";
     }
     output << ") {\n";
@@ -577,7 +797,7 @@ void CodeGenerator::generateFunction(FunctionNode* node) {
             indent();
             output << mapType(node->return_type.get()) << " " << node->function_name << "(";
             for (size_t i = 0; i < node->parameters.size(); ++i) {
-                output << mapType(node->parameters[i]->type.get()) << " " << node->parameters[i]->var_name;
+                output << mapParameterType(node->parameters[i]->type.get()) << " " << node->parameters[i]->var_name;
                 if (i < node->parameters.size() - 1) output << ", ";
             }
             output << ") {\n";
@@ -620,7 +840,7 @@ void CodeGenerator::generateFunction(FunctionNode* node) {
             indent();
             output << mapType(node->return_type.get()) << " " << node->function_name << "(";
             for (size_t i = 0; i < node->parameters.size(); ++i) {
-                output << mapType(node->parameters[i]->type.get()) << " " << node->parameters[i]->var_name;
+                output << mapParameterType(node->parameters[i]->type.get()) << " " << node->parameters[i]->var_name;
                 if (i < node->parameters.size() - 1) output << ", ";
             }
             output << ") {\n";
@@ -794,7 +1014,7 @@ void CodeGenerator::generateFunction(FunctionNode* node) {
             if (node->is_exported) {
                 output << mapTypeForCFFI(param->type.get(), false) << " " << param->var_name;
             } else {
-                output << mapType(param->type.get()) << " " << param->var_name;
+                output << mapParameterType(param->type.get()) << " " << param->var_name;
             }
             if (param->initializer) {
                 output << " = " << generateExpression(param->initializer.get());
@@ -912,6 +1132,7 @@ void CodeGenerator::generateFunction(FunctionNode* node) {
 }
 
 void CodeGenerator::generateClass(ClassDeclNode* node) {
+    bool is_scene_class = classImplementsInterface(node, "Scene");
     indent();
     output << "class " << node->class_name;
 
@@ -926,7 +1147,7 @@ void CodeGenerator::generateClass(ClassDeclNode* node) {
         }
         for (size_t i = 0; i < node->implemented_interfaces.size(); ++i) {
             if (!first) output << ", ";
-            output << "public " << node->implemented_interfaces[i];
+            output << "public " << mapBuiltinInterfaceBase(node->implemented_interfaces[i]);
             first = false;
         }
     }
@@ -982,55 +1203,472 @@ void CodeGenerator::generateClass(ClassDeclNode* node) {
         output << " {}\n";
     }
 
-    // @managed: generate GC child enumeration override
-    if (node->is_managed) {
+    if (is_scene_class) {
         output << "\n";
-        indent(); output << "void __gc_enumerate(std::vector<zenith::mem::RcBlock*>& out) override {\n";
+        indent(); output << "zenith::game::EntityId createEntity(std::string name) {\n";
         indent_level++;
-        for (const auto& field : node->fields) {
-            std::string ft = field->type ? field->type->type_name : "";
-            if (ft == "Ref" || ft == "Weak") {
-                // Access the block via the smart pointer's internal block
-                indent(); output << "// GC trace field: " << field->var_name << "\n";
-            }
-        }
+        indent(); output << "return world.createEntity(name);\n";
+        indent_level--;
+        indent(); output << "}\n\n";
+
+        indent(); output << "void setEntityName(zenith::game::EntityId entity, std::string name) {\n";
+        indent_level++;
+        indent(); output << "if (!world.isAlive(entity)) {\n";
+        indent_level++;
+        indent(); output << "return;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "if (zenith::game::NameComponent* component = world.getName(entity)) {\n";
+        indent_level++;
+        indent(); output << "component->value = name;\n";
+        indent_level--;
+        indent(); output << "} else {\n";
+        indent_level++;
+        indent(); output << "world.addName(entity, name);\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent_level--;
+        indent(); output << "}\n\n";
+
+        indent(); output << "std::string entityName(zenith::game::EntityId entity) {\n";
+        indent_level++;
+        indent(); output << "if (const zenith::game::NameComponent* component = world.getName(entity)) {\n";
+        indent_level++;
+        indent(); output << "return component->value;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "return \"\";\n";
+        indent_level--;
+        indent(); output << "}\n\n";
+
+        indent(); output << "void setEntityTag(zenith::game::EntityId entity, std::string tag) {\n";
+        indent_level++;
+        indent(); output << "if (!world.isAlive(entity)) {\n";
+        indent_level++;
+        indent(); output << "return;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "if (zenith::game::TagComponent* component = world.getTag(entity)) {\n";
+        indent_level++;
+        indent(); output << "component->value = tag;\n";
+        indent_level--;
+        indent(); output << "} else {\n";
+        indent_level++;
+        indent(); output << "world.addTag(entity, tag);\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent_level--;
+        indent(); output << "}\n\n";
+
+        indent(); output << "std::string entityTag(zenith::game::EntityId entity) {\n";
+        indent_level++;
+        indent(); output << "if (const zenith::game::TagComponent* component = world.getTag(entity)) {\n";
+        indent_level++;
+        indent(); output << "return component->value;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "return \"\";\n";
+        indent_level--;
+        indent(); output << "}\n\n";
+
+        indent(); output << "zenith::game::EntityId findEntityByName(std::string name) {\n";
+        indent_level++;
+        indent(); output << "std::optional<zenith::game::EntityId> entity = world.findByName(name);\n";
+        indent(); output << "return entity.has_value() ? entity.value() : zenith::game::EntityId::invalid();\n";
+        indent_level--;
+        indent(); output << "}\n\n";
+
+        indent(); output << "zenith::game::EntityId findEntityByTag(std::string tag) {\n";
+        indent_level++;
+        indent(); output << "std::optional<zenith::game::EntityId> entity = world.findByTag(tag);\n";
+        indent(); output << "return entity.has_value() ? entity.value() : zenith::game::EntityId::invalid();\n";
+        indent_level--;
+        indent(); output << "}\n\n";
+
+        indent(); output << "bool setParent(zenith::game::EntityId child, zenith::game::EntityId parent) {\n";
+        indent_level++;
+        indent(); output << "return zenith::game::Scene::setParent(child, parent);\n";
+        indent_level--;
+        indent(); output << "}\n\n";
+
+        indent(); output << "bool clearParent(zenith::game::EntityId child) {\n";
+        indent_level++;
+        indent(); output << "return zenith::game::Scene::clearParent(child);\n";
+        indent_level--;
+        indent(); output << "}\n\n";
+
+        indent(); output << "zenith::game::EntityId parentOf(zenith::game::EntityId child) {\n";
+        indent_level++;
+        indent(); output << "return zenith::game::Scene::parentOf(child);\n";
+        indent_level--;
+        indent(); output << "}\n\n";
+
+        indent(); output << "int childCount(zenith::game::EntityId parent) {\n";
+        indent_level++;
+        indent(); output << "return zenith::game::Scene::childCount(parent);\n";
+        indent_level--;
+        indent(); output << "}\n\n";
+
+        indent(); output << "zenith::game::EntityId childAt(zenith::game::EntityId parent, int index) {\n";
+        indent_level++;
+        indent(); output << "return zenith::game::Scene::childAt(parent, index);\n";
+        indent_level--;
+        indent(); output << "}\n\n";
+
+        indent(); output << "zenith::game::EntityId spawnSprite(std::string name, float x, float y, float w, float h, std::string color) {\n";
+        indent_level++;
+        indent(); output << "zenith::game::EntityId entity = world.createEntity(name);\n";
+        indent(); output << "zenith::game::Transform2D& transform = world.addTransform2D(entity);\n";
+        indent(); output << "transform.position = zenith::physics::Vec2(x, y);\n";
+        indent(); output << "zenith::game::SpriteRenderer2D& sprite = world.addSpriteRenderer2D(entity);\n";
+        indent(); output << "sprite.size = zenith::physics::Vec2(w, h);\n";
+        indent(); output << "sprite.tintColor = color;\n";
+        indent(); output << "return entity;\n";
+        indent_level--;
+        indent(); output << "}\n\n";
+
+        indent(); output << "zenith::game::EntityId spawnTexturedSprite(std::string name, std::string texturePath, float x, float y, float w, float h, std::string color) {\n";
+        indent_level++;
+        indent(); output << "zenith::game::EntityId entity = spawnSprite(name, x, y, w, h, color);\n";
+        indent(); output << "if (zenith::game::SpriteRenderer2D* sprite = world.getSpriteRenderer2D(entity)) {\n";
+        indent_level++;
+        indent(); output << "sprite->textureHandle = zenith::resource::ResourceManager::getInstance().loadTextureHandle(texturePath);\n";
+        indent(); output << "sprite->texture = zenith::resource::ResourceManager::getInstance().loadTexture(sprite->textureHandle);\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "return entity;\n";
+        indent_level--;
+        indent(); output << "}\n\n";
+
+        indent(); output << "zenith::game::EntityId spawnCamera2D(std::string name, float x, float y, float zoom, bool primary) {\n";
+        indent_level++;
+        indent(); output << "zenith::game::EntityId entity = world.createEntity(name);\n";
+        indent(); output << "zenith::game::Transform2D& transform = world.addTransform2D(entity);\n";
+        indent(); output << "transform.position = zenith::physics::Vec2(x, y);\n";
+        indent(); output << "if (primary) {\n";
+        indent_level++;
+        indent(); output << "std::optional<zenith::game::EntityId> current = world.primaryCamera2D();\n";
+        indent(); output << "if (current.has_value()) {\n";
+        indent_level++;
+        indent(); output << "if (zenith::game::Camera2DComponent* existing = world.getCamera2D(current.value())) {\n";
+        indent_level++;
+        indent(); output << "existing->primary = false;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "zenith::game::Camera2DComponent& camera = world.addCamera2D(entity);\n";
+        indent(); output << "camera.zoom = zoom;\n";
+        indent(); output << "camera.primary = primary;\n";
+        indent(); output << "return entity;\n";
+        indent_level--;
+        indent(); output << "}\n\n";
+
+        indent(); output << "bool destroyEntity(zenith::game::EntityId entity) {\n";
+        indent_level++;
+        indent(); output << "return world.destroyEntity(entity);\n";
+        indent_level--;
+        indent(); output << "}\n\n";
+
+        indent(); output << "bool isEntityAlive(zenith::game::EntityId entity) {\n";
+        indent_level++;
+        indent(); output << "return world.isAlive(entity);\n";
+        indent_level--;
+        indent(); output << "}\n\n";
+
+        indent(); output << "int entityCount() {\n";
+        indent_level++;
+        indent(); output << "return static_cast<int>(world.entityCount());\n";
+        indent_level--;
+        indent(); output << "}\n\n";
+
+        indent(); output << "void setEntityPosition2D(zenith::game::EntityId entity, float x, float y) {\n";
+        indent_level++;
+        indent(); output << "if (!world.isAlive(entity)) {\n";
+        indent_level++;
+        indent(); output << "return;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "zenith::game::Transform2D* transform = world.getTransform2D(entity);\n";
+        indent(); output << "if (transform == nullptr) {\n";
+        indent_level++;
+        indent(); output << "transform = &world.addTransform2D(entity);\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "transform->position = zenith::physics::Vec2(x, y);\n";
+        indent(); output << "if (zenith::physics::RigidBody2D* body = world.getRigidBody2D(entity)) {\n";
+        indent_level++;
+        indent(); output << "body->position = transform->position;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent_level--;
+        indent(); output << "}\n\n";
+
+        indent(); output << "void moveEntity2D(zenith::game::EntityId entity, float dx, float dy) {\n";
+        indent_level++;
+        indent(); output << "setEntityPosition2D(entity, entityPositionX(entity) + dx, entityPositionY(entity) + dy);\n";
+        indent_level--;
+        indent(); output << "}\n\n";
+
+        indent(); output << "float entityPositionX(zenith::game::EntityId entity) {\n";
+        indent_level++;
+        indent(); output << "if (const zenith::game::Transform2D* transform = world.getTransform2D(entity)) {\n";
+        indent_level++;
+        indent(); output << "return transform->position.x;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "if (const zenith::physics::RigidBody2D* body = world.getRigidBody2D(entity)) {\n";
+        indent_level++;
+        indent(); output << "return body->position.x;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "return 0.0f;\n";
+        indent_level--;
+        indent(); output << "}\n\n";
+
+        indent(); output << "float entityPositionY(zenith::game::EntityId entity) {\n";
+        indent_level++;
+        indent(); output << "if (const zenith::game::Transform2D* transform = world.getTransform2D(entity)) {\n";
+        indent_level++;
+        indent(); output << "return transform->position.y;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "if (const zenith::physics::RigidBody2D* body = world.getRigidBody2D(entity)) {\n";
+        indent_level++;
+        indent(); output << "return body->position.y;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "return 0.0f;\n";
+        indent_level--;
+        indent(); output << "}\n\n";
+
+        indent(); output << "void setSpriteColor(zenith::game::EntityId entity, std::string color) {\n";
+        indent_level++;
+        indent(); output << "if (zenith::game::SpriteRenderer2D* sprite = world.getSpriteRenderer2D(entity)) {\n";
+        indent_level++;
+        indent(); output << "sprite->tintColor = color;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent_level--;
+        indent(); output << "}\n\n";
+
+        indent(); output << "void setSpriteTexture(zenith::game::EntityId entity, std::string texturePath) {\n";
+        indent_level++;
+        indent(); output << "if (!world.isAlive(entity)) {\n";
+        indent_level++;
+        indent(); output << "return;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "zenith::game::SpriteRenderer2D* sprite = world.getSpriteRenderer2D(entity);\n";
+        indent(); output << "if (sprite == nullptr) {\n";
+        indent_level++;
+        indent(); output << "sprite = &world.addSpriteRenderer2D(entity);\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "sprite->textureHandle = zenith::resource::ResourceManager::getInstance().loadTextureHandle(texturePath);\n";
+        indent(); output << "sprite->texture = zenith::resource::ResourceManager::getInstance().loadTexture(sprite->textureHandle);\n";
+        indent_level--;
+        indent(); output << "}\n\n";
+
+        indent(); output << "std::string spriteTexturePath(zenith::game::EntityId entity) {\n";
+        indent_level++;
+        indent(); output << "if (const zenith::game::SpriteRenderer2D* sprite = world.getSpriteRenderer2D(entity)) {\n";
+        indent_level++;
+        indent(); output << "if (!sprite->textureHandle.path.empty()) {\n";
+        indent_level++;
+        indent(); output << "return sprite->textureHandle.path;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "if (sprite->texture) {\n";
+        indent_level++;
+        indent(); output << "return sprite->texture->path;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "return \"\";\n";
+        indent_level--;
+        indent(); output << "}\n\n";
+
+        indent(); output << "void attachBody2D(zenith::game::EntityId entity, float mass, float gravityScale, float friction, float restitution) {\n";
+        indent_level++;
+        indent(); output << "if (!world.isAlive(entity)) {\n";
+        indent_level++;
+        indent(); output << "return;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "zenith::physics::RigidBody2D* body = world.getRigidBody2D(entity);\n";
+        indent(); output << "if (body == nullptr) {\n";
+        indent_level++;
+        indent(); output << "body = &world.addRigidBody2D(entity);\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "body->mass = (mass <= 0.0f) ? 1.0f : mass;\n";
+        indent(); output << "body->gravityScale = gravityScale;\n";
+        indent(); output << "body->friction = friction;\n";
+        indent(); output << "body->restitution = restitution;\n";
+        indent(); output << "if (const zenith::game::Transform2D* transform = world.getTransform2D(entity)) {\n";
+        indent_level++;
+        indent(); output << "body->position = transform->position;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent_level--;
+        indent(); output << "}\n\n";
+
+        indent(); output << "zenith::game::BoxCollider2DView boxCollider2D(zenith::game::EntityId entity) {\n";
+        indent_level++;
+        indent(); output << "return zenith::game::Scene::boxCollider2D(entity);\n";
+        indent_level--;
+        indent(); output << "}\n\n";
+
+        indent(); output << "zenith::game::CircleCollider2DView circleCollider2D(zenith::game::EntityId entity) {\n";
+        indent_level++;
+        indent(); output << "return zenith::game::Scene::circleCollider2D(entity);\n";
+        indent_level--;
+        indent(); output << "}\n\n";
+
+        indent(); output << "zenith::game::CapsuleCollider2DView capsuleCollider2D(zenith::game::EntityId entity) {\n";
+        indent_level++;
+        indent(); output << "return zenith::game::Scene::capsuleCollider2D(entity);\n";
+        indent_level--;
+        indent(); output << "}\n\n";
+
+        indent(); output << "void attachBoxCollider2D(zenith::game::EntityId entity, float width, float height, bool isTrigger) {\n";
+        indent_level++;
+        indent(); output << "zenith::game::Scene::attachBoxCollider2D(entity, width, height, isTrigger);\n";
+        indent_level--;
+        indent(); output << "}\n\n";
+
+        indent(); output << "void attachCircleCollider2D(zenith::game::EntityId entity, float radius, bool isTrigger) {\n";
+        indent_level++;
+        indent(); output << "zenith::game::Scene::attachCircleCollider2D(entity, radius, isTrigger);\n";
+        indent_level--;
+        indent(); output << "}\n\n";
+
+        indent(); output << "void attachCapsuleCollider2D(zenith::game::EntityId entity, float height, float radius, bool isTrigger) {\n";
+        indent_level++;
+        indent(); output << "zenith::game::Scene::attachCapsuleCollider2D(entity, height, radius, isTrigger);\n";
+        indent_level--;
+        indent(); output << "}\n\n";
+
+        indent(); output << "void setBodyVelocity2D(zenith::game::EntityId entity, float vx, float vy) {\n";
+        indent_level++;
+        indent(); output << "if (zenith::physics::RigidBody2D* body = world.getRigidBody2D(entity)) {\n";
+        indent_level++;
+        indent(); output << "body->velocity = zenith::physics::Vec2(vx, vy);\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent_level--;
+        indent(); output << "}\n\n";
+
+        indent(); output << "void applyBodyImpulse2D(zenith::game::EntityId entity, float ix, float iy) {\n";
+        indent_level++;
+        indent(); output << "if (zenith::physics::RigidBody2D* body = world.getRigidBody2D(entity)) {\n";
+        indent_level++;
+        indent(); output << "body->applyImpulse(zenith::physics::Vec2(ix, iy));\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent_level--;
+        indent(); output << "}\n\n";
+
+        indent(); output << "float bodyVelocityX(zenith::game::EntityId entity) {\n";
+        indent_level++;
+        indent(); output << "if (const zenith::physics::RigidBody2D* body = world.getRigidBody2D(entity)) {\n";
+        indent_level++;
+        indent(); output << "return body->velocity.x;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "return 0.0f;\n";
+        indent_level--;
+        indent(); output << "}\n\n";
+
+        indent(); output << "float bodyVelocityY(zenith::game::EntityId entity) {\n";
+        indent_level++;
+        indent(); output << "if (const zenith::physics::RigidBody2D* body = world.getRigidBody2D(entity)) {\n";
+        indent_level++;
+        indent(); output << "return body->velocity.y;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "return 0.0f;\n";
+        indent_level--;
+        indent(); output << "}\n\n";
+
+        indent(); output << "bool overlaps2D(zenith::game::EntityId first, zenith::game::EntityId second) {\n";
+        indent_level++;
+        indent(); output << "return zenith::game::Scene::overlaps2D(first, second);\n";
+        indent_level--;
+        indent(); output << "}\n\n";
+
+        indent(); output << "bool containsPoint2D(zenith::game::EntityId entity, float x, float y) {\n";
+        indent_level++;
+        indent(); output << "return zenith::game::Scene::containsPoint2D(entity, x, y);\n";
+        indent_level--;
+        indent(); output << "}\n\n";
+
+        indent(); output << "zenith::game::RaycastHit2DResult raycast2D(float originX, float originY, float directionX, float directionY, float maxDistance) {\n";
+        indent_level++;
+        indent(); output << "return zenith::game::Scene::raycast2D(originX, originY, directionX, directionY, maxDistance);\n";
+        indent_level--;
+        indent(); output << "}\n\n";
+
+        indent(); output << "zenith::game::BoxCollider3DView boxCollider3D(zenith::game::EntityId entity) {\n";
+        indent_level++;
+        indent(); output << "return zenith::game::Scene::boxCollider3D(entity);\n";
+        indent_level--;
+        indent(); output << "}\n\n";
+
+        indent(); output << "zenith::game::SphereCollider3DView sphereCollider3D(zenith::game::EntityId entity) {\n";
+        indent_level++;
+        indent(); output << "return zenith::game::Scene::sphereCollider3D(entity);\n";
+        indent_level--;
+        indent(); output << "}\n\n";
+
+        indent(); output << "void attachBoxCollider3D(zenith::game::EntityId entity, float width, float height, float depth, bool isTrigger) {\n";
+        indent_level++;
+        indent(); output << "zenith::game::Scene::attachBoxCollider3D(entity, width, height, depth, isTrigger);\n";
+        indent_level--;
+        indent(); output << "}\n\n";
+
+        indent(); output << "void attachSphereCollider3D(zenith::game::EntityId entity, float radius, bool isTrigger) {\n";
+        indent_level++;
+        indent(); output << "zenith::game::Scene::attachSphereCollider3D(entity, radius, isTrigger);\n";
+        indent_level--;
+        indent(); output << "}\n\n";
+
+        indent(); output << "bool overlaps3D(zenith::game::EntityId first, zenith::game::EntityId second) {\n";
+        indent_level++;
+        indent(); output << "return zenith::game::Scene::overlaps3D(first, second);\n";
+        indent_level--;
+        indent(); output << "}\n\n";
+
+        indent(); output << "bool containsPoint3D(zenith::game::EntityId entity, float x, float y, float z) {\n";
+        indent_level++;
+        indent(); output << "return zenith::game::Scene::containsPoint3D(entity, x, y, z);\n";
+        indent_level--;
+        indent(); output << "}\n\n";
+
+        indent(); output << "zenith::game::RaycastHit3DResult raycast3D(float originX, float originY, float originZ, float directionX, float directionY, float directionZ, float maxDistance) {\n";
+        indent_level++;
+        indent(); output << "return zenith::game::Scene::raycast3D(originX, originY, originZ, directionX, directionY, directionZ, maxDistance);\n";
+        indent_level--;
+        indent(); output << "}\n\n";
+
+        indent(); output << "bool followPrimaryCamera2D(zenith::game::EntityId target, float offsetX, float offsetY, float smoothing) {\n";
+        indent_level++;
+        indent(); output << "return zenith::followPrimaryCamera2D(world, target, zenith::physics::Vec2(offsetX, offsetY), smoothing);\n";
+        indent_level--;
+        indent(); output << "}\n\n";
+
+        indent(); output << "bool followPrimaryCamera3D(zenith::game::EntityId target, float offsetX, float offsetY, float offsetZ, float smoothing) {\n";
+        indent_level++;
+        indent(); output << "return zenith::followPrimaryCamera3D(world, target, zenith::physics::Vec3(offsetX, offsetY, offsetZ), smoothing);\n";
         indent_level--;
         indent(); output << "}\n";
     }
-    output << "\n";
 
-    for (const auto& method : node->methods) {
-        is_inside_class_method = true;
-        if (auto* agentic = dynamic_cast<AgenticFunctionNode*>(method.get())) {
-            generateAgenticFunction(agentic);
-        } else {
-            generateFunction(method.get());
-        }
-        is_inside_class_method = false;
-    }
-
-    // Generate triggerCallback dispatcher
-    indent(); output << "void triggerCallback(std::string name, std::string val = \"\") {\n";
-    indent_level++;
-    for (const auto& method : node->methods) {
-        if (method->function_name != "build") {
-            if (method->parameters.empty()) {
-                indent();
-                output << "if (name == \"" << method->function_name << "\") { this->" << method->function_name << "(); return; }\n";
-            } else if (method->parameters.size() == 1) {
-                std::string param_type = mapType(method->parameters[0]->type.get());
-                indent();
-                if (param_type == "std::string") {
-                    output << "if (name == \"" << method->function_name << "\") { this->" << method->function_name << "(val); return; }\n";
-                } else if (param_type == "bool") {
-                    output << "if (name == \"" << method->function_name << "\") { this->" << method->function_name << "(val == \"true\"); return; }\n";
-                } else if (param_type == "int") {
-                    output << "if (name == \"" << method->function_name << "\") { try { this->" << method->function_name << "(std::stoi(val)); } catch(...) {} return; }\n";
-                } else if (param_type == "float") {
-                    output << "if (name == \"" << method->function_name << "\") { try { this->" << method->function_name << "(std::stof(val)); } catch(...) {} return; }\n";
-                }
-            }
-        }
+    // @managed: generate GC child enumeration override
     if (node->is_managed) {
         output << "\n";
         indent(); output << "void __gc_enumerate(std::vector<zenith::mem::RcBlock*>& out) override {\n";
@@ -1082,12 +1720,42 @@ void CodeGenerator::generateClass(ClassDeclNode* node) {
     }
     indent_level--;
     indent(); output << "}\n\n";
+
+    bool has_trigger_entity_callback = false;
+    for (const auto& method : node->methods) {
+        if (method->function_name == "triggerEntityCallback") {
+            has_trigger_entity_callback = true;
+            break;
+        }
+    }
+
+    if (is_scene_class && !has_trigger_entity_callback) {
+        indent(); output << "void triggerEntityCallback(std::string name, zenith::game::EntityId entity) override {\n";
+        indent_level++;
+        for (const auto& method : node->methods) {
+            if (method->function_name == "build" || method->function_name == "triggerCallback") {
+                continue;
+            }
+            if (method->parameters.size() == 1) {
+                std::string param_type = mapType(method->parameters[0]->type.get());
+                if (param_type == "zenith::game::EntityId") {
+                    indent();
+                    output << "if (name == \"" << method->function_name << "\") { this->" << method->function_name << "(entity); return; }\n";
+                }
+            }
+        }
+        indent_level--;
+        indent(); output << "}\n\n";
+    }
     
     indent_level--;
     indent(); output << "};\n\n";
 }
 
 void CodeGenerator::generateInterface(InterfaceDeclNode* node) {
+    if (node->interface_name == "Canvas" || node->interface_name == "Scene") {
+        return;
+    }
     indent();
     output << "class " << node->interface_name << " {\n";
     output << "public:\n";
@@ -1103,7 +1771,7 @@ void CodeGenerator::generateInterface(InterfaceDeclNode* node) {
         }
         output << method->function_name << "(";
         for (size_t i = 0; i < method->parameters.size(); ++i) {
-            output << mapType(method->parameters[i]->type.get()) << " " << method->parameters[i]->var_name;
+            output << mapParameterType(method->parameters[i]->type.get()) << " " << method->parameters[i]->var_name;
             if (i < method->parameters.size() - 1) output << ", ";
         }
         output << ") = 0;\n";

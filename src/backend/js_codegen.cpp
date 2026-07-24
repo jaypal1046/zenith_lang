@@ -39,6 +39,240 @@ struct PreRenderContext {
     std::unordered_map<std::string, PreRenderValue> values;
 };
 
+static bool classImplementsScene(const ClassDeclNode* node) {
+    for (const auto& implemented : node->implemented_interfaces) {
+        if (implemented == "Scene") {
+            return true;
+        }
+    }
+    return false;
+}
+
+static void addBuiltinSceneMethodNames(std::unordered_set<std::string>& methods) {
+    static const char* names[] = {
+        "onLoad",
+        "onFrame",
+        "onFixedUpdate",
+        "onPostPhysics",
+        "onDraw",
+        "load",
+        "updateFrame",
+        "simulateFixedStep",
+        "render",
+        "setPaused",
+        "isLoaded",
+        "interpolationAlpha",
+        "totalFrames",
+        "totalFixedSteps",
+        "framesWithDroppedSteps",
+        "lastSubstepCount",
+        "accumulatedTime",
+        "frameDelta",
+        "inspectEntity",
+        "inspectedEntity",
+        "inspectMaterial",
+        "inspectedMaterialPath",
+        "clearInspectorTarget",
+        "selectNextInspectorEntity",
+        "selectPreviousInspectorEntity",
+        "registerPrefabCallback",
+        "hasPrefab",
+        "instantiatePrefab",
+        "instantiateArchetype",
+        "registerSceneStreamCallback",
+        "hasSceneStream",
+        "loadSceneStream",
+        "unloadSceneStream",
+        "isSceneStreamLoaded",
+        "sceneStreamEntityCount",
+        "init",
+        "update",
+        "draw",
+        "createEntity",
+        "setEntityName",
+        "entityName",
+        "setEntityTag",
+        "entityTag",
+        "findEntityByName",
+        "findEntityByTag",
+        "setParent",
+        "clearParent",
+        "parentOf",
+        "childCount",
+        "childAt",
+        "loadTexture",
+        "loadAudio",
+        "loadMesh",
+        "loadShader",
+        "loadMaterial",
+        "importAsset",
+        "createAssetBundle",
+        "addAssetToBundle",
+        "assetBundleAssetCount",
+        "assetBundleAsset",
+        "setAssetMemoryBudget",
+        "assetMemoryBudget",
+        "assetMemoryUsage",
+        "setAssetHotReload",
+        "assetHotReloadEnabled",
+        "pollAssetChanges",
+        "reloadAsset",
+        "reloadDirtyAssets",
+        "markAssetDirty",
+        "assetGroup",
+        "importedAssetPath",
+        "assetDatabaseJson",
+        "bakeAssetMetadata",
+        "spawnSprite",
+        "spawnTexturedSprite",
+        "spawnTexturedSpriteHandle",
+        "spawnCamera2D",
+        "destroyEntity",
+        "destroyEntityHierarchy",
+        "isEntityAlive",
+        "entityCount",
+        "setEntityLayer",
+        "entityLayer",
+        "setEntityMask",
+        "entityMask",
+        "setEntityLayerMask",
+        "canEntitiesInteract",
+        "setEntityPosition2D",
+        "moveEntity2D",
+        "entityPositionX",
+        "entityPositionY",
+        "transform2D",
+        "body2D",
+        "boxCollider2D",
+        "circleCollider2D",
+        "capsuleCollider2D",
+        "camera2D",
+        "audioListener2D",
+        "sprite2D",
+        "tilemap2D",
+        "character2D",
+        "spawnTilemap2D",
+        "resizeTilemap2D",
+        "setTilemapCell",
+        "tilemapCell",
+        "fillTilemap",
+        "clearTilemap",
+        "setTilemapPaletteColor",
+        "tilemapPaletteColor",
+        "spawnCharacter2D",
+        "spawnCharacter2DHandle",
+        "audioSource2D",
+        "spawnAudioSource2D",
+        "spawnAudioSource2DHandle",
+        "spawnAudioListener2D",
+        "spawnMesh",
+        "spawnMeshHandle",
+        "createMaterial",
+        "materialExists",
+        "setMaterialShaderPath",
+        "materialShaderPath",
+        "cloneMaterial",
+        "copyMaterialProperties",
+        "removeMaterialProperty",
+        "clearMaterialProperties",
+        "defineMaterialText",
+        "defineMaterialNumber",
+        "defineMaterialToggle",
+        "defineMaterialRadio",
+        "defineMaterialImage",
+        "defineMaterialButton",
+        "defineMaterialColor",
+        "setMaterialTextProperty",
+        "materialTextProperty",
+        "setMaterialNumberProperty",
+        "materialNumberProperty",
+        "setMaterialToggleProperty",
+        "materialToggleProperty",
+        "setMaterialRadioProperty",
+        "materialRadioProperty",
+        "setMaterialImageProperty",
+        "materialImageProperty",
+        "setMaterialButtonProperty",
+        "materialButtonProperty",
+        "triggerMaterialButton",
+        "materialButtonTriggerCount",
+        "setMaterialPropertyCallback",
+        "materialPropertyCallback",
+        "notifyMaterialProperty",
+        "setMaterialColorProperty",
+        "materialColorProperty",
+        "materialHasProperty",
+        "materialPropertyCount",
+        "materialProperty",
+        "materialPropertyAt",
+        "materialPropertyOptionCount",
+        "materialPropertyOption",
+        "addMaterialPropertyOption",
+        "removeMaterialPropertyOption",
+        "clearMaterialPropertyOptions",
+        "materialPropertyNameAt",
+        "materialPropertyKind",
+        "materialPropertyLabel",
+        "materialPropertyOptions",
+        "setMeshMaterial",
+        "meshMaterialPath",
+        "meshMaterialHandle",
+        "audioSource3D",
+        "spawnAudioSource3D",
+        "spawnAudioSource3DHandle",
+        "playAudio",
+        "stopAudio",
+        "spawnCamera3D",
+        "setEntityPosition3D",
+        "moveEntity3D",
+        "entityPositionZ",
+        "transform3D",
+        "body3D",
+        "boxCollider3D",
+        "sphereCollider3D",
+        "camera3D",
+        "audioListener3D",
+        "pointLight3D",
+        "directionalLight3D",
+        "mesh3D",
+        "character3D",
+        "spawnPointLight3D",
+        "spawnDirectionalLight3D",
+        "spawnCharacter3D",
+        "spawnCharacter3DHandle",
+        "spawnAudioListener3D",
+        "setSpriteColor",
+        "setSpriteTexture",
+        "spriteTexturePath",
+        "attachBody2D",
+        "attachBoxCollider2D",
+        "attachCircleCollider2D",
+        "attachCapsuleCollider2D",
+        "setBodyVelocity2D",
+        "applyBodyImpulse2D",
+        "bodyVelocityX",
+        "bodyVelocityY",
+        "overlaps2D",
+        "containsPoint2D",
+        "raycast2D",
+        "raycast2DMask",
+        "attachBoxCollider3D",
+        "attachSphereCollider3D",
+        "setCharacterMove3D",
+        "jumpCharacter3D",
+        "overlaps3D",
+        "containsPoint3D",
+        "raycast3D",
+        "raycast3DMask",
+        "followPrimaryCamera2D",
+        "followPrimaryCamera3D"
+    };
+
+    for (const char* name : names) {
+        methods.insert(name);
+    }
+}
+
 static std::string escapeHtml(const std::string& value) {
     std::string escaped;
     escaped.reserve(value.size());
@@ -571,6 +805,119 @@ bool JSCodeGenerator::containsAsyncCall(ASTNode* node, const std::unordered_set<
     return false;
 }
 
+static bool isNumericTypeName(const std::string& type_name) {
+    return type_name == "Int" || type_name == "Float";
+}
+
+static bool isVectorTypeName(const std::string& type_name) {
+    return type_name == "Vec2" || type_name == "Vec3" || type_name == "Vec4";
+}
+
+static bool isMatrixTypeName(const std::string& type_name) {
+    return type_name == "Mat4";
+}
+
+static bool isMathValueTypeName(const std::string& type_name) {
+    return isVectorTypeName(type_name) || isMatrixTypeName(type_name);
+}
+
+static bool isMathConstructorName(const std::string& name) {
+    return name == "Vec2" || name == "Vec3" || name == "Vec4" || name == "Mat4";
+}
+
+static bool isCompileTimeAssetConstructorName(const std::string& name) {
+    return name == "texture" || name == "audio" || name == "mesh" || name == "shader" || name == "material";
+}
+
+static std::string compileTimeAssetConstructorType(const std::string& name) {
+    if (name == "texture") return "TextureHandleView";
+    if (name == "audio") return "AudioHandleView";
+    if (name == "mesh") return "MeshHandleView";
+    if (name == "shader") return "ShaderHandleView";
+    if (name == "material") return "MaterialHandleView";
+    return "";
+}
+
+static std::string inferMathBinaryResult(const std::string& left_type, const std::string& op, const std::string& right_type) {
+    if (op == "+" || op == "-") {
+        if (left_type == right_type && isMathValueTypeName(left_type)) {
+            return left_type;
+        }
+        return "";
+    }
+
+    if (op == "*") {
+        if (isVectorTypeName(left_type) && isNumericTypeName(right_type)) return left_type;
+        if (isNumericTypeName(left_type) && isVectorTypeName(right_type)) return right_type;
+        if (left_type == "Mat4" && right_type == "Mat4") return "Mat4";
+        if (left_type == "Mat4" && right_type == "Vec4") return "Vec4";
+        if (left_type == "Mat4" && isNumericTypeName(right_type)) return "Mat4";
+        return "";
+    }
+
+    if (op == "/") {
+        if (isVectorTypeName(left_type) && isNumericTypeName(right_type)) return left_type;
+        if (left_type == "Mat4" && isNumericTypeName(right_type)) return "Mat4";
+        return "";
+    }
+
+    return "";
+}
+
+static std::string inferGeneratedExpressionType(const ExprNode* expr) {
+    if (!expr) return "";
+    if (auto* id = dynamic_cast<const IdentifierNode*>(expr)) return id->type_hint;
+    if (auto* str = dynamic_cast<const StringLiteralNode*>(expr)) return "String";
+    if (auto* num = dynamic_cast<const NumberLiteralNode*>(expr)) return num->is_float ? "Float" : "Int";
+    if (dynamic_cast<const BoolLiteralNode*>(expr)) return "Bool";
+    if (auto* list = dynamic_cast<const ListLiteralNode*>(expr)) return list->elements.empty() ? "List<Void>" : "List";
+    if (auto* map = dynamic_cast<const MapLiteralNode*>(expr)) return map->entries.empty() ? "Map<Void,Void>" : "Map";
+    if (auto* ui = dynamic_cast<const UIComponentNode*>(expr)) {
+        if (isMathConstructorName(ui->component_type)) return ui->component_type;
+        if (isCompileTimeAssetConstructorName(ui->component_type)) return compileTimeAssetConstructorType(ui->component_type);
+        return "";
+    }
+    if (auto* prop = dynamic_cast<const PropertyAccessNode*>(expr)) {
+        const std::string object_type = inferGeneratedExpressionType(prop->object.get());
+        if (isVectorTypeName(object_type) || isMatrixTypeName(object_type)) return "Float";
+        if (object_type.rfind("List<", 0) == 0 || object_type == "List") {
+            if (prop->property_name == "size" || prop->property_name == "length") return "Int";
+        }
+        return "";
+    }
+    if (auto* call = dynamic_cast<const MethodCallNode*>(expr)) {
+        const std::string object_type = inferGeneratedExpressionType(call->object.get());
+        if (call->method_name == "length" && call->arguments.empty()) {
+            if (isVectorTypeName(object_type)) return "Float";
+            return "Int";
+        }
+        if (call->method_name == "lengthSquared" && call->arguments.empty() && isVectorTypeName(object_type)) return "Float";
+        if (call->method_name == "normalized" && call->arguments.empty() && isVectorTypeName(object_type)) return object_type;
+        return "";
+    }
+    if (auto* binary = dynamic_cast<const BinaryExprNode*>(expr)) {
+        const std::string left_type = inferGeneratedExpressionType(binary->left.get());
+        const std::string right_type = inferGeneratedExpressionType(binary->right.get());
+        if (binary->op == "=" || binary->op == "+=" || binary->op == "-=" || binary->op == "*=" || binary->op == "/=") {
+            return left_type;
+        }
+        if (binary->op == "+" && (binary->is_string_concat || left_type == "String" || right_type == "String")) {
+            return "String";
+        }
+        const std::string math_result = inferMathBinaryResult(left_type, binary->op, right_type);
+        if (!math_result.empty()) return math_result;
+        if (isNumericTypeName(left_type) && isNumericTypeName(right_type)) {
+            return left_type == "Float" || right_type == "Float" ? "Float" : "Int";
+        }
+        if (binary->op == "==" || binary->op == "!=" || binary->op == "<" || binary->op == ">" ||
+            binary->op == "<=" || binary->op == ">=") {
+            return "Bool";
+        }
+        return "";
+    }
+    return "";
+}
+
 std::string JSCodeGenerator::generateExpression(ExprNode* expr) {
     if (!expr) return "";
     
@@ -622,7 +969,34 @@ std::string JSCodeGenerator::generateExpression(ExprNode* expr) {
         return b->value ? "true" : "false";
     }
     if (auto* binary = dynamic_cast<BinaryExprNode*>(expr)) {
-        return generateExpression(binary->left.get()) + " " + binary->op + " " + generateExpression(binary->right.get());
+        const std::string left_expr = generateExpression(binary->left.get());
+        const std::string right_expr = generateExpression(binary->right.get());
+        const std::string left_type = inferGeneratedExpressionType(binary->left.get());
+        const std::string right_type = inferGeneratedExpressionType(binary->right.get());
+
+        if ((binary->op == "==" || binary->op == "!=") && left_type == right_type && isMathValueTypeName(left_type)) {
+            const std::string equal_expr = "zenith.mathEqual(" + left_expr + ", " + right_expr + ")";
+            return binary->op == "==" ? equal_expr : "!(" + equal_expr + ")";
+        }
+        if ((binary->op == "+=" || binary->op == "-=" || binary->op == "*=" || binary->op == "/=") && isMathValueTypeName(left_type)) {
+            std::string helper = "mathAdd";
+            if (binary->op == "-=") helper = "mathSub";
+            else if (binary->op == "*=") helper = "mathMul";
+            else if (binary->op == "/=") helper = "mathDiv";
+            return left_expr + " = zenith." + helper + "(" + left_expr + ", " + right_expr + ")";
+        }
+        if (binary->op == "+" && (binary->is_string_concat || left_type == "String" || right_type == "String")) {
+            return left_expr + " + " + right_expr;
+        }
+        const std::string math_result = inferMathBinaryResult(left_type, binary->op, right_type);
+        if (!math_result.empty()) {
+            std::string helper = "mathAdd";
+            if (binary->op == "-") helper = "mathSub";
+            else if (binary->op == "*") helper = "mathMul";
+            else if (binary->op == "/") helper = "mathDiv";
+            return "zenith." + helper + "(" + left_expr + ", " + right_expr + ")";
+        }
+        return left_expr + " " + binary->op + " " + right_expr;
     }
     if (auto* unary = dynamic_cast<UnaryExprNode*>(expr)) {
         return unary->op + generateExpression(unary->expression.get());
@@ -649,10 +1023,12 @@ std::string JSCodeGenerator::generateExpression(ExprNode* expr) {
         return generateExpression(prop->object.get()) + "." + prop->property_name;
     }
     if (auto* call = dynamic_cast<MethodCallNode*>(expr)) {
+        const std::string object_type = inferGeneratedExpressionType(call->object.get());
         if (call->method_name == "run" && call->arguments.empty()) {
             return "zenith.runGameLoop(" + generateExpression(call->object.get()) + ")";
         }
-        if (call->method_name == "length" && call->arguments.empty()) {
+        if (call->method_name == "length" && call->arguments.empty() &&
+            (object_type == "String" || object_type == "List" || object_type.rfind("List<", 0) == 0)) {
             return generateExpression(call->object.get()) + ".length";
         }
         bool is_async_call = async_functions.count(call->method_name) > 0;
@@ -675,6 +1051,36 @@ std::string JSCodeGenerator::generateExpression(ExprNode* expr) {
         return res;
     }
     if (auto* ui = dynamic_cast<UIComponentNode*>(expr)) {
+        if (isMathConstructorName(ui->component_type)) {
+            return "zenith.make" + ui->component_type + "(" +
+                   [&]() {
+                       std::string args;
+                       for (size_t i = 0; i < ui->children.size(); ++i) {
+                           args += generateExpression(ui->children[i].get());
+                           if (i < ui->children.size() - 1) args += ", ";
+                       }
+                       return args;
+                   }() + ")";
+        }
+        if (isCompileTimeAssetConstructorName(ui->component_type)) {
+            if (ui->component_type == "texture") {
+                return "{ __zenithType: \"TextureHandleView\", path: " + generateExpression(ui->children[0].get()) + ", id: 0, refCount: 0, loaded: false, width: 0, height: 0, channels: 0, gpuId: 0 }";
+            }
+            if (ui->component_type == "audio") {
+                return "{ __zenithType: \"AudioHandleView\", path: " + generateExpression(ui->children[0].get()) + ", id: 0, refCount: 0, loaded: false, duration: 0, spatial: false }";
+            }
+            if (ui->component_type == "mesh") {
+                return "{ __zenithType: \"MeshHandleView\", path: " + generateExpression(ui->children[0].get()) + ", id: 0, refCount: 0, loaded: false, vertexCount: 0, triangleCount: 0, vbo: 0, ebo: 0 }";
+            }
+            if (ui->component_type == "shader") {
+                return "{ __zenithType: \"ShaderHandleView\", path: " + generateExpression(ui->children[0].get()) + ", id: 0, refCount: 0, loaded: false, programId: 0 }";
+            }
+            if (ui->component_type == "material") {
+                std::string shader_path = ui->children.size() > 1 ? generateExpression(ui->children[1].get()) : "\"\"";
+                return "{ __zenithType: \"MaterialHandleView\", path: " + generateExpression(ui->children[0].get()) + ", id: 0, refCount: 0, loaded: false, shaderPath: " + shader_path + ", propertyCount: 0 }";
+            }
+        }
+
         std::string res;
         bool is_class = class_names.count(ui->component_type) > 0;
         bool is_fn = function_names.count(ui->component_type) > 0;
@@ -815,6 +1221,7 @@ void JSCodeGenerator::generateStatement(ASTNode* stmt) {
 }
 
 void JSCodeGenerator::generateClass(ClassDeclNode* node) {
+    bool is_scene_class = classImplementsScene(node);
     current_class_fields.clear();
     for (const auto& param : node->primary_constructor_args) {
         current_class_fields.insert(param->var_name);
@@ -822,9 +1229,33 @@ void JSCodeGenerator::generateClass(ClassDeclNode* node) {
     for (const auto& member : node->fields) {
         current_class_fields.insert(member->var_name);
     }
+    if (is_scene_class) {
+        current_class_fields.insert("name");
+        current_class_fields.insert("clearColor");
+        current_class_fields.insert("fixedDeltaTime");
+        current_class_fields.insert("maxFrameDelta");
+        current_class_fields.insert("maxFixedStepsPerFrame");
+        current_class_fields.insert("autoSimulatePhysics");
+        current_class_fields.insert("autoRenderWorld2D");
+        current_class_fields.insert("drawEntityNames");
+        current_class_fields.insert("debugDrawGrid2D");
+        current_class_fields.insert("debugDrawColliders2D");
+        current_class_fields.insert("debugDrawTransforms2D");
+        current_class_fields.insert("debugDrawCameraBounds2D");
+        current_class_fields.insert("debugDrawRuntimeStats");
+        current_class_fields.insert("debugGridCellWidth");
+        current_class_fields.insert("debugGridCellHeight");
+        current_class_fields.insert("debugOverlayColor");
+        current_class_fields.insert("debugOverlayEnabled");
+        current_class_fields.insert("minimalInspectorEnabled");
+        current_class_fields.insert("paused");
+    }
     current_class_methods.clear();
     for (const auto& method : node->methods) {
         current_class_methods.insert(method->function_name);
+    }
+    if (is_scene_class) {
+        addBuiltinSceneMethodNames(current_class_methods);
     }
 
     bool has_build = false;
@@ -849,6 +1280,57 @@ void JSCodeGenerator::generateClass(ClassDeclNode* node) {
     for (const auto& param : node->primary_constructor_args) {
         indent();
         output << "this." << param->var_name << " = " << param->var_name << ";\n";
+    }
+    if (is_scene_class) {
+        indent(); output << "this.name = \"" << node->class_name << "\";\n";
+        indent(); output << "this.clearColor = \"black\";\n";
+        indent(); output << "this.fixedDeltaTime = 1.0 / 60.0;\n";
+        indent(); output << "this.maxFrameDelta = 0.25;\n";
+        indent(); output << "this.maxFixedStepsPerFrame = 8;\n";
+        indent(); output << "this.autoSimulatePhysics = true;\n";
+        indent(); output << "this.autoRenderWorld2D = false;\n";
+        indent(); output << "this.drawEntityNames = true;\n";
+        indent(); output << "this.debugDrawGrid2D = false;\n";
+        indent(); output << "this.debugDrawColliders2D = false;\n";
+        indent(); output << "this.debugDrawTransforms2D = false;\n";
+        indent(); output << "this.debugDrawCameraBounds2D = false;\n";
+        indent(); output << "this.debugDrawRuntimeStats = false;\n";
+        indent(); output << "this.debugGridCellWidth = 1;\n";
+        indent(); output << "this.debugGridCellHeight = 1;\n";
+        indent(); output << "this.debugOverlayColor = 'cyan';\n";
+        indent(); output << "this.debugOverlayEnabled = true;\n";
+        indent(); output << "this.minimalInspectorEnabled = false;\n";
+        indent(); output << "this.paused = false;\n";
+        indent(); output << "this._zenithLoaded = false;\n";
+        indent(); output << "this._zenithAccumulator = 0.0;\n";
+        indent(); output << "this._zenithLastFrameDelta = 0.0;\n";
+        indent(); output << "this._zenithFrameCount = 0;\n";
+        indent(); output << "this._zenithFixedStepCount = 0;\n";
+        indent(); output << "this._zenithDroppedStepFrames = 0;\n";
+        indent(); output << "this._zenithLastFixedSteps = 0;\n";
+        indent(); output << "this._zenithNextEntityId = 1;\n";
+        indent(); output << "this._zenithNextAssetHandleId = 1;\n";
+        indent(); output << "this._zenithEntities = [];\n";
+        indent(); output << "this._zenithMaterials = new Map();\n";
+        indent(); output << "this._zenithTextureHandles = new Map();\n";
+        indent(); output << "this._zenithAudioHandles = new Map();\n";
+        indent(); output << "this._zenithMeshHandles = new Map();\n";
+        indent(); output << "this._zenithShaderHandles = new Map();\n";
+        indent(); output << "this._zenithMaterialHandles = new Map();\n";
+        indent(); output << "this._zenithAssetMetadata = new Map();\n";
+        indent(); output << "this._zenithAssetBundles = new Map();\n";
+        indent(); output << "this._zenithAssetBudgets = new Map();\n";
+        indent(); output << "this._zenithAssetHotReload = true;\n";
+        indent(); output << "this._zenithBakedAssetOutputs = new Map();\n";
+        indent(); output << "this._zenithPrefabs = new Map();\n";
+        indent(); output << "this._zenithSceneStreams = new Map();\n";
+        indent(); output << "this._zenithLoadedSceneStreams = new Map();\n";
+        indent(); output << "this._zenithPrimaryCamera = null;\n";
+        indent(); output << "this._zenithPrimaryAudioListener = null;\n";
+        indent(); output << "this._zenithPrimaryCamera3D = null;\n";
+        indent(); output << "this._zenithPrimaryAudioListener3D = null;\n";
+        indent(); output << "this._zenithInspectorEntity = null;\n";
+        indent(); output << "this._zenithInspectorMaterialPath = '';\n";
     }
     for (const auto& member : node->fields) {
         indent();
@@ -940,6 +1422,5083 @@ void JSCodeGenerator::generateClass(ClassDeclNode* node) {
             indent_level--;
             indent(); output << "}\n";
         }
+    }
+
+    if (current_class_methods.count("triggerCallback") == 0) {
+        indent();
+        output << "triggerCallback(name, val = '') {\n";
+        indent_level++;
+        for (const auto& method : node->methods) {
+            if (method->function_name == "build" || method->function_name == "triggerCallback") {
+                continue;
+            }
+            if (method->parameters.empty()) {
+                indent();
+                output << "if (name === \"" << method->function_name << "\") { this." << method->function_name << "(); return; }\n";
+            } else if (method->parameters.size() == 1) {
+                std::string param_type = method->parameters[0]->type ? method->parameters[0]->type->type_name : "";
+                indent();
+                if (param_type == "String") {
+                    output << "if (name === \"" << method->function_name << "\") { this." << method->function_name << "(val === undefined || val === null ? '' : String(val)); return; }\n";
+                } else if (param_type == "Bool") {
+                    output << "if (name === \"" << method->function_name << "\") { this." << method->function_name << "(val === true || val === 'true'); return; }\n";
+                } else if (param_type == "Int") {
+                    output << "if (name === \"" << method->function_name << "\") { const parsed = Number.parseInt(val, 10); if (!Number.isNaN(parsed)) this." << method->function_name << "(parsed); return; }\n";
+                } else if (param_type == "Float") {
+                    output << "if (name === \"" << method->function_name << "\") { const parsed = Number(val); if (!Number.isNaN(parsed)) this." << method->function_name << "(parsed); return; }\n";
+                }
+            }
+        }
+        indent_level--;
+        indent(); output << "}\n";
+    }
+
+    if (is_scene_class && current_class_methods.count("triggerEntityCallback") == 0) {
+        indent();
+        output << "triggerEntityCallback(name, entity = null) {\n";
+        indent_level++;
+        for (const auto& method : node->methods) {
+            if (method->function_name == "build" || method->function_name == "triggerCallback") {
+                continue;
+            }
+            if (method->parameters.size() == 1) {
+                std::string param_type = method->parameters[0]->type ? method->parameters[0]->type->type_name : "";
+                if (param_type == "EntityId") {
+                    indent();
+                    output << "if (name === \"" << method->function_name << "\") { this." << method->function_name << "(entity); return; }\n";
+                }
+            }
+        }
+        indent_level--;
+        indent(); output << "}\n";
+    }
+
+    if (is_scene_class) {
+        indent();
+        output << "createEntity(name) {\n";
+        indent_level++;
+        indent(); output << "const entity = {\n";
+        indent_level++;
+        indent(); output << "id: this._zenithNextEntityId++,\n";
+        indent(); output << "name,\n";
+        indent(); output << "tag: '',\n";
+        indent(); output << "kind: 'entity',\n";
+        indent(); output << "x: 0,\n";
+        indent(); output << "y: 0,\n";
+        indent(); output << "z: 0,\n";
+        indent(); output << "rotation: 0,\n";
+        indent(); output << "rotationX: 0,\n";
+        indent(); output << "rotationY: 0,\n";
+        indent(); output << "rotationZ: 0,\n";
+        indent(); output << "scaleX: 1,\n";
+        indent(); output << "scaleY: 1,\n";
+        indent(); output << "scaleZ: 1,\n";
+        indent(); output << "visible: true,\n";
+        indent(); output << "parent: null,\n";
+        indent(); output << "children: []\n";
+        indent_level--;
+        indent(); output << "};\n";
+        indent(); output << "this._zenithEntities.push(entity);\n";
+        indent(); output << "return entity;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithEnsureTransform2D(entity) {\n";
+        indent_level++;
+        indent(); output << "if (!entity) return null;\n";
+        indent(); output << "if (entity.x === undefined) entity.x = 0;\n";
+        indent(); output << "if (entity.y === undefined) entity.y = 0;\n";
+        indent(); output << "if (entity.rotation === undefined) entity.rotation = 0;\n";
+        indent(); output << "if (entity.scaleX === undefined) entity.scaleX = 1;\n";
+        indent(); output << "if (entity.scaleY === undefined) entity.scaleY = 1;\n";
+        indent(); output << "return entity;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithEnsureTransform3D(entity) {\n";
+        indent_level++;
+        indent(); output << "const target = this._zenithEnsureTransform2D(entity);\n";
+        indent(); output << "if (!target) return null;\n";
+        indent(); output << "if (target.z === undefined) target.z = 0;\n";
+        indent(); output << "if (target.rotationX === undefined) target.rotationX = 0;\n";
+        indent(); output << "if (target.rotationY === undefined) target.rotationY = 0;\n";
+        indent(); output << "if (target.rotationZ === undefined) target.rotationZ = 0;\n";
+        indent(); output << "if (target.scaleZ === undefined) target.scaleZ = 1;\n";
+        indent(); output << "return target;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithEnsureBody2D(entity) {\n";
+        indent_level++;
+        indent(); output << "const target = this._zenithEnsureTransform2D(entity);\n";
+        indent(); output << "if (!target) return null;\n";
+        indent(); output << "target.hasBody = true;\n";
+        indent(); output << "if (target.vx === undefined) target.vx = 0;\n";
+        indent(); output << "if (target.vy === undefined) target.vy = 0;\n";
+        indent(); output << "if (target.mass === undefined || target.mass <= 0) target.mass = 1;\n";
+        indent(); output << "if (target.gravityScale === undefined) target.gravityScale = 1;\n";
+        indent(); output << "if (target.friction === undefined) target.friction = 0.2;\n";
+        indent(); output << "if (target.restitution === undefined) target.restitution = 0;\n";
+        indent(); output << "return target;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithEnsureBoxCollider2D(entity) {\n";
+        indent_level++;
+        indent(); output << "const target = this._zenithEnsureTransform2D(entity);\n";
+        indent(); output << "if (!target) return null;\n";
+        indent(); output << "target.hasBoxCollider2D = true;\n";
+        indent(); output << "if (target.boxColliderOffsetX === undefined) target.boxColliderOffsetX = 0;\n";
+        indent(); output << "if (target.boxColliderOffsetY === undefined) target.boxColliderOffsetY = 0;\n";
+        indent(); output << "if (target.boxColliderWidth === undefined || target.boxColliderWidth <= 0) target.boxColliderWidth = 1;\n";
+        indent(); output << "if (target.boxColliderHeight === undefined || target.boxColliderHeight <= 0) target.boxColliderHeight = 1;\n";
+        indent(); output << "if (target.boxColliderIsTrigger === undefined) target.boxColliderIsTrigger = false;\n";
+        indent(); output << "if (target.boxColliderEnabled === undefined) target.boxColliderEnabled = true;\n";
+        indent(); output << "return target;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithEnsureCircleCollider2D(entity) {\n";
+        indent_level++;
+        indent(); output << "const target = this._zenithEnsureTransform2D(entity);\n";
+        indent(); output << "if (!target) return null;\n";
+        indent(); output << "target.hasCircleCollider2D = true;\n";
+        indent(); output << "if (target.circleColliderOffsetX === undefined) target.circleColliderOffsetX = 0;\n";
+        indent(); output << "if (target.circleColliderOffsetY === undefined) target.circleColliderOffsetY = 0;\n";
+        indent(); output << "if (target.circleColliderRadius === undefined || target.circleColliderRadius <= 0) target.circleColliderRadius = 0.5;\n";
+        indent(); output << "if (target.circleColliderIsTrigger === undefined) target.circleColliderIsTrigger = false;\n";
+        indent(); output << "if (target.circleColliderEnabled === undefined) target.circleColliderEnabled = true;\n";
+        indent(); output << "return target;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithEnsureCapsuleCollider2D(entity) {\n";
+        indent_level++;
+        indent(); output << "const target = this._zenithEnsureTransform2D(entity);\n";
+        indent(); output << "if (!target) return null;\n";
+        indent(); output << "target.hasCapsuleCollider2D = true;\n";
+        indent(); output << "if (target.capsuleColliderOffsetX === undefined) target.capsuleColliderOffsetX = 0;\n";
+        indent(); output << "if (target.capsuleColliderOffsetY === undefined) target.capsuleColliderOffsetY = 0;\n";
+        indent(); output << "if (target.capsuleColliderRadius === undefined || target.capsuleColliderRadius <= 0) target.capsuleColliderRadius = 0.5;\n";
+        indent(); output << "if (target.capsuleColliderHeight === undefined || target.capsuleColliderHeight < target.capsuleColliderRadius * 2) target.capsuleColliderHeight = Math.max(2, target.capsuleColliderRadius * 2);\n";
+        indent(); output << "if (target.capsuleColliderIsTrigger === undefined) target.capsuleColliderIsTrigger = false;\n";
+        indent(); output << "if (target.capsuleColliderEnabled === undefined) target.capsuleColliderEnabled = true;\n";
+        indent(); output << "return target;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithBoxColliderBounds2D(entity) {\n";
+        indent_level++;
+        indent(); output << "if (!entity || entity.hasBoxCollider2D !== true || entity.boxColliderEnabled === false) return null;\n";
+        indent(); output << "const width = entity.boxColliderWidth !== undefined && entity.boxColliderWidth > 0 ? entity.boxColliderWidth : 1;\n";
+        indent(); output << "const height = entity.boxColliderHeight !== undefined && entity.boxColliderHeight > 0 ? entity.boxColliderHeight : 1;\n";
+        indent(); output << "const centerX = (entity.x !== undefined ? entity.x : 0) + (entity.boxColliderOffsetX !== undefined ? entity.boxColliderOffsetX : 0);\n";
+        indent(); output << "const centerY = (entity.y !== undefined ? entity.y : 0) + (entity.boxColliderOffsetY !== undefined ? entity.boxColliderOffsetY : 0);\n";
+        indent(); output << "return {\n";
+        indent_level++;
+        indent(); output << "minX: centerX - (width * 0.5),\n";
+        indent(); output << "maxX: centerX + (width * 0.5),\n";
+        indent(); output << "minY: centerY - (height * 0.5),\n";
+        indent(); output << "maxY: centerY + (height * 0.5)\n";
+        indent_level--;
+        indent(); output << "};\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithCircleColliderState2D(entity) {\n";
+        indent_level++;
+        indent(); output << "if (!entity || entity.hasCircleCollider2D !== true || entity.circleColliderEnabled === false) return null;\n";
+        indent(); output << "const radius = entity.circleColliderRadius !== undefined && entity.circleColliderRadius > 0 ? entity.circleColliderRadius : 0.5;\n";
+        indent(); output << "return {\n";
+        indent_level++;
+        indent(); output << "x: (entity.x !== undefined ? entity.x : 0) + (entity.circleColliderOffsetX !== undefined ? entity.circleColliderOffsetX : 0),\n";
+        indent(); output << "y: (entity.y !== undefined ? entity.y : 0) + (entity.circleColliderOffsetY !== undefined ? entity.circleColliderOffsetY : 0),\n";
+        indent(); output << "radius\n";
+        indent_level--;
+        indent(); output << "};\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithCapsuleColliderState2D(entity) {\n";
+        indent_level++;
+        indent(); output << "if (!entity || entity.hasCapsuleCollider2D !== true || entity.capsuleColliderEnabled === false) return null;\n";
+        indent(); output << "const radius = entity.capsuleColliderRadius !== undefined && entity.capsuleColliderRadius > 0 ? entity.capsuleColliderRadius : 0.5;\n";
+        indent(); output << "const height = entity.capsuleColliderHeight !== undefined && entity.capsuleColliderHeight >= radius * 2 ? entity.capsuleColliderHeight : (radius * 2);\n";
+        indent(); output << "const halfSegment = Math.max(0, (height * 0.5) - radius);\n";
+        indent(); output << "return {\n";
+        indent_level++;
+        indent(); output << "x: (entity.x !== undefined ? entity.x : 0) + (entity.capsuleColliderOffsetX !== undefined ? entity.capsuleColliderOffsetX : 0),\n";
+        indent(); output << "y: (entity.y !== undefined ? entity.y : 0) + (entity.capsuleColliderOffsetY !== undefined ? entity.capsuleColliderOffsetY : 0),\n";
+        indent(); output << "radius,\n";
+        indent(); output << "height,\n";
+        indent(); output << "halfSegment\n";
+        indent_level--;
+        indent(); output << "};\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithBoxIntersectsCircle2D(bounds, circle) {\n";
+        indent_level++;
+        indent(); output << "if (!bounds || !circle) return false;\n";
+        indent(); output << "const closestX = Math.max(bounds.minX, Math.min(circle.x, bounds.maxX));\n";
+        indent(); output << "const closestY = Math.max(bounds.minY, Math.min(circle.y, bounds.maxY));\n";
+        indent(); output << "const dx = circle.x - closestX;\n";
+        indent(); output << "const dy = circle.y - closestY;\n";
+        indent(); output << "return (dx * dx) + (dy * dy) <= (circle.radius * circle.radius);\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithCapsuleMiddleBoxBounds2D(capsule) {\n";
+        indent_level++;
+        indent(); output << "if (!capsule || capsule.halfSegment <= 0.000001) return null;\n";
+        indent(); output << "return {\n";
+        indent_level++;
+        indent(); output << "minX: capsule.x - capsule.radius,\n";
+        indent(); output << "maxX: capsule.x + capsule.radius,\n";
+        indent(); output << "minY: capsule.y - capsule.halfSegment,\n";
+        indent(); output << "maxY: capsule.y + capsule.halfSegment\n";
+        indent_level--;
+        indent(); output << "};\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithCapsuleTopCircle2D(capsule) {\n";
+        indent_level++;
+        indent(); output << "if (!capsule) return null;\n";
+        indent(); output << "return { x: capsule.x, y: capsule.y - capsule.halfSegment, radius: capsule.radius };\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithCapsuleBottomCircle2D(capsule) {\n";
+        indent_level++;
+        indent(); output << "if (!capsule) return null;\n";
+        indent(); output << "return { x: capsule.x, y: capsule.y + capsule.halfSegment, radius: capsule.radius };\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithCirclesOverlap2D(first, second) {\n";
+        indent_level++;
+        indent(); output << "if (!first || !second) return false;\n";
+        indent(); output << "const dx = first.x - second.x;\n";
+        indent(); output << "const dy = first.y - second.y;\n";
+        indent(); output << "const radius = first.radius + second.radius;\n";
+        indent(); output << "return (dx * dx) + (dy * dy) <= (radius * radius);\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithCapsuleIntersectsBox2D(capsule, box) {\n";
+        indent_level++;
+        indent(); output << "if (!capsule || !box) return false;\n";
+        indent(); output << "const middle = this._zenithCapsuleMiddleBoxBounds2D(capsule);\n";
+        indent(); output << "if (middle && middle.minX <= box.maxX && middle.maxX >= box.minX && middle.minY <= box.maxY && middle.maxY >= box.minY) return true;\n";
+        indent(); output << "if (this._zenithBoxIntersectsCircle2D(box, this._zenithCapsuleTopCircle2D(capsule))) return true;\n";
+        indent(); output << "if (this._zenithBoxIntersectsCircle2D(box, this._zenithCapsuleBottomCircle2D(capsule))) return true;\n";
+        indent(); output << "return false;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithCapsuleIntersectsCircle2D(capsule, circle) {\n";
+        indent_level++;
+        indent(); output << "if (!capsule || !circle) return false;\n";
+        indent(); output << "const middle = this._zenithCapsuleMiddleBoxBounds2D(capsule);\n";
+        indent(); output << "if (middle && this._zenithBoxIntersectsCircle2D(middle, circle)) return true;\n";
+        indent(); output << "if (this._zenithCirclesOverlap2D(this._zenithCapsuleTopCircle2D(capsule), circle)) return true;\n";
+        indent(); output << "if (this._zenithCirclesOverlap2D(this._zenithCapsuleBottomCircle2D(capsule), circle)) return true;\n";
+        indent(); output << "return false;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithCapsuleIntersectsCapsule2D(first, second) {\n";
+        indent_level++;
+        indent(); output << "if (!first || !second) return false;\n";
+        indent(); output << "const firstMiddle = this._zenithCapsuleMiddleBoxBounds2D(first);\n";
+        indent(); output << "const secondMiddle = this._zenithCapsuleMiddleBoxBounds2D(second);\n";
+        indent(); output << "const firstTop = this._zenithCapsuleTopCircle2D(first);\n";
+        indent(); output << "const firstBottom = this._zenithCapsuleBottomCircle2D(first);\n";
+        indent(); output << "const secondTop = this._zenithCapsuleTopCircle2D(second);\n";
+        indent(); output << "const secondBottom = this._zenithCapsuleBottomCircle2D(second);\n";
+        indent(); output << "if (firstMiddle && secondMiddle && firstMiddle.minX <= secondMiddle.maxX && firstMiddle.maxX >= secondMiddle.minX && firstMiddle.minY <= secondMiddle.maxY && firstMiddle.maxY >= secondMiddle.minY) return true;\n";
+        indent(); output << "if (firstMiddle && (this._zenithBoxIntersectsCircle2D(firstMiddle, secondTop) || this._zenithBoxIntersectsCircle2D(firstMiddle, secondBottom))) return true;\n";
+        indent(); output << "if (secondMiddle && (this._zenithBoxIntersectsCircle2D(secondMiddle, firstTop) || this._zenithBoxIntersectsCircle2D(secondMiddle, firstBottom))) return true;\n";
+        indent(); output << "return this._zenithCirclesOverlap2D(firstTop, secondTop) || this._zenithCirclesOverlap2D(firstTop, secondBottom) || this._zenithCirclesOverlap2D(firstBottom, secondTop) || this._zenithCirclesOverlap2D(firstBottom, secondBottom);\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithCapsuleContainsPoint2D(capsule, x, y) {\n";
+        indent_level++;
+        indent(); output << "if (!capsule) return false;\n";
+        indent(); output << "const middle = this._zenithCapsuleMiddleBoxBounds2D(capsule);\n";
+        indent(); output << "if (middle && x >= middle.minX && x <= middle.maxX && y >= middle.minY && y <= middle.maxY) return true;\n";
+        indent(); output << "const top = this._zenithCapsuleTopCircle2D(capsule);\n";
+        indent(); output << "const topDx = x - top.x;\n";
+        indent(); output << "const topDy = y - top.y;\n";
+        indent(); output << "if ((topDx * topDx) + (topDy * topDy) <= (top.radius * top.radius)) return true;\n";
+        indent(); output << "const bottom = this._zenithCapsuleBottomCircle2D(capsule);\n";
+        indent(); output << "const bottomDx = x - bottom.x;\n";
+        indent(); output << "const bottomDy = y - bottom.y;\n";
+        indent(); output << "return (bottomDx * bottomDx) + (bottomDy * bottomDy) <= (bottom.radius * bottom.radius);\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithRaycastCapsule2D(originX, originY, dirX, dirY, capsule, maxDistance) {\n";
+        indent_level++;
+        indent(); output << "if (!capsule || maxDistance < 0) return null;\n";
+        indent(); output << "let bestHit = null;\n";
+        indent(); output << "let bestDistance = maxDistance;\n";
+        indent(); output << "const consider = (hit) => {\n";
+        indent_level++;
+        indent(); output << "if (!hit || hit.distance > bestDistance) return;\n";
+        indent(); output << "bestDistance = hit.distance;\n";
+        indent(); output << "bestHit = hit;\n";
+        indent_level--;
+        indent(); output << "};\n";
+        indent(); output << "const middle = this._zenithCapsuleMiddleBoxBounds2D(capsule);\n";
+        indent(); output << "if (middle) consider(this._zenithRaycastBox2D(originX, originY, dirX, dirY, middle, bestDistance));\n";
+        indent(); output << "consider(this._zenithRaycastCircle2D(originX, originY, dirX, dirY, this._zenithCapsuleTopCircle2D(capsule), bestDistance));\n";
+        indent(); output << "consider(this._zenithRaycastCircle2D(originX, originY, dirX, dirY, this._zenithCapsuleBottomCircle2D(capsule), bestDistance));\n";
+        indent(); output << "return bestHit;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithEnsureBody3D(entity) {\n";
+        indent_level++;
+        indent(); output << "const target = this._zenithEnsureTransform3D(entity);\n";
+        indent(); output << "if (!target) return null;\n";
+        indent(); output << "target.hasBody = true;\n";
+        indent(); output << "target.hasBody3D = true;\n";
+        indent(); output << "if (target.vx === undefined) target.vx = 0;\n";
+        indent(); output << "if (target.vy === undefined) target.vy = 0;\n";
+        indent(); output << "if (target.vz === undefined) target.vz = 0;\n";
+        indent(); output << "if (target.mass === undefined || target.mass <= 0) target.mass = 1;\n";
+        indent(); output << "if (target.gravityScale === undefined) target.gravityScale = 1;\n";
+        indent(); output << "if (target.friction === undefined) target.friction = 0.2;\n";
+        indent(); output << "if (target.restitution === undefined) target.restitution = 0;\n";
+        indent(); output << "if (target.useGravity === undefined) target.useGravity = true;\n";
+        indent(); output << "if (target.isGrounded === undefined) target.isGrounded = false;\n";
+        indent(); output << "return target;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithEnsureBoxCollider3D(entity) {\n";
+        indent_level++;
+        indent(); output << "const target = this._zenithEnsureTransform3D(entity);\n";
+        indent(); output << "if (!target) return null;\n";
+        indent(); output << "target.hasBoxCollider3D = true;\n";
+        indent(); output << "if (target.boxCollider3DOffsetX === undefined) target.boxCollider3DOffsetX = 0;\n";
+        indent(); output << "if (target.boxCollider3DOffsetY === undefined) target.boxCollider3DOffsetY = 0;\n";
+        indent(); output << "if (target.boxCollider3DOffsetZ === undefined) target.boxCollider3DOffsetZ = 0;\n";
+        indent(); output << "if (target.boxCollider3DWidth === undefined || target.boxCollider3DWidth <= 0) target.boxCollider3DWidth = 1;\n";
+        indent(); output << "if (target.boxCollider3DHeight === undefined || target.boxCollider3DHeight <= 0) target.boxCollider3DHeight = 1;\n";
+        indent(); output << "if (target.boxCollider3DDepth === undefined || target.boxCollider3DDepth <= 0) target.boxCollider3DDepth = 1;\n";
+        indent(); output << "if (target.boxCollider3DIsTrigger === undefined) target.boxCollider3DIsTrigger = false;\n";
+        indent(); output << "if (target.boxCollider3DEnabled === undefined) target.boxCollider3DEnabled = true;\n";
+        indent(); output << "return target;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithEnsureSphereCollider3D(entity) {\n";
+        indent_level++;
+        indent(); output << "const target = this._zenithEnsureTransform3D(entity);\n";
+        indent(); output << "if (!target) return null;\n";
+        indent(); output << "target.hasSphereCollider3D = true;\n";
+        indent(); output << "if (target.sphereCollider3DOffsetX === undefined) target.sphereCollider3DOffsetX = 0;\n";
+        indent(); output << "if (target.sphereCollider3DOffsetY === undefined) target.sphereCollider3DOffsetY = 0;\n";
+        indent(); output << "if (target.sphereCollider3DOffsetZ === undefined) target.sphereCollider3DOffsetZ = 0;\n";
+        indent(); output << "if (target.sphereCollider3DRadius === undefined || target.sphereCollider3DRadius <= 0) target.sphereCollider3DRadius = 0.5;\n";
+        indent(); output << "if (target.sphereCollider3DIsTrigger === undefined) target.sphereCollider3DIsTrigger = false;\n";
+        indent(); output << "if (target.sphereCollider3DEnabled === undefined) target.sphereCollider3DEnabled = true;\n";
+        indent(); output << "return target;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithBoxColliderBounds3D(entity) {\n";
+        indent_level++;
+        indent(); output << "if (!entity || entity.hasBoxCollider3D !== true || entity.boxCollider3DEnabled === false) return null;\n";
+        indent(); output << "const width = entity.boxCollider3DWidth !== undefined && entity.boxCollider3DWidth > 0 ? entity.boxCollider3DWidth : 1;\n";
+        indent(); output << "const height = entity.boxCollider3DHeight !== undefined && entity.boxCollider3DHeight > 0 ? entity.boxCollider3DHeight : 1;\n";
+        indent(); output << "const depth = entity.boxCollider3DDepth !== undefined && entity.boxCollider3DDepth > 0 ? entity.boxCollider3DDepth : 1;\n";
+        indent(); output << "const centerX = (entity.x !== undefined ? entity.x : 0) + (entity.boxCollider3DOffsetX !== undefined ? entity.boxCollider3DOffsetX : 0);\n";
+        indent(); output << "const centerY = (entity.y !== undefined ? entity.y : 0) + (entity.boxCollider3DOffsetY !== undefined ? entity.boxCollider3DOffsetY : 0);\n";
+        indent(); output << "const centerZ = (entity.z !== undefined ? entity.z : 0) + (entity.boxCollider3DOffsetZ !== undefined ? entity.boxCollider3DOffsetZ : 0);\n";
+        indent(); output << "return {\n";
+        indent_level++;
+        indent(); output << "minX: centerX - (width * 0.5),\n";
+        indent(); output << "maxX: centerX + (width * 0.5),\n";
+        indent(); output << "minY: centerY - (height * 0.5),\n";
+        indent(); output << "maxY: centerY + (height * 0.5),\n";
+        indent(); output << "minZ: centerZ - (depth * 0.5),\n";
+        indent(); output << "maxZ: centerZ + (depth * 0.5)\n";
+        indent_level--;
+        indent(); output << "};\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithSphereColliderState3D(entity) {\n";
+        indent_level++;
+        indent(); output << "if (!entity || entity.hasSphereCollider3D !== true || entity.sphereCollider3DEnabled === false) return null;\n";
+        indent(); output << "const radius = entity.sphereCollider3DRadius !== undefined && entity.sphereCollider3DRadius > 0 ? entity.sphereCollider3DRadius : 0.5;\n";
+        indent(); output << "return {\n";
+        indent_level++;
+        indent(); output << "x: (entity.x !== undefined ? entity.x : 0) + (entity.sphereCollider3DOffsetX !== undefined ? entity.sphereCollider3DOffsetX : 0),\n";
+        indent(); output << "y: (entity.y !== undefined ? entity.y : 0) + (entity.sphereCollider3DOffsetY !== undefined ? entity.sphereCollider3DOffsetY : 0),\n";
+        indent(); output << "z: (entity.z !== undefined ? entity.z : 0) + (entity.sphereCollider3DOffsetZ !== undefined ? entity.sphereCollider3DOffsetZ : 0),\n";
+        indent(); output << "radius\n";
+        indent_level--;
+        indent(); output << "};\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithBoxIntersectsSphere3D(bounds, sphere) {\n";
+        indent_level++;
+        indent(); output << "if (!bounds || !sphere) return false;\n";
+        indent(); output << "const closestX = Math.max(bounds.minX, Math.min(sphere.x, bounds.maxX));\n";
+        indent(); output << "const closestY = Math.max(bounds.minY, Math.min(sphere.y, bounds.maxY));\n";
+        indent(); output << "const closestZ = Math.max(bounds.minZ, Math.min(sphere.z, bounds.maxZ));\n";
+        indent(); output << "const dx = sphere.x - closestX;\n";
+        indent(); output << "const dy = sphere.y - closestY;\n";
+        indent(); output << "const dz = sphere.z - closestZ;\n";
+        indent(); output << "return (dx * dx) + (dy * dy) + (dz * dz) <= (sphere.radius * sphere.radius);\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithRaycastSphere3D(originX, originY, originZ, dirX, dirY, dirZ, sphere, maxDistance) {\n";
+        indent_level++;
+        indent(); output << "if (!sphere || maxDistance < 0) return null;\n";
+        indent(); output << "const a = (dirX * dirX) + (dirY * dirY) + (dirZ * dirZ);\n";
+        indent(); output << "if (a <= 0.0000001) return null;\n";
+        indent(); output << "const ocX = originX - sphere.x;\n";
+        indent(); output << "const ocY = originY - sphere.y;\n";
+        indent(); output << "const ocZ = originZ - sphere.z;\n";
+        indent(); output << "const b = 2 * ((ocX * dirX) + (ocY * dirY) + (ocZ * dirZ));\n";
+        indent(); output << "const c = (ocX * ocX) + (ocY * ocY) + (ocZ * ocZ) - (sphere.radius * sphere.radius);\n";
+        indent(); output << "const discriminant = (b * b) - (4 * a * c);\n";
+        indent(); output << "if (discriminant < 0) return null;\n";
+        indent(); output << "const sqrtDisc = Math.sqrt(discriminant);\n";
+        indent(); output << "let distance = (-b - sqrtDisc) / (2 * a);\n";
+        indent(); output << "if (distance < 0) distance = (-b + sqrtDisc) / (2 * a);\n";
+        indent(); output << "if (distance < 0 || distance > maxDistance) return null;\n";
+        indent(); output << "const pointX = originX + (dirX * distance);\n";
+        indent(); output << "const pointY = originY + (dirY * distance);\n";
+        indent(); output << "const pointZ = originZ + (dirZ * distance);\n";
+        indent(); output << "let normalX = pointX - sphere.x;\n";
+        indent(); output << "let normalY = pointY - sphere.y;\n";
+        indent(); output << "let normalZ = pointZ - sphere.z;\n";
+        indent(); output << "const normalLength = Math.sqrt((normalX * normalX) + (normalY * normalY) + (normalZ * normalZ));\n";
+        indent(); output << "if (normalLength > 0.0000001) {\n";
+        indent_level++;
+        indent(); output << "normalX /= normalLength;\n";
+        indent(); output << "normalY /= normalLength;\n";
+        indent(); output << "normalZ /= normalLength;\n";
+        indent_level--;
+        indent(); output << "} else {\n";
+        indent_level++;
+        indent(); output << "normalX = -dirX;\n";
+        indent(); output << "normalY = -dirY;\n";
+        indent(); output << "normalZ = -dirZ;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "return { distance, pointX, pointY, pointZ, normalX, normalY, normalZ };\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithRaycastBox3D(originX, originY, originZ, dirX, dirY, dirZ, bounds, maxDistance) {\n";
+        indent_level++;
+        indent(); output << "if (!bounds || maxDistance < 0) return null;\n";
+        indent(); output << "const dirEpsilon = 0.0000001;\n";
+        indent(); output << "let tMin = 0;\n";
+        indent(); output << "let tMax = maxDistance;\n";
+        indent(); output << "let normalX = 0;\n";
+        indent(); output << "let normalY = 0;\n";
+        indent(); output << "let normalZ = 0;\n";
+        indent(); output << "const axisTest = (origin, dir, min, max, nx, ny, nz) => {\n";
+        indent_level++;
+        indent(); output << "if (Math.abs(dir) <= dirEpsilon) {\n";
+        indent_level++;
+        indent(); output << "return origin >= min && origin <= max;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "let near = (min - origin) / dir;\n";
+        indent(); output << "let far = (max - origin) / dir;\n";
+        indent(); output << "let hitNx = nx;\n";
+        indent(); output << "let hitNy = ny;\n";
+        indent(); output << "let hitNz = nz;\n";
+        indent(); output << "if (near > far) {\n";
+        indent_level++;
+        indent(); output << "const swap = near;\n";
+        indent(); output << "near = far;\n";
+        indent(); output << "far = swap;\n";
+        indent(); output << "hitNx = -nx;\n";
+        indent(); output << "hitNy = -ny;\n";
+        indent(); output << "hitNz = -nz;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "if (near > tMin) {\n";
+        indent_level++;
+        indent(); output << "tMin = near;\n";
+        indent(); output << "normalX = hitNx;\n";
+        indent(); output << "normalY = hitNy;\n";
+        indent(); output << "normalZ = hitNz;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "if (far < tMax) tMax = far;\n";
+        indent(); output << "return tMin <= tMax;\n";
+        indent_level--;
+        indent(); output << "};\n";
+        indent(); output << "if (!axisTest(originX, dirX, bounds.minX, bounds.maxX, -1, 0, 0)) return null;\n";
+        indent(); output << "if (!axisTest(originY, dirY, bounds.minY, bounds.maxY, 0, -1, 0)) return null;\n";
+        indent(); output << "if (!axisTest(originZ, dirZ, bounds.minZ, bounds.maxZ, 0, 0, -1)) return null;\n";
+        indent(); output << "if (tMax < 0) return null;\n";
+        indent(); output << "const distance = tMin >= 0 ? tMin : 0;\n";
+        indent(); output << "if (distance > maxDistance) return null;\n";
+        indent(); output << "const pointX = originX + (dirX * distance);\n";
+        indent(); output << "const pointY = originY + (dirY * distance);\n";
+        indent(); output << "const pointZ = originZ + (dirZ * distance);\n";
+        indent(); output << "if (distance === 0 && normalX === 0 && normalY === 0 && normalZ === 0) {\n";
+        indent_level++;
+        indent(); output << "normalX = -dirX;\n";
+        indent(); output << "normalY = -dirY;\n";
+        indent(); output << "normalZ = -dirZ;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "return { distance, pointX, pointY, pointZ, normalX, normalY, normalZ };\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithEnsureCamera2D(entity) {\n";
+        indent_level++;
+        indent(); output << "const target = this._zenithEnsureTransform2D(entity);\n";
+        indent(); output << "if (!target) return null;\n";
+        indent(); output << "if (target.zoom === undefined) target.zoom = 1;\n";
+        indent(); output << "if (target.primary === undefined) target.primary = false;\n";
+        indent(); output << "if (target.viewportX === undefined) target.viewportX = 0;\n";
+        indent(); output << "if (target.viewportY === undefined) target.viewportY = 0;\n";
+        indent(); output << "if (target.viewportWidth === undefined) target.viewportWidth = 1;\n";
+        indent(); output << "if (target.viewportHeight === undefined) target.viewportHeight = 1;\n";
+        indent(); output << "return target;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithEnsureAudioListener2D(entity) {\n";
+        indent_level++;
+        indent(); output << "const target = this._zenithEnsureTransform2D(entity);\n";
+        indent(); output << "if (!target) return null;\n";
+        indent(); output << "target.hasAudioListener2D = true;\n";
+        indent(); output << "if (target.gain === undefined) target.gain = 1;\n";
+        indent(); output << "if (target.primary === undefined) target.primary = false;\n";
+        indent(); output << "if (target.enabled === undefined) target.enabled = true;\n";
+        indent(); output << "return target;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithEnsureCamera3D(entity) {\n";
+        indent_level++;
+        indent(); output << "const target = this._zenithEnsureTransform3D(entity);\n";
+        indent(); output << "if (!target) return null;\n";
+        indent(); output << "if (target.fov === undefined) target.fov = 60;\n";
+        indent(); output << "if (target.nearClip === undefined) target.nearClip = 0.1;\n";
+        indent(); output << "if (target.farClip === undefined) target.farClip = 1000;\n";
+        indent(); output << "if (target.primary === undefined) target.primary = false;\n";
+        indent(); output << "if (target.viewportX === undefined) target.viewportX = 0;\n";
+        indent(); output << "if (target.viewportY === undefined) target.viewportY = 0;\n";
+        indent(); output << "if (target.viewportWidth === undefined) target.viewportWidth = 1;\n";
+        indent(); output << "if (target.viewportHeight === undefined) target.viewportHeight = 1;\n";
+        indent(); output << "return target;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithEnsureAudioListener3D(entity) {\n";
+        indent_level++;
+        indent(); output << "const target = this._zenithEnsureTransform3D(entity);\n";
+        indent(); output << "if (!target) return null;\n";
+        indent(); output << "target.hasAudioListener3D = true;\n";
+        indent(); output << "if (target.gain === undefined) target.gain = 1;\n";
+        indent(); output << "if (target.primary === undefined) target.primary = false;\n";
+        indent(); output << "if (target.enabled === undefined) target.enabled = true;\n";
+        indent(); output << "return target;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithEnsureSprite2D(entity) {\n";
+        indent_level++;
+        indent(); output << "const target = this._zenithEnsureTransform2D(entity);\n";
+        indent(); output << "if (!target) return null;\n";
+        indent(); output << "if (target.w === undefined) target.w = 1;\n";
+        indent(); output << "if (target.h === undefined) target.h = 1;\n";
+        indent(); output << "if (target.anchorX === undefined) target.anchorX = 0.5;\n";
+        indent(); output << "if (target.anchorY === undefined) target.anchorY = 0.5;\n";
+        indent(); output << "if (target.color === undefined) target.color = 'white';\n";
+        indent(); output << "if (target.texturePath === undefined) target.texturePath = '';\n";
+        indent(); output << "if (target.sortOrder === undefined) target.sortOrder = 0;\n";
+        indent(); output << "if (target.visible === undefined) target.visible = true;\n";
+        indent(); output << "return target;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithEnsureTilemap2D(entity) {\n";
+        indent_level++;
+        indent(); output << "const target = this._zenithEnsureTransform2D(entity);\n";
+        indent(); output << "if (!target) return null;\n";
+        indent(); output << "if (target.columns === undefined || target.columns < 1) target.columns = 1;\n";
+        indent(); output << "if (target.rows === undefined || target.rows < 1) target.rows = 1;\n";
+        indent(); output << "if (target.tileWidth === undefined || target.tileWidth <= 0) target.tileWidth = 1;\n";
+        indent(); output << "if (target.tileHeight === undefined || target.tileHeight <= 0) target.tileHeight = 1;\n";
+        indent(); output << "if (target.anchorX === undefined) target.anchorX = 0;\n";
+        indent(); output << "if (target.anchorY === undefined) target.anchorY = 0;\n";
+        indent(); output << "if (target.sortOrder === undefined) target.sortOrder = 0;\n";
+        indent(); output << "if (target.visible === undefined) target.visible = true;\n";
+        indent(); output << "const expectedCellCount = target.columns * target.rows;\n";
+        indent(); output << "if (!Array.isArray(target.cells)) {\n";
+        indent_level++;
+        indent(); output << "target.cells = new Array(expectedCellCount).fill(0);\n";
+        indent_level--;
+        indent(); output << "} else if (target.cells.length !== expectedCellCount) {\n";
+        indent_level++;
+        indent(); output << "const nextCells = new Array(expectedCellCount).fill(0);\n";
+        indent(); output << "const copyCount = Math.min(expectedCellCount, target.cells.length);\n";
+        indent(); output << "for (let i = 0; i < copyCount; i += 1) nextCells[i] = Number(target.cells[i]) || 0;\n";
+        indent(); output << "target.cells = nextCells;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "if (!Array.isArray(target.palette) || target.palette.length === 0) target.palette = ['', 'white'];\n";
+        indent(); output << "if (target.palette[0] === undefined) target.palette[0] = '';\n";
+        indent(); output << "if (target.palette.length < 2) target.palette.push('white');\n";
+        indent(); output << "return target;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithEnsureCharacter2D(entity) {\n";
+        indent_level++;
+        indent(); output << "const target = this._zenithEnsureSprite2D(entity);\n";
+        indent(); output << "if (!target) return null;\n";
+        indent(); output << "this._zenithEnsureBody2D(target);\n";
+        indent(); output << "if (target.moveSpeed === undefined) target.moveSpeed = 10;\n";
+        indent(); output << "if (target.jumpForce === undefined) target.jumpForce = 12;\n";
+        indent(); output << "if (target.isGrounded === undefined) target.isGrounded = false;\n";
+        indent(); output << "if (target.facingRight === undefined) target.facingRight = true;\n";
+        indent(); output << "return target;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithEnsureAudioSource2D(entity) {\n";
+        indent_level++;
+        indent(); output << "const target = this._zenithEnsureTransform2D(entity);\n";
+        indent(); output << "if (!target) return null;\n";
+        indent(); output << "target.hasAudio2D = true;\n";
+        indent(); output << "if (target.clipPath === undefined) target.clipPath = '';\n";
+        indent(); output << "if (target.volume === undefined) target.volume = 1;\n";
+        indent(); output << "if (target.pitch === undefined) target.pitch = 1;\n";
+        indent(); output << "if (target.loop === undefined) target.loop = false;\n";
+        indent(); output << "if (target.playOnAwake === undefined) target.playOnAwake = false;\n";
+        indent(); output << "if (target.isPlaying === undefined) target.isPlaying = false;\n";
+        indent(); output << "return target;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithEnsureMesh3D(entity) {\n";
+        indent_level++;
+        indent(); output << "const target = this._zenithEnsureTransform3D(entity);\n";
+        indent(); output << "if (!target) return null;\n";
+        indent(); output << "if (target.meshPath === undefined) target.meshPath = '';\n";
+        indent(); output << "if (target.shaderPath === undefined) target.shaderPath = '';\n";
+        indent(); output << "if (target.materialPath === undefined) target.materialPath = '';\n";
+        indent(); output << "if (target.visible === undefined) target.visible = true;\n";
+        indent(); output << "if (target.castShadows === undefined) target.castShadows = true;\n";
+        indent(); output << "return target;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithEnsureCharacter3D(entity) {\n";
+        indent_level++;
+        indent(); output << "const target = this._zenithEnsureMesh3D(entity);\n";
+        indent(); output << "if (!target) return null;\n";
+        indent(); output << "this._zenithEnsureBody3D(target);\n";
+        indent(); output << "if (target.moveSpeed === undefined) target.moveSpeed = 6;\n";
+        indent(); output << "if (target.turnSpeed === undefined) target.turnSpeed = 4;\n";
+        indent(); output << "if (target.jumpSpeed === undefined) target.jumpSpeed = 7.5;\n";
+        indent(); output << "if (target.groundAcceleration === undefined) target.groundAcceleration = 36;\n";
+        indent(); output << "if (target.airAcceleration === undefined) target.airAcceleration = 14;\n";
+        indent(); output << "if (target.groundFriction === undefined) target.groundFriction = 20;\n";
+        indent(); output << "if (target.airControl === undefined) target.airControl = 0.35;\n";
+        indent(); output << "if (target.groundSnapDistance === undefined) target.groundSnapDistance = 0.2;\n";
+        indent(); output << "if (target.maxSlopeAngle === undefined) target.maxSlopeAngle = 55;\n";
+        indent(); output << "if (target.moveInputX === undefined) target.moveInputX = 0;\n";
+        indent(); output << "if (target.moveInputY === undefined) target.moveInputY = 0;\n";
+        indent(); output << "if (target.moveInputZ === undefined) target.moveInputZ = 0;\n";
+        indent(); output << "if (target.isGrounded === undefined) target.isGrounded = false;\n";
+        indent(); output << "if (target.useGravity === undefined) target.useGravity = true;\n";
+        indent(); output << "if (target.jumpQueued === undefined) target.jumpQueued = false;\n";
+        indent(); output << "return target;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithEnsureAudioSource3D(entity) {\n";
+        indent_level++;
+        indent(); output << "const target = this._zenithEnsureTransform3D(entity);\n";
+        indent(); output << "if (!target) return null;\n";
+        indent(); output << "target.hasAudio3D = true;\n";
+        indent(); output << "if (target.clipPath === undefined) target.clipPath = '';\n";
+        indent(); output << "if (target.volume === undefined) target.volume = 1;\n";
+        indent(); output << "if (target.pitch === undefined) target.pitch = 1;\n";
+        indent(); output << "if (target.loop === undefined) target.loop = false;\n";
+        indent(); output << "if (target.playOnAwake === undefined) target.playOnAwake = false;\n";
+        indent(); output << "if (target.isPlaying === undefined) target.isPlaying = false;\n";
+        indent(); output << "if (target.minDistance === undefined) target.minDistance = 1;\n";
+        indent(); output << "if (target.maxDistance === undefined) target.maxDistance = 20;\n";
+        indent(); output << "return target;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithEnsurePointLight3D(entity) {\n";
+        indent_level++;
+        indent(); output << "const target = this._zenithEnsureTransform3D(entity);\n";
+        indent(); output << "if (!target) return null;\n";
+        indent(); output << "target.hasPointLight3D = true;\n";
+        indent(); output << "if (target.intensity === undefined) target.intensity = 1;\n";
+        indent(); output << "if (target.range === undefined) target.range = 10;\n";
+        indent(); output << "if (target.color === undefined) target.color = 'white';\n";
+        indent(); output << "if (target.enabled === undefined) target.enabled = true;\n";
+        indent(); output << "return target;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithEnsureDirectionalLight3D(entity) {\n";
+        indent_level++;
+        indent(); output << "const target = this._zenithEnsureTransform3D(entity);\n";
+        indent(); output << "if (!target) return null;\n";
+        indent(); output << "target.hasDirectionalLight3D = true;\n";
+        indent(); output << "if (target.directionX === undefined) target.directionX = 0;\n";
+        indent(); output << "if (target.directionY === undefined) target.directionY = -1;\n";
+        indent(); output << "if (target.directionZ === undefined) target.directionZ = 0;\n";
+        indent(); output << "if (target.intensity === undefined) target.intensity = 1;\n";
+        indent(); output << "if (target.color === undefined) target.color = 'white';\n";
+        indent(); output << "if (target.castShadows === undefined) target.castShadows = true;\n";
+        indent(); output << "if (target.enabled === undefined) target.enabled = true;\n";
+        indent(); output << "return target;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithNormalizeAssetPath(path) {\n";
+        indent_level++;
+        indent(); output << "const raw = path === undefined || path === null ? '' : String(path).replace(/\\\\/g, '/');\n";
+        indent(); output << "if (!raw) return '';\n";
+        indent(); output << "const parts = raw.split('/');\n";
+        indent(); output << "const stack = [];\n";
+        indent(); output << "for (const part of parts) {\n";
+        indent_level++;
+        indent(); output << "if (!part || part === '.') continue;\n";
+        indent(); output << "if (part === '..') {\n";
+        indent_level++;
+        indent(); output << "if (stack.length > 0 && stack[stack.length - 1] !== '..') stack.pop();\n";
+        indent(); output << "else stack.push(part);\n";
+        indent_level--;
+        indent(); output << "} else {\n";
+        indent_level++;
+        indent(); output << "stack.push(part);\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "return stack.join('/');\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithGuessAssetType(path) {\n";
+        indent_level++;
+        indent(); output << "const normalized = this._zenithNormalizeAssetPath(path).toLowerCase();\n";
+        indent(); output << "const dot = normalized.lastIndexOf('.');\n";
+        indent(); output << "const ext = dot >= 0 ? normalized.slice(dot) : '';\n";
+        indent(); output << "if (['.png', '.jpg', '.jpeg', '.bmp', '.gif', '.tga', '.dds', '.webp'].includes(ext)) return 'Texture';\n";
+        indent(); output << "if (['.wav', '.mp3', '.ogg', '.flac'].includes(ext)) return 'Audio';\n";
+        indent(); output << "if (['.obj', '.fbx', '.gltf', '.glb', '.dae', '.mesh'].includes(ext)) return 'Mesh';\n";
+        indent(); output << "if (['.shader', '.vert', '.frag', '.glsl', '.hlsl'].includes(ext)) return 'Shader';\n";
+        indent(); output << "if (['.mat', '.material'].includes(ext)) return 'Material';\n";
+        indent(); output << "if (['.ttf', '.otf', '.fnt'].includes(ext)) return 'Font';\n";
+        indent(); output << "if (['.particle', '.particles', '.vfx'].includes(ext)) return 'Particles';\n";
+        indent(); output << "return 'Unknown';\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithAssetFolder(assetType) {\n";
+        indent_level++;
+        indent(); output << "switch (assetType) {\n";
+        indent_level++;
+        indent(); output << "case 'Texture': return 'textures';\n";
+        indent(); output << "case 'Audio': return 'audio';\n";
+        indent(); output << "case 'Mesh': return 'meshes';\n";
+        indent(); output << "case 'Shader': return 'shaders';\n";
+        indent(); output << "case 'Material': return 'materials';\n";
+        indent(); output << "case 'Font': return 'fonts';\n";
+        indent(); output << "case 'Particles': return 'particles';\n";
+        indent(); output << "default: return 'misc';\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithDefaultAssetBytes(assetType) {\n";
+        indent_level++;
+        indent(); output << "switch (assetType) {\n";
+        indent_level++;
+        indent(); output << "case 'Texture': return 4096;\n";
+        indent(); output << "case 'Audio': return 2048;\n";
+        indent(); output << "case 'Mesh': return 6144;\n";
+        indent(); output << "case 'Shader': return 1024;\n";
+        indent(); output << "case 'Material': return 1024;\n";
+        indent(); output << "case 'Font': return 2048;\n";
+        indent(); output << "case 'Particles': return 1024;\n";
+        indent(); output << "default: return 1024;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithEstimateAssetBytes(assetType, sourceBytes = 0) {\n";
+        indent_level++;
+        indent(); output << "const seed = sourceBytes > 0 ? sourceBytes : this._zenithDefaultAssetBytes(assetType);\n";
+        indent(); output << "switch (assetType) {\n";
+        indent_level++;
+        indent(); output << "case 'Texture': return Math.max(4096, seed * 4);\n";
+        indent(); output << "case 'Audio': return Math.max(2048, seed * 2);\n";
+        indent(); output << "case 'Mesh': return Math.max(6144, seed * 3);\n";
+        indent(); output << "case 'Shader': return Math.max(1024, seed);\n";
+        indent(); output << "case 'Material': return Math.max(1024, seed);\n";
+        indent(); output << "case 'Font': return Math.max(2048, seed * 2);\n";
+        indent(); output << "case 'Particles': return Math.max(1024, seed * 2);\n";
+        indent(); output << "default: return Math.max(1024, seed);\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithFindAssetMetadata(path) {\n";
+        indent_level++;
+        indent(); output << "const normalized = this._zenithNormalizeAssetPath(path);\n";
+        indent(); output << "if (!normalized) return null;\n";
+        indent(); output << "if (this._zenithAssetMetadata.has(normalized)) return this._zenithAssetMetadata.get(normalized);\n";
+        indent(); output << "for (const metadata of this._zenithAssetMetadata.values()) {\n";
+        indent_level++;
+        indent(); output << "if (metadata && metadata.sourcePath === normalized) return metadata;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "return null;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithEnsureAssetMetadata(path, requestedType = 'Unknown') {\n";
+        indent_level++;
+        indent(); output << "const normalized = this._zenithNormalizeAssetPath(path);\n";
+        indent(); output << "if (!normalized) return null;\n";
+        indent(); output << "let metadata = this._zenithFindAssetMetadata(normalized);\n";
+        indent(); output << "if (!metadata) {\n";
+        indent_level++;
+        indent(); output << "const type = requestedType && requestedType !== 'Unknown' ? requestedType : this._zenithGuessAssetType(normalized);\n";
+        indent(); output << "metadata = {\n";
+        indent_level++;
+        indent(); output << "sourcePath: normalized,\n";
+        indent(); output << "importedPath: normalized,\n";
+        indent(); output << "type,\n";
+        indent(); output << "group: '',\n";
+        indent(); output << "sourceBytes: 0,\n";
+        indent(); output << "estimatedMemoryBytes: this._zenithEstimateAssetBytes(type, 0),\n";
+        indent(); output << "sourceTimestamp: 0,\n";
+        indent(); output << "importedTimestamp: 0,\n";
+        indent(); output << "version: 1,\n";
+        indent(); output << "hotReloadable: true,\n";
+        indent(); output << "dirty: false\n";
+        indent_level--;
+        indent(); output << "};\n";
+        indent(); output << "this._zenithAssetMetadata.set(normalized, metadata);\n";
+        indent_level--;
+        indent(); output << "} else if ((!metadata.type || metadata.type === 'Unknown') && requestedType && requestedType !== 'Unknown') {\n";
+        indent_level++;
+        indent(); output << "metadata.type = requestedType;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "if (!metadata.estimatedMemoryBytes || metadata.estimatedMemoryBytes <= 0) {\n";
+        indent_level++;
+        indent(); output << "metadata.estimatedMemoryBytes = this._zenithEstimateAssetBytes(metadata.type || requestedType || 'Unknown', metadata.sourceBytes || 0);\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "return metadata;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithAssetHandleStore(assetType) {\n";
+        indent_level++;
+        indent(); output << "switch (assetType) {\n";
+        indent_level++;
+        indent(); output << "case 'Texture': return this._zenithTextureHandles;\n";
+        indent(); output << "case 'Audio': return this._zenithAudioHandles;\n";
+        indent(); output << "case 'Mesh': return this._zenithMeshHandles;\n";
+        indent(); output << "case 'Shader': return this._zenithShaderHandles;\n";
+        indent(); output << "case 'Material': return this._zenithMaterialHandles;\n";
+        indent(); output << "default: return null;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithAssetMemoryUsageByType(assetType) {\n";
+        indent_level++;
+        indent(); output << "const store = this._zenithAssetHandleStore(assetType);\n";
+        indent(); output << "if (!store) return 0;\n";
+        indent(); output << "let total = 0;\n";
+        indent(); output << "for (const handle of store.values()) {\n";
+        indent_level++;
+        indent(); output << "if (handle && handle.loaded) total += handle.memoryBytes || 0;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "return total;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithAssetBudgetValue(assetType) {\n";
+        indent_level++;
+        indent(); output << "return this._zenithAssetBudgets.has(assetType) ? Number(this._zenithAssetBudgets.get(assetType)) : 0;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithCanLoadAsset(assetType, handle, requestedBytes) {\n";
+        indent_level++;
+        indent(); output << "const budget = this._zenithAssetBudgetValue(assetType);\n";
+        indent(); output << "if (budget <= 0) return true;\n";
+        indent(); output << "const existingBytes = handle && handle.loaded ? Number(handle.memoryBytes || 0) : 0;\n";
+        indent(); output << "return this._zenithAssetMemoryUsageByType(assetType) - existingBytes + requestedBytes <= budget;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithEnsureHandleRecord(store, path, assetType = 'Unknown') {\n";
+        indent_level++;
+        indent(); output << "const assetPath = this._zenithNormalizeAssetPath(path);\n";
+        indent(); output << "if (!assetPath) return null;\n";
+        indent(); output << "let handle = store.get(assetPath);\n";
+        indent(); output << "if (!handle) {\n";
+        indent_level++;
+        indent(); output << "handle = { path: assetPath, id: this._zenithNextAssetHandleId++, refCount: 0, loaded: false, memoryBytes: 0, version: 1, type: assetType || 'Unknown' };\n";
+        indent(); output << "store.set(assetPath, handle);\n";
+        indent_level--;
+        indent(); output << "} else {\n";
+        indent_level++;
+        indent(); output << "handle.path = assetPath;\n";
+        indent(); output << "handle.type = assetType || handle.type || 'Unknown';\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "return handle;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithTextureHandle(texturePath) {\n";
+        indent_level++;
+        indent(); output << "const metadata = this._zenithEnsureAssetMetadata(texturePath, 'Texture');\n";
+        indent(); output << "if (!metadata) return { path: '', id: 0, refCount: 0, loaded: false, width: 0, height: 0, channels: 0, gpuId: 0 };\n";
+        indent(); output << "const handle = this._zenithEnsureHandleRecord(this._zenithTextureHandles, metadata.importedPath || texturePath, 'Texture');\n";
+        indent(); output << "const memoryBytes = metadata.estimatedMemoryBytes || this._zenithEstimateAssetBytes('Texture', metadata.sourceBytes || 0);\n";
+        indent(); output << "if (!this._zenithCanLoadAsset('Texture', handle, memoryBytes)) {\n";
+        indent_level++;
+        indent(); output << "handle.loaded = false;\n";
+        indent(); output << "handle.refCount = 0;\n";
+        indent(); output << "return { path: handle.path, id: handle.id, refCount: 0, loaded: false, width: 0, height: 0, channels: 0, gpuId: 0 };\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "handle.loaded = true;\n";
+        indent(); output << "handle.refCount = 1;\n";
+        indent(); output << "handle.memoryBytes = memoryBytes;\n";
+        indent(); output << "handle.version = metadata.version || 1;\n";
+        indent(); output << "metadata.type = 'Texture';\n";
+        indent(); output << "metadata.estimatedMemoryBytes = memoryBytes;\n";
+        indent(); output << "metadata.dirty = false;\n";
+        indent(); output << "return { path: handle.path, id: handle.id, refCount: handle.refCount, loaded: handle.loaded, width: 0, height: 0, channels: 0, gpuId: 1 };\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithAudioHandle(clipPath, spatial = false) {\n";
+        indent_level++;
+        indent(); output << "const metadata = this._zenithEnsureAssetMetadata(clipPath, 'Audio');\n";
+        indent(); output << "if (!metadata) return { path: '', id: 0, refCount: 0, loaded: false, duration: 0, spatial: false };\n";
+        indent(); output << "const handle = this._zenithEnsureHandleRecord(this._zenithAudioHandles, metadata.importedPath || clipPath, 'Audio');\n";
+        indent(); output << "const memoryBytes = metadata.estimatedMemoryBytes || this._zenithEstimateAssetBytes('Audio', metadata.sourceBytes || 0);\n";
+        indent(); output << "if (!this._zenithCanLoadAsset('Audio', handle, memoryBytes)) {\n";
+        indent_level++;
+        indent(); output << "handle.loaded = false;\n";
+        indent(); output << "handle.refCount = 0;\n";
+        indent(); output << "return { path: handle.path, id: handle.id, refCount: 0, loaded: false, duration: 0, spatial: false };\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "handle.loaded = true;\n";
+        indent(); output << "handle.refCount = 1;\n";
+        indent(); output << "handle.memoryBytes = memoryBytes;\n";
+        indent(); output << "handle.version = metadata.version || 1;\n";
+        indent(); output << "metadata.type = 'Audio';\n";
+        indent(); output << "metadata.estimatedMemoryBytes = memoryBytes;\n";
+        indent(); output << "metadata.dirty = false;\n";
+        indent(); output << "return { path: handle.path, id: handle.id, refCount: handle.refCount, loaded: handle.loaded, duration: 0, spatial: spatial === true };\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithMeshHandle(meshPath) {\n";
+        indent_level++;
+        indent(); output << "const metadata = this._zenithEnsureAssetMetadata(meshPath, 'Mesh');\n";
+        indent(); output << "if (!metadata) return { path: '', id: 0, refCount: 0, loaded: false, vertexCount: 0, triangleCount: 0, vbo: 0, ebo: 0 };\n";
+        indent(); output << "const handle = this._zenithEnsureHandleRecord(this._zenithMeshHandles, metadata.importedPath || meshPath, 'Mesh');\n";
+        indent(); output << "const memoryBytes = metadata.estimatedMemoryBytes || this._zenithEstimateAssetBytes('Mesh', metadata.sourceBytes || 0);\n";
+        indent(); output << "if (!this._zenithCanLoadAsset('Mesh', handle, memoryBytes)) {\n";
+        indent_level++;
+        indent(); output << "handle.loaded = false;\n";
+        indent(); output << "handle.refCount = 0;\n";
+        indent(); output << "return { path: handle.path, id: handle.id, refCount: 0, loaded: false, vertexCount: 0, triangleCount: 0, vbo: 0, ebo: 0 };\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "handle.loaded = true;\n";
+        indent(); output << "handle.refCount = 1;\n";
+        indent(); output << "handle.memoryBytes = memoryBytes;\n";
+        indent(); output << "handle.version = metadata.version || 1;\n";
+        indent(); output << "metadata.type = 'Mesh';\n";
+        indent(); output << "metadata.estimatedMemoryBytes = memoryBytes;\n";
+        indent(); output << "metadata.dirty = false;\n";
+        indent(); output << "return { path: handle.path, id: handle.id, refCount: handle.refCount, loaded: handle.loaded, vertexCount: 0, triangleCount: 0, vbo: 0, ebo: 0 };\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithShaderHandle(shaderPath) {\n";
+        indent_level++;
+        indent(); output << "const metadata = this._zenithEnsureAssetMetadata(shaderPath, 'Shader');\n";
+        indent(); output << "if (!metadata) return { path: '', id: 0, refCount: 0, loaded: false, programId: 0 };\n";
+        indent(); output << "const handle = this._zenithEnsureHandleRecord(this._zenithShaderHandles, metadata.importedPath || shaderPath, 'Shader');\n";
+        indent(); output << "const memoryBytes = metadata.estimatedMemoryBytes || this._zenithEstimateAssetBytes('Shader', metadata.sourceBytes || 0);\n";
+        indent(); output << "if (!this._zenithCanLoadAsset('Shader', handle, memoryBytes)) {\n";
+        indent_level++;
+        indent(); output << "handle.loaded = false;\n";
+        indent(); output << "handle.refCount = 0;\n";
+        indent(); output << "return { path: handle.path, id: handle.id, refCount: 0, loaded: false, programId: 0 };\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "handle.loaded = true;\n";
+        indent(); output << "handle.refCount = 1;\n";
+        indent(); output << "handle.memoryBytes = memoryBytes;\n";
+        indent(); output << "handle.version = metadata.version || 1;\n";
+        indent(); output << "metadata.type = 'Shader';\n";
+        indent(); output << "metadata.estimatedMemoryBytes = memoryBytes;\n";
+        indent(); output << "metadata.dirty = false;\n";
+        indent(); output << "return { path: handle.path, id: handle.id, refCount: handle.refCount, loaded: handle.loaded, programId: 0 };\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithMaterialHandle(materialPath, shaderPath = '') {\n";
+        indent_level++;
+        indent(); output << "const metadata = this._zenithEnsureAssetMetadata(materialPath, 'Material');\n";
+        indent(); output << "if (!metadata) return { path: '', id: 0, refCount: 0, loaded: false, shaderPath: '', propertyCount: 0 };\n";
+        indent(); output << "const path = metadata.importedPath || this._zenithNormalizeAssetPath(materialPath);\n";
+        indent(); output << "const material = this._zenithEnsureMaterial(path, shaderPath);\n";
+        indent(); output << "const handle = this._zenithEnsureHandleRecord(this._zenithMaterialHandles, path, 'Material');\n";
+        indent(); output << "const memoryBytes = metadata.estimatedMemoryBytes || this._zenithEstimateAssetBytes('Material', metadata.sourceBytes || 0);\n";
+        indent(); output << "if (!this._zenithCanLoadAsset('Material', handle, memoryBytes)) {\n";
+        indent_level++;
+        indent(); output << "handle.loaded = false;\n";
+        indent(); output << "handle.refCount = 0;\n";
+        indent(); output << "return { path: handle.path, id: handle.id, refCount: 0, loaded: false, shaderPath: material && material.shaderPath ? material.shaderPath : '', propertyCount: material && material.properties ? material.properties.size : 0 };\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "handle.loaded = true;\n";
+        indent(); output << "handle.refCount = 1;\n";
+        indent(); output << "handle.memoryBytes = memoryBytes;\n";
+        indent(); output << "handle.version = metadata.version || 1;\n";
+        indent(); output << "metadata.type = 'Material';\n";
+        indent(); output << "metadata.estimatedMemoryBytes = memoryBytes;\n";
+        indent(); output << "metadata.dirty = false;\n";
+        indent(); output << "return {\n";
+        indent_level++;
+        indent(); output << "path,\n";
+        indent(); output << "id: handle ? handle.id : 0,\n";
+        indent(); output << "refCount: handle ? handle.refCount : 0,\n";
+        indent(); output << "loaded: !!(handle && handle.loaded),\n";
+        indent(); output << "shaderPath: material && material.shaderPath ? material.shaderPath : '',\n";
+        indent(); output << "propertyCount: material && material.properties ? material.properties.size : 0\n";
+        indent_level--;
+        indent(); output << "};\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithEnsureMaterial(materialPath, shaderPath = '') {\n";
+        indent_level++;
+        indent(); output << "if (!materialPath) return null;\n";
+        indent(); output << "let material = this._zenithMaterials.get(materialPath);\n";
+        indent(); output << "if (!material) {\n";
+        indent_level++;
+        indent(); output << "material = {\n";
+        indent_level++;
+        indent(); output << "path: materialPath,\n";
+        indent(); output << "shaderPath: shaderPath || '',\n";
+        indent(); output << "properties: new Map()\n";
+        indent_level--;
+        indent(); output << "};\n";
+        indent(); output << "this._zenithMaterials.set(materialPath, material);\n";
+        indent_level--;
+        indent(); output << "} else if (shaderPath) {\n";
+        indent_level++;
+        indent(); output << "material.shaderPath = shaderPath;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "return material;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithParseMaterialOptions(optionsCsv) {\n";
+        indent_level++;
+        indent(); output << "if (!optionsCsv) return [];\n";
+        indent(); output << "return String(optionsCsv)\n";
+        indent_level++;
+        indent(); output << ".split(',')\n";
+        indent(); output << ".map((item) => item.trim())\n";
+        indent(); output << ".filter((item) => item.length > 0)\n";
+        indent(); output << ".map((item) => ({ label: item, value: item }));\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithNormalizeMaterialPropertyKind(kindName) {\n";
+        indent_level++;
+        indent(); output << "const value = kindName === undefined || kindName === null ? '' : String(kindName).trim();\n";
+        indent(); output << "const validKinds = ['Text', 'Number', 'Toggle', 'Radio', 'Image', 'Button', 'Color'];\n";
+        indent(); output << "return validKinds.includes(value) ? value : '';\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithEnsureMaterialProperty(materialPath, propertyName, kind, label) {\n";
+        indent_level++;
+        indent(); output << "const material = this._zenithEnsureMaterial(materialPath);\n";
+        indent(); output << "if (!material || !propertyName) return null;\n";
+        indent(); output << "let property = material.properties.get(propertyName);\n";
+        indent(); output << "if (!property) {\n";
+        indent_level++;
+        indent(); output << "property = {\n";
+        indent_level++;
+        indent(); output << "name: propertyName,\n";
+        indent(); output << "label: label || '',\n";
+        indent(); output << "kind,\n";
+        indent(); output << "stringValue: '',\n";
+        indent(); output << "numberValue: 0,\n";
+        indent(); output << "boolValue: false,\n";
+        indent(); output << "callbackName: '',\n";
+        indent(); output << "triggerCount: 0,\n";
+        indent(); output << "options: []\n";
+        indent_level--;
+        indent(); output << "};\n";
+        indent(); output << "material.properties.set(propertyName, property);\n";
+        indent_level--;
+        indent(); output << "} else {\n";
+        indent_level++;
+        indent(); output << "property.kind = kind;\n";
+        indent(); output << "property.label = label || '';\n";
+        indent(); output << "if (property.callbackName === undefined || property.callbackName === null) property.callbackName = '';\n";
+        indent(); output << "if (property.triggerCount === undefined || property.triggerCount === null) property.triggerCount = 0;\n";
+        indent(); output << "property.options = [];\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "return property;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithMaterialProperty(materialPath, propertyName) {\n";
+        indent_level++;
+        indent(); output << "if (!materialPath || !propertyName) return null;\n";
+        indent(); output << "const material = this._zenithMaterials.get(materialPath);\n";
+        indent(); output << "if (!material) return null;\n";
+        indent(); output << "return material.properties.get(propertyName) || null;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithMaterialPropertyCallbackValue(property) {\n";
+        indent_level++;
+        indent(); output << "if (!property) return '';\n";
+        indent(); output << "if (property.kind === 'Number') return String(property.numberValue !== undefined ? property.numberValue : 0);\n";
+        indent(); output << "if (property.kind === 'Toggle') return property.boolValue === true ? 'true' : 'false';\n";
+        indent(); output << "return property.stringValue === undefined || property.stringValue === null ? '' : String(property.stringValue);\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithMaterialPropertyOption(materialPath, propertyName, index) {\n";
+        indent_level++;
+        indent(); output << "const property = this._zenithMaterialProperty(materialPath, propertyName);\n";
+        indent(); output << "if (!property || !Array.isArray(property.options) || index < 0 || index >= property.options.length) return null;\n";
+        indent(); output << "return property.options[index] || null;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithCloneMaterialPropertyState(property, fallbackName = '') {\n";
+        indent_level++;
+        indent(); output << "return {\n";
+        indent_level++;
+        indent(); output << "name: property && property.name !== undefined ? property.name : fallbackName,\n";
+        indent(); output << "label: property && property.label !== undefined ? property.label : '',\n";
+        indent(); output << "kind: property && property.kind !== undefined ? property.kind : 'Text',\n";
+        indent(); output << "stringValue: property && property.stringValue !== undefined ? property.stringValue : '',\n";
+        indent(); output << "numberValue: property && property.numberValue !== undefined ? property.numberValue : 0,\n";
+        indent(); output << "boolValue: property ? property.boolValue === true : false,\n";
+        indent(); output << "callbackName: property && property.callbackName !== undefined ? property.callbackName : '',\n";
+        indent(); output << "triggerCount: property && property.triggerCount !== undefined ? Math.max(0, Math.trunc(Number(property.triggerCount) || 0)) : 0,\n";
+        indent(); output << "options: Array.isArray(property && property.options) ? property.options.map((option) => ({ label: option && option.label !== undefined ? option.label : (option && option.value !== undefined ? option.value : ''), value: option && option.value !== undefined ? option.value : (option && option.label !== undefined ? option.label : '') })) : []\n";
+        indent_level--;
+        indent(); output << "};\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithInitEntityLayerMask(entity) {\n";
+        indent_level++;
+        indent(); output << "if (!entity) return entity;\n";
+        indent(); output << "const rawLayer = Math.trunc(Number(entity.layer) || 0);\n";
+        indent(); output << "const rawMask = Math.trunc(Number(entity.mask));\n";
+        indent(); output << "entity.layer = rawLayer === 0 ? 1 : rawLayer;\n";
+        indent(); output << "entity.mask = Number.isNaN(rawMask) ? 0xFFFFFFFF : rawMask;\n";
+        indent(); output << "if (!Array.isArray(entity.children)) entity.children = [];\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithEntityLayer(entity) {\n";
+        indent_level++;
+        indent(); output << "if (!entity) return 1;\n";
+        indent(); output << "this._zenithInitEntityLayerMask(entity);\n";
+        indent(); output << "return entity.layer;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithEntityMask(entity) {\n";
+        indent_level++;
+        indent(); output << "if (!entity) return 0xFFFFFFFF;\n";
+        indent(); output << "this._zenithInitEntityLayerMask(entity);\n";
+        indent(); output << "return entity.mask;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithLayerMaskMatches(maskBits, layerBits) {\n";
+        indent_level++;
+        indent(); output << "const normalizedLayer = (() => { const bits = Math.trunc(Number(layerBits) || 0); return bits === 0 ? 1 : bits; })();\n";
+        indent(); output << "const normalizedMask = Math.trunc(Number(maskBits));\n";
+        indent(); output << "return ((Number.isNaN(normalizedMask) ? 0xFFFFFFFF : normalizedMask) & normalizedLayer) !== 0;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithCanEntitiesInteract(first, second) {\n";
+        indent_level++;
+        indent(); output << "if (!first || !second) return false;\n";
+        indent(); output << "return this._zenithLayerMaskMatches(this._zenithEntityMask(first), this._zenithEntityLayer(second)) && this._zenithLayerMaskMatches(this._zenithEntityMask(second), this._zenithEntityLayer(first));\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithCaptureNewEntities(beforeIds) {\n";
+        indent_level++;
+        indent(); output << "const created = [];\n";
+        indent(); output << "for (const entity of this._zenithEntities) {\n";
+        indent_level++;
+        indent(); output << "if (entity && !beforeIds.has(entity.id)) created.push(entity);\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "return created;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithHierarchyDepth(entity) {\n";
+        indent_level++;
+        indent(); output << "let depth = 0;\n";
+        indent(); output << "let cursor = entity && entity.parent ? entity.parent : null;\n";
+        indent(); output << "while (cursor) {\n";
+        indent_level++;
+        indent(); output << "depth += 1;\n";
+        indent(); output << "cursor = cursor.parent || null;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "return depth;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithCloneEntity(source, entityName = '') {\n";
+        indent_level++;
+        indent(); output << "if (!source || this._zenithEntities.indexOf(source) < 0) return null;\n";
+        indent(); output << "const clone = { ...source, id: this._zenithNextEntityId++, name: entityName || source.name || '', parent: null, children: [] };\n";
+        indent(); output << "if (clone.kind === 'camera2d' || clone.kind === 'listener2d' || clone.kind === 'camera3d' || clone.kind === 'listener3d') clone.primary = false;\n";
+        indent(); output << "this._zenithInitEntityLayerMask(clone);\n";
+        indent(); output << "this._zenithEntities.push(clone);\n";
+        indent(); output << "return clone;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithCloneEntityHierarchy(source, entityName = '') {\n";
+        indent_level++;
+        indent(); output << "const root = this._zenithCloneEntity(source, entityName);\n";
+        indent(); output << "if (!root) return null;\n";
+        indent(); output << "const children = source && Array.isArray(source.children) ? source.children.slice() : [];\n";
+        indent(); output << "for (const child of children) {\n";
+        indent_level++;
+        indent(); output << "const cloneChild = this._zenithCloneEntityHierarchy(child, '');\n";
+        indent(); output << "if (cloneChild) this.setParent(cloneChild, root);\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "return root;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "registerPrefabCallback(prefabName, callbackName) {\n";
+        indent_level++;
+        indent(); output << "this._zenithPrefabs.set(prefabName, { callbackName: callbackName === undefined || callbackName === null ? '' : String(callbackName) });\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "hasPrefab(prefabName) {\n";
+        indent_level++;
+        indent(); output << "return this._zenithPrefabs.has(prefabName);\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "instantiatePrefab(prefabName, entityName = '') {\n";
+        indent_level++;
+        indent(); output << "const prefab = this._zenithPrefabs.get(prefabName);\n";
+        indent(); output << "if (!prefab) return null;\n";
+        indent(); output << "const entity = this.createEntity(entityName || prefabName);\n";
+        indent(); output << "this.triggerEntityCallback(prefab.callbackName || '', entity);\n";
+        indent(); output << "return entity;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "instantiateArchetype(source, entityName = '') {\n";
+        indent_level++;
+        indent(); output << "return this._zenithCloneEntityHierarchy(source, entityName || '');\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "registerSceneStreamCallback(streamName, callbackName) {\n";
+        indent_level++;
+        indent(); output << "this._zenithSceneStreams.set(streamName, { callbackName: callbackName === undefined || callbackName === null ? '' : String(callbackName) });\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "hasSceneStream(streamName) {\n";
+        indent_level++;
+        indent(); output << "return this._zenithSceneStreams.has(streamName);\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "loadSceneStream(streamName, instanceName = '') {\n";
+        indent_level++;
+        indent(); output << "const stream = this._zenithSceneStreams.get(streamName);\n";
+        indent(); output << "if (!stream) return false;\n";
+        indent(); output << "const key = instanceName ? String(instanceName) : String(streamName);\n";
+        indent(); output << "if (this._zenithLoadedSceneStreams.has(key)) return false;\n";
+        indent(); output << "const beforeIds = new Set(this._zenithEntities.map((entity) => entity.id));\n";
+        indent(); output << "this.triggerCallback(stream.callbackName || '', key);\n";
+        indent(); output << "this._zenithLoadedSceneStreams.set(key, { source: String(streamName), entities: this._zenithCaptureNewEntities(beforeIds) });\n";
+        indent(); output << "return true;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "unloadSceneStream(instanceName) {\n";
+        indent_level++;
+        indent(); output << "const stream = this._zenithLoadedSceneStreams.get(instanceName);\n";
+        indent(); output << "if (!stream || !Array.isArray(stream.entities)) return false;\n";
+        indent(); output << "const entities = stream.entities.slice().sort((left, right) => this._zenithHierarchyDepth(right) - this._zenithHierarchyDepth(left));\n";
+        indent(); output << "for (const entity of entities) {\n";
+        indent_level++;
+        indent(); output << "if (this.isEntityAlive(entity)) this.destroyEntity(entity);\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "this._zenithLoadedSceneStreams.delete(instanceName);\n";
+        indent(); output << "return true;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "isSceneStreamLoaded(instanceName) {\n";
+        indent_level++;
+        indent(); output << "return this._zenithLoadedSceneStreams.has(instanceName);\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "sceneStreamEntityCount(instanceName) {\n";
+        indent_level++;
+        indent(); output << "const stream = this._zenithLoadedSceneStreams.get(instanceName);\n";
+        indent(); output << "if (!stream || !Array.isArray(stream.entities)) return 0;\n";
+        indent(); output << "let count = 0;\n";
+        indent(); output << "for (const entity of stream.entities) {\n";
+        indent_level++;
+        indent(); output << "if (this.isEntityAlive(entity)) count += 1;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "return count;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "setEntityLayer(entity, layerBits) {\n";
+        indent_level++;
+        indent(); output << "if (!entity) return;\n";
+        indent(); output << "this._zenithInitEntityLayerMask(entity);\n";
+        indent(); output << "const bits = Math.trunc(Number(layerBits) || 0);\n";
+        indent(); output << "entity.layer = bits === 0 ? 1 : bits;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "entityLayer(entity) {\n";
+        indent_level++;
+        indent(); output << "return this._zenithEntityLayer(entity);\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "setEntityMask(entity, maskBits) {\n";
+        indent_level++;
+        indent(); output << "if (!entity) return;\n";
+        indent(); output << "this._zenithInitEntityLayerMask(entity);\n";
+        indent(); output << "const bits = Math.trunc(Number(maskBits));\n";
+        indent(); output << "entity.mask = Number.isNaN(bits) ? 0xFFFFFFFF : bits;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "entityMask(entity) {\n";
+        indent_level++;
+        indent(); output << "return this._zenithEntityMask(entity);\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "setEntityLayerMask(entity, layerBits, maskBits) {\n";
+        indent_level++;
+        indent(); output << "if (!entity) return;\n";
+        indent(); output << "this.setEntityLayer(entity, layerBits);\n";
+        indent(); output << "this.setEntityMask(entity, maskBits);\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "canEntitiesInteract(first, second) {\n";
+        indent_level++;
+        indent(); output << "return this._zenithCanEntitiesInteract(first, second);\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "setEntityName(entity, name) {\n";
+        indent_level++;
+        indent(); output << "if (entity) entity.name = name;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "entityName(entity) {\n";
+        indent_level++;
+        indent(); output << "return entity && entity.name ? entity.name : '';\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "setEntityTag(entity, tag) {\n";
+        indent_level++;
+        indent(); output << "if (entity) entity.tag = tag;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "entityTag(entity) {\n";
+        indent_level++;
+        indent(); output << "return entity && entity.tag ? entity.tag : '';\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "findEntityByName(name) {\n";
+        indent_level++;
+        indent(); output << "for (const entity of this._zenithEntities) {\n";
+        indent_level++;
+        indent(); output << "if (entity.name === name) return entity;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "return null;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "findEntityByTag(tag) {\n";
+        indent_level++;
+        indent(); output << "for (const entity of this._zenithEntities) {\n";
+        indent_level++;
+        indent(); output << "if (entity.tag === tag) return entity;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "return null;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "setParent(child, parent) {\n";
+        indent_level++;
+        indent(); output << "if (!child || !parent || child === parent) return false;\n";
+        indent(); output << "if (child.parent && child.parent.children) {\n";
+        indent_level++;
+        indent(); output << "const oldIndex = child.parent.children.indexOf(child);\n";
+        indent(); output << "if (oldIndex >= 0) child.parent.children.splice(oldIndex, 1);\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "child.parent = parent;\n";
+        indent(); output << "parent.children = parent.children || [];\n";
+        indent(); output << "if (parent.children.indexOf(child) < 0) parent.children.push(child);\n";
+        indent(); output << "return true;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "clearParent(child) {\n";
+        indent_level++;
+        indent(); output << "if (!child || !child.parent) return false;\n";
+        indent(); output << "if (child.parent.children) {\n";
+        indent_level++;
+        indent(); output << "const index = child.parent.children.indexOf(child);\n";
+        indent(); output << "if (index >= 0) child.parent.children.splice(index, 1);\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "child.parent = null;\n";
+        indent(); output << "return true;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "parentOf(child) {\n";
+        indent_level++;
+        indent(); output << "return child && child.parent ? child.parent : null;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "childCount(parent) {\n";
+        indent_level++;
+        indent(); output << "return parent && parent.children ? parent.children.length : 0;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "childAt(parent, index) {\n";
+        indent_level++;
+        indent(); output << "if (!parent || !parent.children || index < 0 || index >= parent.children.length) return null;\n";
+        indent(); output << "return parent.children[index];\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "loadTexture(texturePath) {\n";
+        indent_level++;
+        indent(); output << "return this._zenithTextureHandle(texturePath);\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "loadAudio(clipPath, spatial) {\n";
+        indent_level++;
+        indent(); output << "return this._zenithAudioHandle(clipPath, spatial === true);\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "loadMesh(meshPath) {\n";
+        indent_level++;
+        indent(); output << "return this._zenithMeshHandle(meshPath);\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "loadShader(shaderPath) {\n";
+        indent_level++;
+        indent(); output << "return this._zenithShaderHandle(shaderPath);\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "loadMaterial(materialPath, shaderPath) {\n";
+        indent_level++;
+        indent(); output << "return this._zenithMaterialHandle(materialPath, shaderPath);\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "importAsset(sourcePath, importedPath, groupName, bundleName) {\n";
+        indent_level++;
+        indent(); output << "const source = this._zenithNormalizeAssetPath(sourcePath);\n";
+        indent(); output << "if (!source) return '';\n";
+        indent(); output << "const type = this._zenithGuessAssetType(source);\n";
+        indent(); output << "const imported = this._zenithNormalizeAssetPath(importedPath) || ('assets/imported/' + this._zenithAssetFolder(type) + '/' + source.split('/').pop());\n";
+        indent(); output << "let metadata = this._zenithFindAssetMetadata(source);\n";
+        indent(); output << "if (metadata && metadata.importedPath && metadata.importedPath !== imported) {\n";
+        indent_level++;
+        indent(); output << "this._zenithAssetMetadata.delete(metadata.importedPath);\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "metadata = metadata || {};\n";
+        indent(); output << "metadata.sourcePath = source;\n";
+        indent(); output << "metadata.importedPath = imported;\n";
+        indent(); output << "metadata.type = type;\n";
+        indent(); output << "metadata.group = groupName ? String(groupName) : (metadata.group || '');\n";
+        indent(); output << "metadata.sourceBytes = metadata.sourceBytes || 0;\n";
+        indent(); output << "metadata.estimatedMemoryBytes = this._zenithEstimateAssetBytes(type, metadata.sourceBytes || 0);\n";
+        indent(); output << "metadata.sourceTimestamp = metadata.sourceTimestamp || 0;\n";
+        indent(); output << "metadata.importedTimestamp = metadata.importedTimestamp || 0;\n";
+        indent(); output << "metadata.version = Math.max(1, Number(metadata.version || 1));\n";
+        indent(); output << "metadata.hotReloadable = metadata.hotReloadable !== false;\n";
+        indent(); output << "metadata.dirty = false;\n";
+        indent(); output << "this._zenithAssetMetadata.set(imported, metadata);\n";
+        indent(); output << "if (bundleName) this.addAssetToBundle(bundleName, imported);\n";
+        indent(); output << "return imported;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "createAssetBundle(bundleName) {\n";
+        indent_level++;
+        indent(); output << "const name = bundleName === undefined || bundleName === null ? '' : String(bundleName);\n";
+        indent(); output << "if (!name) return false;\n";
+        indent(); output << "if (!this._zenithAssetBundles.has(name)) this._zenithAssetBundles.set(name, { name, assets: [] });\n";
+        indent(); output << "return true;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "addAssetToBundle(bundleName, assetPath) {\n";
+        indent_level++;
+        indent(); output << "const name = bundleName === undefined || bundleName === null ? '' : String(bundleName);\n";
+        indent(); output << "const resolvedPath = this.importedAssetPath(assetPath) || this._zenithNormalizeAssetPath(assetPath);\n";
+        indent(); output << "if (!name || !resolvedPath) return false;\n";
+        indent(); output << "this.createAssetBundle(name);\n";
+        indent(); output << "this._zenithEnsureAssetMetadata(resolvedPath, this._zenithGuessAssetType(resolvedPath));\n";
+        indent(); output << "const bundle = this._zenithAssetBundles.get(name);\n";
+        indent(); output << "if (bundle.assets.indexOf(resolvedPath) < 0) bundle.assets.push(resolvedPath);\n";
+        indent(); output << "return true;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "assetBundleAssetCount(bundleName) {\n";
+        indent_level++;
+        indent(); output << "const bundle = this._zenithAssetBundles.get(String(bundleName || ''));\n";
+        indent(); output << "return bundle && bundle.assets ? bundle.assets.length : 0;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "assetBundleAsset(bundleName, index) {\n";
+        indent_level++;
+        indent(); output << "const bundle = this._zenithAssetBundles.get(String(bundleName || ''));\n";
+        indent(); output << "if (!bundle || !bundle.assets) return '';\n";
+        indent(); output << "const i = Math.trunc(index);\n";
+        indent(); output << "return i >= 0 && i < bundle.assets.length ? bundle.assets[i] : '';\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "setAssetMemoryBudget(assetType, bytes) {\n";
+        indent_level++;
+        indent(); output << "const type = assetType === undefined || assetType === null ? '' : String(assetType);\n";
+        indent(); output << "if (!type) return false;\n";
+        indent(); output << "this._zenithAssetBudgets.set(type, Math.max(0, Math.trunc(bytes)));\n";
+        indent(); output << "return true;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "assetMemoryBudget(assetType) {\n";
+        indent_level++;
+        indent(); output << "const type = assetType === undefined || assetType === null ? '' : String(assetType);\n";
+        indent(); output << "return this._zenithAssetBudgetValue(type);\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "assetMemoryUsage(assetType) {\n";
+        indent_level++;
+        indent(); output << "const type = assetType === undefined || assetType === null ? '' : String(assetType);\n";
+        indent(); output << "return this._zenithAssetMemoryUsageByType(type);\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "setAssetHotReload(enabled) {\n";
+        indent_level++;
+        indent(); output << "this._zenithAssetHotReload = enabled === true;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "assetHotReloadEnabled() {\n";
+        indent_level++;
+        indent(); output << "return this._zenithAssetHotReload === true;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "pollAssetChanges() {\n";
+        indent_level++;
+        indent(); output << "let dirty = 0;\n";
+        indent(); output << "for (const metadata of this._zenithAssetMetadata.values()) {\n";
+        indent_level++;
+        indent(); output << "if (metadata && metadata.dirty) dirty += 1;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "return dirty;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "reloadAsset(assetPath) {\n";
+        indent_level++;
+        indent(); output << "const metadata = this._zenithEnsureAssetMetadata(assetPath, this._zenithGuessAssetType(assetPath));\n";
+        indent(); output << "if (!metadata) return false;\n";
+        indent(); output << "const type = metadata.type || this._zenithGuessAssetType(metadata.importedPath || assetPath);\n";
+        indent(); output << "const handleStore = this._zenithAssetHandleStore(type);\n";
+        indent(); output << "const targetPath = metadata.importedPath || this._zenithNormalizeAssetPath(assetPath);\n";
+        indent(); output << "const handle = handleStore ? this._zenithEnsureHandleRecord(handleStore, targetPath, type) : null;\n";
+        indent(); output << "const memoryBytes = this._zenithEstimateAssetBytes(type, metadata.sourceBytes || 0);\n";
+        indent(); output << "if (handle && !this._zenithCanLoadAsset(type, handle, memoryBytes)) return false;\n";
+        indent(); output << "metadata.type = type;\n";
+        indent(); output << "metadata.version = Math.max(1, Number(metadata.version || 1) + 1);\n";
+        indent(); output << "metadata.estimatedMemoryBytes = memoryBytes;\n";
+        indent(); output << "metadata.dirty = false;\n";
+        indent(); output << "if (handle) {\n";
+        indent_level++;
+        indent(); output << "handle.loaded = true;\n";
+        indent(); output << "handle.refCount = 1;\n";
+        indent(); output << "handle.memoryBytes = memoryBytes;\n";
+        indent(); output << "handle.version = metadata.version;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "return true;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "reloadDirtyAssets() {\n";
+        indent_level++;
+        indent(); output << "if (!this._zenithAssetHotReload) return 0;\n";
+        indent(); output << "let reloaded = 0;\n";
+        indent(); output << "for (const metadata of this._zenithAssetMetadata.values()) {\n";
+        indent_level++;
+        indent(); output << "if (metadata && metadata.dirty && this.reloadAsset(metadata.importedPath || metadata.sourcePath)) reloaded += 1;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "return reloaded;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "markAssetDirty(assetPath) {\n";
+        indent_level++;
+        indent(); output << "const metadata = this._zenithEnsureAssetMetadata(assetPath, this._zenithGuessAssetType(assetPath));\n";
+        indent(); output << "if (!metadata) return false;\n";
+        indent(); output << "metadata.dirty = true;\n";
+        indent(); output << "return true;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "assetGroup(assetPath) {\n";
+        indent_level++;
+        indent(); output << "const metadata = this._zenithFindAssetMetadata(assetPath);\n";
+        indent(); output << "return metadata && metadata.group ? metadata.group : '';\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "importedAssetPath(assetPath) {\n";
+        indent_level++;
+        indent(); output << "const metadata = this._zenithFindAssetMetadata(assetPath);\n";
+        indent(); output << "return metadata && metadata.importedPath ? metadata.importedPath : '';\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "assetDatabaseJson() {\n";
+        indent_level++;
+        indent(); output << "const assets = Array.from(this._zenithAssetMetadata.values()).slice().sort((a, b) => String(a.importedPath || '').localeCompare(String(b.importedPath || '')));\n";
+        indent(); output << "const bundles = Array.from(this._zenithAssetBundles.values()).map(bundle => ({ name: bundle.name, assets: Array.isArray(bundle.assets) ? bundle.assets.slice() : [] })).sort((a, b) => String(a.name).localeCompare(String(b.name)));\n";
+        indent(); output << "const budgets = {};\n";
+        indent(); output << "for (const [type, value] of this._zenithAssetBudgets.entries()) budgets[type] = Number(value);\n";
+        indent(); output << "return JSON.stringify({ hotReloadEnabled: this._zenithAssetHotReload === true, assets, bundles, budgets });\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "bakeAssetMetadata(outputPath) {\n";
+        indent_level++;
+        indent(); output << "const target = outputPath === undefined || outputPath === null ? '' : String(outputPath);\n";
+        indent(); output << "if (!target) return false;\n";
+        indent(); output << "this._zenithBakedAssetOutputs.set(target, this.assetDatabaseJson());\n";
+        indent(); output << "return true;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "spawnSprite(name, x, y, w, h, color) {\n";
+        indent_level++;
+        indent(); output << "const entity = {\n";
+        indent_level++;
+        indent(); output << "id: this._zenithNextEntityId++,\n";
+        indent(); output << "name,\n";
+        indent(); output << "tag: '',\n";
+        indent(); output << "kind: 'sprite2d',\n";
+        indent(); output << "x,\n";
+        indent(); output << "y,\n";
+        indent(); output << "z: 0,\n";
+        indent(); output << "rotation: 0,\n";
+        indent(); output << "rotationX: 0,\n";
+        indent(); output << "rotationY: 0,\n";
+        indent(); output << "rotationZ: 0,\n";
+        indent(); output << "scaleX: 1,\n";
+        indent(); output << "scaleY: 1,\n";
+        indent(); output << "scaleZ: 1,\n";
+        indent(); output << "w,\n";
+        indent(); output << "h,\n";
+        indent(); output << "color,\n";
+        indent(); output << "texturePath: '',\n";
+        indent(); output << "anchorX: 0.5,\n";
+        indent(); output << "anchorY: 0.5,\n";
+        indent(); output << "sortOrder: 0,\n";
+        indent(); output << "visible: true,\n";
+        indent(); output << "parent: null,\n";
+        indent(); output << "children: [],\n";
+        indent(); output << "hasBody: false,\n";
+        indent(); output << "vx: 0,\n";
+        indent(); output << "vy: 0,\n";
+        indent(); output << "mass: 1,\n";
+        indent(); output << "gravityScale: 1,\n";
+        indent(); output << "friction: 0.2,\n";
+        indent(); output << "restitution: 0\n";
+        indent_level--;
+        indent(); output << "};\n";
+        indent(); output << "this._zenithEntities.push(entity);\n";
+        indent(); output << "return entity;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "spawnTexturedSprite(name, texturePath, x, y, w, h, color) {\n";
+        indent_level++;
+        indent(); output << "const entity = this.spawnSprite(name, x, y, w, h, color);\n";
+        indent(); output << "entity.texturePath = texturePath;\n";
+        indent(); output << "return entity;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "spawnTexturedSpriteHandle(name, texture, x, y, w, h, color) {\n";
+        indent_level++;
+        indent(); output << "const texturePath = texture && texture.path ? String(texture.path) : '';\n";
+        indent(); output << "return this.spawnTexturedSprite(name, texturePath, x, y, w, h, color);\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "spawnTilemap2D(name, x, y, columns, rows, tileWidth, tileHeight, defaultColor) {\n";
+        indent_level++;
+        indent(); output << "const entity = {\n";
+        indent_level++;
+        indent(); output << "id: this._zenithNextEntityId++,\n";
+        indent(); output << "name,\n";
+        indent(); output << "tag: '',\n";
+        indent(); output << "kind: 'tilemap2d',\n";
+        indent(); output << "x,\n";
+        indent(); output << "y,\n";
+        indent(); output << "z: 0,\n";
+        indent(); output << "rotation: 0,\n";
+        indent(); output << "rotationX: 0,\n";
+        indent(); output << "rotationY: 0,\n";
+        indent(); output << "rotationZ: 0,\n";
+        indent(); output << "scaleX: 1,\n";
+        indent(); output << "scaleY: 1,\n";
+        indent(); output << "scaleZ: 1,\n";
+        indent(); output << "columns: Math.max(1, Math.trunc(columns)),\n";
+        indent(); output << "rows: Math.max(1, Math.trunc(rows)),\n";
+        indent(); output << "tileWidth: tileWidth > 0 ? tileWidth : 1,\n";
+        indent(); output << "tileHeight: tileHeight > 0 ? tileHeight : 1,\n";
+        indent(); output << "anchorX: 0,\n";
+        indent(); output << "anchorY: 0,\n";
+        indent(); output << "sortOrder: 0,\n";
+        indent(); output << "visible: true,\n";
+        indent(); output << "cells: [],\n";
+        indent(); output << "palette: ['', defaultColor || 'white'],\n";
+        indent(); output << "parent: null,\n";
+        indent(); output << "children: []\n";
+        indent_level--;
+        indent(); output << "};\n";
+        indent(); output << "entity.cells = new Array(entity.columns * entity.rows).fill(0);\n";
+        indent(); output << "this._zenithEntities.push(entity);\n";
+        indent(); output << "return entity;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "spawnCharacter2D(name, texturePath, x, y, w, h, color) {\n";
+        indent_level++;
+        indent(); output << "const entity = this.spawnTexturedSprite(name, texturePath, x, y, w, h, color);\n";
+        indent(); output << "entity.kind = 'character2d';\n";
+        indent(); output << "this._zenithEnsureCharacter2D(entity);\n";
+        indent(); output << "return entity;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "spawnCharacter2DHandle(name, texture, x, y, w, h, color) {\n";
+        indent_level++;
+        indent(); output << "const texturePath = texture && texture.path ? String(texture.path) : '';\n";
+        indent(); output << "return this.spawnCharacter2D(name, texturePath, x, y, w, h, color);\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "spawnAudioSource2D(name, clipPath, x, y, playOnAwake) {\n";
+        indent_level++;
+        indent(); output << "const entity = {\n";
+        indent_level++;
+        indent(); output << "id: this._zenithNextEntityId++,\n";
+        indent(); output << "name,\n";
+        indent(); output << "tag: '',\n";
+        indent(); output << "kind: 'audio2d',\n";
+        indent(); output << "x,\n";
+        indent(); output << "y,\n";
+        indent(); output << "z: 0,\n";
+        indent(); output << "rotation: 0,\n";
+        indent(); output << "rotationX: 0,\n";
+        indent(); output << "rotationY: 0,\n";
+        indent(); output << "rotationZ: 0,\n";
+        indent(); output << "scaleX: 1,\n";
+        indent(); output << "scaleY: 1,\n";
+        indent(); output << "scaleZ: 1,\n";
+        indent(); output << "parent: null,\n";
+        indent(); output << "children: []\n";
+        indent_level--;
+        indent(); output << "};\n";
+        indent(); output << "this._zenithEntities.push(entity);\n";
+        indent(); output << "const target = this._zenithEnsureAudioSource2D(entity);\n";
+        indent(); output << "if (target) {\n";
+        indent_level++;
+        indent(); output << "target.clipPath = clipPath || '';\n";
+        indent(); output << "target.playOnAwake = playOnAwake === true;\n";
+        indent(); output << "target.isPlaying = playOnAwake === true;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "return entity;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "spawnAudioSource2DHandle(name, clip, x, y, playOnAwake) {\n";
+        indent_level++;
+        indent(); output << "const clipPath = clip && clip.path ? String(clip.path) : '';\n";
+        indent(); output << "return this.spawnAudioSource2D(name, clipPath, x, y, playOnAwake);\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "spawnAudioListener2D(name, x, y, primary) {\n";
+        indent_level++;
+        indent(); output << "const entity = {\n";
+        indent_level++;
+        indent(); output << "id: this._zenithNextEntityId++,\n";
+        indent(); output << "name,\n";
+        indent(); output << "tag: '',\n";
+        indent(); output << "kind: 'listener2d',\n";
+        indent(); output << "x,\n";
+        indent(); output << "y,\n";
+        indent(); output << "z: 0,\n";
+        indent(); output << "rotation: 0,\n";
+        indent(); output << "rotationX: 0,\n";
+        indent(); output << "rotationY: 0,\n";
+        indent(); output << "rotationZ: 0,\n";
+        indent(); output << "scaleX: 1,\n";
+        indent(); output << "scaleY: 1,\n";
+        indent(); output << "scaleZ: 1,\n";
+        indent(); output << "parent: null,\n";
+        indent(); output << "children: []\n";
+        indent_level--;
+        indent(); output << "};\n";
+        indent(); output << "this._zenithEntities.push(entity);\n";
+        indent(); output << "const target = this._zenithEnsureAudioListener2D(entity);\n";
+        indent(); output << "if (target) {\n";
+        indent_level++;
+        indent(); output << "if (primary) {\n";
+        indent_level++;
+        indent(); output << "for (const existing of this._zenithEntities) {\n";
+        indent_level++;
+        indent(); output << "if (existing !== target && existing.kind === 'listener2d') existing.primary = false;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "this._zenithPrimaryAudioListener = target;\n";
+        indent_level--;
+        indent(); output << "} else if (this._zenithPrimaryAudioListener === target) {\n";
+        indent_level++;
+        indent(); output << "this._zenithPrimaryAudioListener = null;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "target.primary = primary === true;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "return entity;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "spawnCamera2D(name, x, y, zoom, primary) {\n";
+        indent_level++;
+        indent(); output << "const entity = {\n";
+        indent_level++;
+        indent(); output << "id: this._zenithNextEntityId++,\n";
+        indent(); output << "name,\n";
+        indent(); output << "tag: '',\n";
+        indent(); output << "kind: 'camera2d',\n";
+        indent(); output << "x,\n";
+        indent(); output << "y,\n";
+        indent(); output << "z: 0,\n";
+        indent(); output << "rotation: 0,\n";
+        indent(); output << "rotationX: 0,\n";
+        indent(); output << "rotationY: 0,\n";
+        indent(); output << "rotationZ: 0,\n";
+        indent(); output << "scaleX: 1,\n";
+        indent(); output << "scaleY: 1,\n";
+        indent(); output << "scaleZ: 1,\n";
+        indent(); output << "zoom,\n";
+        indent(); output << "primary,\n";
+        indent(); output << "viewportX: 0,\n";
+        indent(); output << "viewportY: 0,\n";
+        indent(); output << "viewportWidth: 1,\n";
+        indent(); output << "viewportHeight: 1,\n";
+        indent(); output << "parent: null,\n";
+        indent(); output << "children: []\n";
+        indent_level--;
+        indent(); output << "};\n";
+        indent(); output << "if (primary) {\n";
+        indent_level++;
+        indent(); output << "for (const existing of this._zenithEntities) {\n";
+        indent_level++;
+        indent(); output << "if (existing.kind === 'camera2d') existing.primary = false;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "this._zenithPrimaryCamera = entity;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "this._zenithEntities.push(entity);\n";
+        indent(); output << "return entity;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "destroyEntity(entity) {\n";
+        indent_level++;
+        indent(); output << "const index = this._zenithEntities.indexOf(entity);\n";
+        indent(); output << "if (index < 0) return false;\n";
+        indent(); output << "if (entity.parent && entity.parent.children) {\n";
+        indent_level++;
+        indent(); output << "const parentIndex = entity.parent.children.indexOf(entity);\n";
+        indent(); output << "if (parentIndex >= 0) entity.parent.children.splice(parentIndex, 1);\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "if (entity.children) {\n";
+        indent_level++;
+        indent(); output << "for (const child of entity.children) {\n";
+        indent_level++;
+        indent(); output << "child.parent = null;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "entity.children = [];\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "if (this._zenithPrimaryCamera === entity) this._zenithPrimaryCamera = null;\n";
+        indent(); output << "if (this._zenithPrimaryAudioListener === entity) this._zenithPrimaryAudioListener = null;\n";
+        indent(); output << "if (this._zenithPrimaryCamera3D === entity) this._zenithPrimaryCamera3D = null;\n";
+        indent(); output << "if (this._zenithPrimaryAudioListener3D === entity) this._zenithPrimaryAudioListener3D = null;\n";
+        indent(); output << "this._zenithEntities.splice(index, 1);\n";
+        indent(); output << "return true;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "destroyEntityHierarchy(entity) {\n";
+        indent_level++;
+        indent(); output << "if (!entity) return false;\n";
+        indent(); output << "const children = Array.isArray(entity.children) ? entity.children.slice() : [];\n";
+        indent(); output << "for (const child of children) {\n";
+        indent_level++;
+        indent(); output << "this.destroyEntityHierarchy(child);\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "return this.destroyEntity(entity);\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "isEntityAlive(entity) {\n";
+        indent_level++;
+        indent(); output << "return this._zenithEntities.indexOf(entity) >= 0;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "entityCount() {\n";
+        indent_level++;
+        indent(); output << "return this._zenithEntities.length;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "setEntityPosition2D(entity, x, y) {\n";
+        indent_level++;
+        indent(); output << "if (!entity) return;\n";
+        indent(); output << "entity.x = x;\n";
+        indent(); output << "entity.y = y;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "moveEntity2D(entity, dx, dy) {\n";
+        indent_level++;
+        indent(); output << "if (!entity) return;\n";
+        indent(); output << "entity.x = (entity.x || 0) + dx;\n";
+        indent(); output << "entity.y = (entity.y || 0) + dy;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "entityPositionX(entity) {\n";
+        indent_level++;
+        indent(); output << "return entity ? (entity.x || 0) : 0;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "entityPositionY(entity) {\n";
+        indent_level++;
+        indent(); output << "return entity ? (entity.y || 0) : 0;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "resizeTilemap2D(entity, columns, rows, fillTileId) {\n";
+        indent_level++;
+        indent(); output << "const target = this._zenithEnsureTilemap2D(entity);\n";
+        indent(); output << "if (!target) return;\n";
+        indent(); output << "const nextColumns = Math.max(1, Math.trunc(columns));\n";
+        indent(); output << "const nextRows = Math.max(1, Math.trunc(rows));\n";
+        indent(); output << "const fillValue = Math.trunc(fillTileId || 0);\n";
+        indent(); output << "const previousColumns = target.columns;\n";
+        indent(); output << "const previousRows = target.rows;\n";
+        indent(); output << "const previousCells = Array.isArray(target.cells) ? target.cells.slice() : [];\n";
+        indent(); output << "target.columns = nextColumns;\n";
+        indent(); output << "target.rows = nextRows;\n";
+        indent(); output << "target.cells = new Array(nextColumns * nextRows).fill(fillValue);\n";
+        indent(); output << "const copyColumns = Math.min(previousColumns, nextColumns);\n";
+        indent(); output << "const copyRows = Math.min(previousRows, nextRows);\n";
+        indent(); output << "for (let row = 0; row < copyRows; row += 1) {\n";
+        indent_level++;
+        indent(); output << "for (let column = 0; column < copyColumns; column += 1) {\n";
+        indent_level++;
+        indent(); output << "target.cells[(row * nextColumns) + column] = Number(previousCells[(row * previousColumns) + column]) || 0;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "setTilemapCell(entity, column, row, tileId) {\n";
+        indent_level++;
+        indent(); output << "const target = this._zenithEnsureTilemap2D(entity);\n";
+        indent(); output << "if (!target) return;\n";
+        indent(); output << "const tileColumn = Math.trunc(column);\n";
+        indent(); output << "const tileRow = Math.trunc(row);\n";
+        indent(); output << "if (tileColumn < 0 || tileColumn >= target.columns || tileRow < 0 || tileRow >= target.rows) return;\n";
+        indent(); output << "const value = Math.trunc(tileId);\n";
+        indent(); output << "target.cells[(tileRow * target.columns) + tileColumn] = value;\n";
+        indent(); output << "while (value >= 0 && target.palette.length <= value) target.palette.push('');\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "tilemapCell(entity, column, row) {\n";
+        indent_level++;
+        indent(); output << "const target = this._zenithEnsureTilemap2D(entity);\n";
+        indent(); output << "if (!target) return 0;\n";
+        indent(); output << "const tileColumn = Math.trunc(column);\n";
+        indent(); output << "const tileRow = Math.trunc(row);\n";
+        indent(); output << "if (tileColumn < 0 || tileColumn >= target.columns || tileRow < 0 || tileRow >= target.rows) return 0;\n";
+        indent(); output << "return Number(target.cells[(tileRow * target.columns) + tileColumn]) || 0;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "fillTilemap(entity, tileId) {\n";
+        indent_level++;
+        indent(); output << "const target = this._zenithEnsureTilemap2D(entity);\n";
+        indent(); output << "if (!target) return;\n";
+        indent(); output << "const value = Math.trunc(tileId);\n";
+        indent(); output << "target.cells.fill(value);\n";
+        indent(); output << "while (value >= 0 && target.palette.length <= value) target.palette.push('');\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "clearTilemap(entity) {\n";
+        indent_level++;
+        indent(); output << "this.fillTilemap(entity, 0);\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "setTilemapPaletteColor(entity, tileId, color) {\n";
+        indent_level++;
+        indent(); output << "const target = this._zenithEnsureTilemap2D(entity);\n";
+        indent(); output << "const index = Math.trunc(tileId);\n";
+        indent(); output << "if (!target || index < 0) return;\n";
+        indent(); output << "while (target.palette.length <= index) target.palette.push('');\n";
+        indent(); output << "target.palette[index] = color || '';\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "tilemapPaletteColor(entity, tileId) {\n";
+        indent_level++;
+        indent(); output << "const target = this._zenithEnsureTilemap2D(entity);\n";
+        indent(); output << "const index = Math.trunc(tileId);\n";
+        indent(); output << "if (!target || index < 0 || index >= target.palette.length) return '';\n";
+        indent(); output << "return target.palette[index] || '';\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "spawnMesh(name, meshPath, shaderPath, x, y, z) {\n";
+        indent_level++;
+        indent(); output << "const entity = {\n";
+        indent_level++;
+        indent(); output << "id: this._zenithNextEntityId++,\n";
+        indent(); output << "name,\n";
+        indent(); output << "tag: '',\n";
+        indent(); output << "kind: 'mesh3d',\n";
+        indent(); output << "x,\n";
+        indent(); output << "y,\n";
+        indent(); output << "z,\n";
+        indent(); output << "rotation: 0,\n";
+        indent(); output << "rotationX: 0,\n";
+        indent(); output << "rotationY: 0,\n";
+        indent(); output << "rotationZ: 0,\n";
+        indent(); output << "scaleX: 1,\n";
+        indent(); output << "scaleY: 1,\n";
+        indent(); output << "scaleZ: 1,\n";
+        indent(); output << "meshPath,\n";
+        indent(); output << "shaderPath,\n";
+        indent(); output << "materialPath: '',\n";
+        indent(); output << "visible: true,\n";
+        indent(); output << "castShadows: true,\n";
+        indent(); output << "parent: null,\n";
+        indent(); output << "children: []\n";
+        indent_level--;
+        indent(); output << "};\n";
+        indent(); output << "this._zenithEntities.push(entity);\n";
+        indent(); output << "return entity;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "spawnMeshHandle(name, mesh, shader, x, y, z) {\n";
+        indent_level++;
+        indent(); output << "const meshPath = mesh && mesh.path ? String(mesh.path) : '';\n";
+        indent(); output << "const shaderPath = shader && shader.path ? String(shader.path) : '';\n";
+        indent(); output << "return this.spawnMesh(name, meshPath, shaderPath, x, y, z);\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "spawnCharacter3D(name, meshPath, shaderPath, materialPath, x, y, z) {\n";
+        indent_level++;
+        indent(); output << "const entity = this.spawnMesh(name, meshPath, shaderPath, x, y, z);\n";
+        indent(); output << "entity.kind = 'character3d';\n";
+        indent(); output << "entity.materialPath = materialPath || '';\n";
+        indent(); output << "if (entity.materialPath) this._zenithEnsureMaterial(entity.materialPath);\n";
+        indent(); output << "this._zenithEnsureCharacter3D(entity);\n";
+        indent(); output << "return entity;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "spawnCharacter3DHandle(name, mesh, shader, material, x, y, z) {\n";
+        indent_level++;
+        indent(); output << "const meshPath = mesh && mesh.path ? String(mesh.path) : '';\n";
+        indent(); output << "const shaderPath = shader && shader.path ? String(shader.path) : '';\n";
+        indent(); output << "const materialPath = material && material.path ? String(material.path) : '';\n";
+        indent(); output << "return this.spawnCharacter3D(name, meshPath, shaderPath, materialPath, x, y, z);\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "spawnAudioSource3D(name, clipPath, x, y, z, playOnAwake) {\n";
+        indent_level++;
+        indent(); output << "const entity = {\n";
+        indent_level++;
+        indent(); output << "id: this._zenithNextEntityId++,\n";
+        indent(); output << "name,\n";
+        indent(); output << "tag: '',\n";
+        indent(); output << "kind: 'audio3d',\n";
+        indent(); output << "x,\n";
+        indent(); output << "y,\n";
+        indent(); output << "z,\n";
+        indent(); output << "rotation: 0,\n";
+        indent(); output << "rotationX: 0,\n";
+        indent(); output << "rotationY: 0,\n";
+        indent(); output << "rotationZ: 0,\n";
+        indent(); output << "scaleX: 1,\n";
+        indent(); output << "scaleY: 1,\n";
+        indent(); output << "scaleZ: 1,\n";
+        indent(); output << "parent: null,\n";
+        indent(); output << "children: []\n";
+        indent_level--;
+        indent(); output << "};\n";
+        indent(); output << "this._zenithEntities.push(entity);\n";
+        indent(); output << "const target = this._zenithEnsureAudioSource3D(entity);\n";
+        indent(); output << "if (target) {\n";
+        indent_level++;
+        indent(); output << "target.clipPath = clipPath || '';\n";
+        indent(); output << "target.playOnAwake = playOnAwake === true;\n";
+        indent(); output << "target.isPlaying = playOnAwake === true;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "return entity;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "spawnAudioSource3DHandle(name, clip, x, y, z, playOnAwake) {\n";
+        indent_level++;
+        indent(); output << "const clipPath = clip && clip.path ? String(clip.path) : '';\n";
+        indent(); output << "return this.spawnAudioSource3D(name, clipPath, x, y, z, playOnAwake);\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "spawnPointLight3D(name, x, y, z, color, intensity, range) {\n";
+        indent_level++;
+        indent(); output << "const entity = {\n";
+        indent_level++;
+        indent(); output << "id: this._zenithNextEntityId++,\n";
+        indent(); output << "name,\n";
+        indent(); output << "tag: '',\n";
+        indent(); output << "kind: 'pointlight3d',\n";
+        indent(); output << "x,\n";
+        indent(); output << "y,\n";
+        indent(); output << "z,\n";
+        indent(); output << "rotation: 0,\n";
+        indent(); output << "rotationX: 0,\n";
+        indent(); output << "rotationY: 0,\n";
+        indent(); output << "rotationZ: 0,\n";
+        indent(); output << "scaleX: 1,\n";
+        indent(); output << "scaleY: 1,\n";
+        indent(); output << "scaleZ: 1,\n";
+        indent(); output << "parent: null,\n";
+        indent(); output << "children: []\n";
+        indent_level--;
+        indent(); output << "};\n";
+        indent(); output << "this._zenithEntities.push(entity);\n";
+        indent(); output << "const target = this._zenithEnsurePointLight3D(entity);\n";
+        indent(); output << "if (target) {\n";
+        indent_level++;
+        indent(); output << "target.color = color || 'white';\n";
+        indent(); output << "target.intensity = intensity;\n";
+        indent(); output << "target.range = range;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "return entity;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "spawnDirectionalLight3D(name, x, y, z, dirX, dirY, dirZ, color, intensity, castShadows) {\n";
+        indent_level++;
+        indent(); output << "const entity = {\n";
+        indent_level++;
+        indent(); output << "id: this._zenithNextEntityId++,\n";
+        indent(); output << "name,\n";
+        indent(); output << "tag: '',\n";
+        indent(); output << "kind: 'directionallight3d',\n";
+        indent(); output << "x,\n";
+        indent(); output << "y,\n";
+        indent(); output << "z,\n";
+        indent(); output << "rotation: 0,\n";
+        indent(); output << "rotationX: 0,\n";
+        indent(); output << "rotationY: 0,\n";
+        indent(); output << "rotationZ: 0,\n";
+        indent(); output << "scaleX: 1,\n";
+        indent(); output << "scaleY: 1,\n";
+        indent(); output << "scaleZ: 1,\n";
+        indent(); output << "parent: null,\n";
+        indent(); output << "children: []\n";
+        indent_level--;
+        indent(); output << "};\n";
+        indent(); output << "this._zenithEntities.push(entity);\n";
+        indent(); output << "const target = this._zenithEnsureDirectionalLight3D(entity);\n";
+        indent(); output << "if (target) {\n";
+        indent_level++;
+        indent(); output << "target.directionX = dirX;\n";
+        indent(); output << "target.directionY = dirY;\n";
+        indent(); output << "target.directionZ = dirZ;\n";
+        indent(); output << "target.color = color || 'white';\n";
+        indent(); output << "target.intensity = intensity;\n";
+        indent(); output << "target.castShadows = castShadows !== false;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "return entity;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "spawnAudioListener3D(name, x, y, z, primary) {\n";
+        indent_level++;
+        indent(); output << "const entity = {\n";
+        indent_level++;
+        indent(); output << "id: this._zenithNextEntityId++,\n";
+        indent(); output << "name,\n";
+        indent(); output << "tag: '',\n";
+        indent(); output << "kind: 'listener3d',\n";
+        indent(); output << "x,\n";
+        indent(); output << "y,\n";
+        indent(); output << "z,\n";
+        indent(); output << "rotation: 0,\n";
+        indent(); output << "rotationX: 0,\n";
+        indent(); output << "rotationY: 0,\n";
+        indent(); output << "rotationZ: 0,\n";
+        indent(); output << "scaleX: 1,\n";
+        indent(); output << "scaleY: 1,\n";
+        indent(); output << "scaleZ: 1,\n";
+        indent(); output << "parent: null,\n";
+        indent(); output << "children: []\n";
+        indent_level--;
+        indent(); output << "};\n";
+        indent(); output << "this._zenithEntities.push(entity);\n";
+        indent(); output << "const target = this._zenithEnsureAudioListener3D(entity);\n";
+        indent(); output << "if (target) {\n";
+        indent_level++;
+        indent(); output << "if (primary) {\n";
+        indent_level++;
+        indent(); output << "for (const existing of this._zenithEntities) {\n";
+        indent_level++;
+        indent(); output << "if (existing !== target && existing.kind === 'listener3d') existing.primary = false;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "this._zenithPrimaryAudioListener3D = target;\n";
+        indent_level--;
+        indent(); output << "} else if (this._zenithPrimaryAudioListener3D === target) {\n";
+        indent_level++;
+        indent(); output << "this._zenithPrimaryAudioListener3D = null;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "target.primary = primary === true;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "return entity;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "createMaterial(materialPath, shaderPath) {\n";
+        indent_level++;
+        indent(); output << "const material = this._zenithEnsureMaterial(materialPath, shaderPath);\n";
+        indent(); output << "return material ? material.path : '';\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "materialExists(materialPath) {\n";
+        indent_level++;
+        indent(); output << "return !!materialPath && this._zenithMaterials.has(materialPath);\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "setMaterialShaderPath(materialPath, shaderPath) {\n";
+        indent_level++;
+        indent(); output << "const material = this._zenithEnsureMaterial(materialPath, shaderPath);\n";
+        indent(); output << "if (material) material.shaderPath = shaderPath;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "materialShaderPath(materialPath) {\n";
+        indent_level++;
+        indent(); output << "const material = this._zenithEnsureMaterial(materialPath);\n";
+        indent(); output << "return material ? (material.shaderPath || '') : '';\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "cloneMaterial(sourceMaterialPath, targetMaterialPath) {\n";
+        indent_level++;
+        indent(); output << "if (!targetMaterialPath) return '';\n";
+        indent(); output << "const source = sourceMaterialPath ? this._zenithMaterials.get(sourceMaterialPath) : null;\n";
+        indent(); output << "if (!source) return '';\n";
+        indent(); output << "const target = this._zenithEnsureMaterial(targetMaterialPath, source.shaderPath || '');\n";
+        indent(); output << "if (!target) return '';\n";
+        indent(); output << "target.shaderPath = source.shaderPath || '';\n";
+        indent(); output << "target.properties = new Map();\n";
+        indent(); output << "for (const [propertyName, property] of source.properties.entries()) {\n";
+        indent_level++;
+        indent(); output << "target.properties.set(propertyName, this._zenithCloneMaterialPropertyState(property, propertyName));\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "return target.path || targetMaterialPath;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "copyMaterialProperties(sourceMaterialPath, targetMaterialPath) {\n";
+        indent_level++;
+        indent(); output << "if (!targetMaterialPath) return 0;\n";
+        indent(); output << "const source = sourceMaterialPath ? this._zenithMaterials.get(sourceMaterialPath) : null;\n";
+        indent(); output << "const target = this._zenithEnsureMaterial(targetMaterialPath);\n";
+        indent(); output << "if (!source || !target) return 0;\n";
+        indent(); output << "target.properties = new Map();\n";
+        indent(); output << "for (const [propertyName, property] of source.properties.entries()) {\n";
+        indent_level++;
+        indent(); output << "target.properties.set(propertyName, this._zenithCloneMaterialPropertyState(property, propertyName));\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "return target.properties.size;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "removeMaterialProperty(materialPath, propertyName) {\n";
+        indent_level++;
+        indent(); output << "if (!materialPath || !propertyName) return false;\n";
+        indent(); output << "const material = this._zenithMaterials.get(materialPath);\n";
+        indent(); output << "if (!material) return false;\n";
+        indent(); output << "return material.properties.delete(propertyName);\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "clearMaterialProperties(materialPath) {\n";
+        indent_level++;
+        indent(); output << "if (!materialPath) return 0;\n";
+        indent(); output << "const material = this._zenithMaterials.get(materialPath);\n";
+        indent(); output << "if (!material) return 0;\n";
+        indent(); output << "const removed = material.properties.size;\n";
+        indent(); output << "material.properties.clear();\n";
+        indent(); output << "return removed;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "defineMaterialText(materialPath, propertyName, label, defaultValue) {\n";
+        indent_level++;
+        indent(); output << "const property = this._zenithEnsureMaterialProperty(materialPath, propertyName, 'Text', label);\n";
+        indent(); output << "if (!property) return false;\n";
+        indent(); output << "property.stringValue = defaultValue;\n";
+        indent(); output << "return true;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "defineMaterialNumber(materialPath, propertyName, label, defaultValue) {\n";
+        indent_level++;
+        indent(); output << "const property = this._zenithEnsureMaterialProperty(materialPath, propertyName, 'Number', label);\n";
+        indent(); output << "if (!property) return false;\n";
+        indent(); output << "property.numberValue = defaultValue;\n";
+        indent(); output << "return true;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "defineMaterialToggle(materialPath, propertyName, label, defaultValue) {\n";
+        indent_level++;
+        indent(); output << "const property = this._zenithEnsureMaterialProperty(materialPath, propertyName, 'Toggle', label);\n";
+        indent(); output << "if (!property) return false;\n";
+        indent(); output << "property.boolValue = defaultValue === true;\n";
+        indent(); output << "return true;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "defineMaterialRadio(materialPath, propertyName, label, optionsCsv, defaultValue) {\n";
+        indent_level++;
+        indent(); output << "const property = this._zenithEnsureMaterialProperty(materialPath, propertyName, 'Radio', label);\n";
+        indent(); output << "if (!property) return false;\n";
+        indent(); output << "property.options = this._zenithParseMaterialOptions(optionsCsv);\n";
+        indent(); output << "property.stringValue = defaultValue;\n";
+        indent(); output << "return true;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "defineMaterialImage(materialPath, propertyName, label, defaultValue) {\n";
+        indent_level++;
+        indent(); output << "const property = this._zenithEnsureMaterialProperty(materialPath, propertyName, 'Image', label);\n";
+        indent(); output << "if (!property) return false;\n";
+        indent(); output << "property.stringValue = defaultValue;\n";
+        indent(); output << "return true;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "defineMaterialButton(materialPath, propertyName, label, actionValue) {\n";
+        indent_level++;
+        indent(); output << "const property = this._zenithEnsureMaterialProperty(materialPath, propertyName, 'Button', label);\n";
+        indent(); output << "if (!property) return false;\n";
+        indent(); output << "property.stringValue = actionValue;\n";
+        indent(); output << "return true;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "defineMaterialColor(materialPath, propertyName, label, defaultValue) {\n";
+        indent_level++;
+        indent(); output << "const property = this._zenithEnsureMaterialProperty(materialPath, propertyName, 'Color', label);\n";
+        indent(); output << "if (!property) return false;\n";
+        indent(); output << "property.stringValue = defaultValue;\n";
+        indent(); output << "return true;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "setMaterialTextProperty(materialPath, propertyName, value) {\n";
+        indent_level++;
+        indent(); output << "const property = this._zenithMaterialProperty(materialPath, propertyName);\n";
+        indent(); output << "if (!property) return false;\n";
+        indent(); output << "property.stringValue = value;\n";
+        indent(); output << "return true;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "materialTextProperty(materialPath, propertyName) {\n";
+        indent_level++;
+        indent(); output << "const property = this._zenithMaterialProperty(materialPath, propertyName);\n";
+        indent(); output << "return property ? (property.stringValue || '') : '';\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "setMaterialNumberProperty(materialPath, propertyName, value) {\n";
+        indent_level++;
+        indent(); output << "const property = this._zenithMaterialProperty(materialPath, propertyName);\n";
+        indent(); output << "if (!property) return false;\n";
+        indent(); output << "property.numberValue = value;\n";
+        indent(); output << "return true;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "materialNumberProperty(materialPath, propertyName) {\n";
+        indent_level++;
+        indent(); output << "const property = this._zenithMaterialProperty(materialPath, propertyName);\n";
+        indent(); output << "return property ? (property.numberValue || 0) : 0;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "setMaterialToggleProperty(materialPath, propertyName, value) {\n";
+        indent_level++;
+        indent(); output << "const property = this._zenithMaterialProperty(materialPath, propertyName);\n";
+        indent(); output << "if (!property) return false;\n";
+        indent(); output << "property.boolValue = value === true;\n";
+        indent(); output << "return true;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "materialToggleProperty(materialPath, propertyName) {\n";
+        indent_level++;
+        indent(); output << "const property = this._zenithMaterialProperty(materialPath, propertyName);\n";
+        indent(); output << "return property ? property.boolValue === true : false;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "setMaterialRadioProperty(materialPath, propertyName, value) {\n";
+        indent_level++;
+        indent(); output << "const property = this._zenithMaterialProperty(materialPath, propertyName);\n";
+        indent(); output << "if (!property) return false;\n";
+        indent(); output << "property.stringValue = value;\n";
+        indent(); output << "return true;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "materialRadioProperty(materialPath, propertyName) {\n";
+        indent_level++;
+        indent(); output << "const property = this._zenithMaterialProperty(materialPath, propertyName);\n";
+        indent(); output << "return property ? (property.stringValue || '') : '';\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "setMaterialImageProperty(materialPath, propertyName, value) {\n";
+        indent_level++;
+        indent(); output << "const property = this._zenithMaterialProperty(materialPath, propertyName);\n";
+        indent(); output << "if (!property) return false;\n";
+        indent(); output << "property.stringValue = value;\n";
+        indent(); output << "return true;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "materialImageProperty(materialPath, propertyName) {\n";
+        indent_level++;
+        indent(); output << "const property = this._zenithMaterialProperty(materialPath, propertyName);\n";
+        indent(); output << "return property ? (property.stringValue || '') : '';\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "setMaterialButtonProperty(materialPath, propertyName, value) {\n";
+        indent_level++;
+        indent(); output << "const property = this._zenithMaterialProperty(materialPath, propertyName);\n";
+        indent(); output << "if (!property) return false;\n";
+        indent(); output << "property.stringValue = value;\n";
+        indent(); output << "return true;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "materialButtonProperty(materialPath, propertyName) {\n";
+        indent_level++;
+        indent(); output << "const property = this._zenithMaterialProperty(materialPath, propertyName);\n";
+        indent(); output << "return property ? (property.stringValue || '') : '';\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "triggerMaterialButton(materialPath, propertyName) {\n";
+        indent_level++;
+        indent(); output << "const property = this._zenithMaterialProperty(materialPath, propertyName);\n";
+        indent(); output << "if (!property || property.kind !== 'Button') return false;\n";
+        indent(); output << "property.triggerCount = Math.max(0, Math.trunc(Number(property.triggerCount) || 0)) + 1;\n";
+        indent(); output << "if (property.stringValue && typeof this.triggerCallback === 'function') this.triggerCallback(property.stringValue);\n";
+        indent(); output << "return true;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "materialButtonTriggerCount(materialPath, propertyName) {\n";
+        indent_level++;
+        indent(); output << "const property = this._zenithMaterialProperty(materialPath, propertyName);\n";
+        indent(); output << "return property ? Math.max(0, Math.trunc(Number(property.triggerCount) || 0)) : 0;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "setMaterialPropertyCallback(materialPath, propertyName, callbackName) {\n";
+        indent_level++;
+        indent(); output << "const property = this._zenithMaterialProperty(materialPath, propertyName);\n";
+        indent(); output << "if (!property) return false;\n";
+        indent(); output << "property.callbackName = callbackName === undefined || callbackName === null ? '' : String(callbackName);\n";
+        indent(); output << "return true;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "materialPropertyCallback(materialPath, propertyName) {\n";
+        indent_level++;
+        indent(); output << "const property = this._zenithMaterialProperty(materialPath, propertyName);\n";
+        indent(); output << "return property ? (property.callbackName || '') : '';\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "notifyMaterialProperty(materialPath, propertyName) {\n";
+        indent_level++;
+        indent(); output << "const property = this._zenithMaterialProperty(materialPath, propertyName);\n";
+        indent(); output << "if (!property || !property.callbackName) return false;\n";
+        indent(); output << "property.triggerCount = Math.max(0, Math.trunc(Number(property.triggerCount) || 0)) + 1;\n";
+        indent(); output << "if (typeof this.triggerCallback === 'function') this.triggerCallback(property.callbackName, this._zenithMaterialPropertyCallbackValue(property));\n";
+        indent(); output << "return true;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "setMaterialColorProperty(materialPath, propertyName, value) {\n";
+        indent_level++;
+        indent(); output << "const property = this._zenithMaterialProperty(materialPath, propertyName);\n";
+        indent(); output << "if (!property) return false;\n";
+        indent(); output << "property.stringValue = value;\n";
+        indent(); output << "return true;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "materialColorProperty(materialPath, propertyName) {\n";
+        indent_level++;
+        indent(); output << "const property = this._zenithMaterialProperty(materialPath, propertyName);\n";
+        indent(); output << "return property ? (property.stringValue || '') : '';\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "materialPropertyCount(materialPath) {\n";
+        indent_level++;
+        indent(); output << "const material = this._zenithEnsureMaterial(materialPath);\n";
+        indent(); output << "return material ? material.properties.size : 0;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "materialHasProperty(materialPath, propertyName) {\n";
+        indent_level++;
+        indent(); output << "return this._zenithMaterialProperty(materialPath, propertyName) !== null;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "materialPropertyOptionCount(materialPath, propertyName) {\n";
+        indent_level++;
+        indent(); output << "const property = this._zenithMaterialProperty(materialPath, propertyName);\n";
+        indent(); output << "return property && Array.isArray(property.options) ? property.options.length : 0;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "addMaterialPropertyOption(materialPath, propertyName, label, value) {\n";
+        indent_level++;
+        indent(); output << "const property = this._zenithMaterialProperty(materialPath, propertyName);\n";
+        indent(); output << "if (!property) return false;\n";
+        indent(); output << "const optionValue = value === undefined || value === null || String(value).length === 0 ? (label === undefined || label === null ? '' : String(label)) : String(value);\n";
+        indent(); output << "if (!optionValue) return false;\n";
+        indent(); output << "const optionLabel = label === undefined || label === null || String(label).length === 0 ? optionValue : String(label);\n";
+        indent(); output << "if (!Array.isArray(property.options)) property.options = [];\n";
+        indent(); output << "property.options.push({ label: optionLabel, value: optionValue });\n";
+        indent(); output << "return true;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "removeMaterialPropertyOption(materialPath, propertyName, index) {\n";
+        indent_level++;
+        indent(); output << "const property = this._zenithMaterialProperty(materialPath, propertyName);\n";
+        indent(); output << "if (!property || !Array.isArray(property.options) || index < 0 || index >= property.options.length) return false;\n";
+        indent(); output << "property.options.splice(index, 1);\n";
+        indent(); output << "return true;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "clearMaterialPropertyOptions(materialPath, propertyName) {\n";
+        indent_level++;
+        indent(); output << "const property = this._zenithMaterialProperty(materialPath, propertyName);\n";
+        indent(); output << "if (!property || !Array.isArray(property.options)) return 0;\n";
+        indent(); output << "const removed = property.options.length;\n";
+        indent(); output << "property.options = [];\n";
+        indent(); output << "return removed;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "materialPropertyNameAt(materialPath, index) {\n";
+        indent_level++;
+        indent(); output << "const material = this._zenithEnsureMaterial(materialPath);\n";
+        indent(); output << "if (!material || index < 0 || index >= material.properties.size) return '';\n";
+        indent(); output << "return Array.from(material.properties.keys())[index] || '';\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "materialPropertyKind(materialPath, propertyName) {\n";
+        indent_level++;
+        indent(); output << "const property = this._zenithMaterialProperty(materialPath, propertyName);\n";
+        indent(); output << "return property ? (property.kind || '') : '';\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "materialPropertyLabel(materialPath, propertyName) {\n";
+        indent_level++;
+        indent(); output << "const property = this._zenithMaterialProperty(materialPath, propertyName);\n";
+        indent(); output << "return property ? (property.label || '') : '';\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "materialPropertyOptions(materialPath, propertyName) {\n";
+        indent_level++;
+        indent(); output << "const property = this._zenithMaterialProperty(materialPath, propertyName);\n";
+        indent(); output << "if (!property || !Array.isArray(property.options) || property.options.length === 0) return '';\n";
+        indent(); output << "return property.options.map((option) => option && option.value !== undefined ? option.value : (option && option.label !== undefined ? option.label : '')).join(',');\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "materialProperty(materialPath, propertyName) {\n";
+        indent_level++;
+        indent(); output << "const self = this;\n";
+        indent(); output << "let currentName = propertyName || '';\n";
+        indent(); output << "return {\n";
+        indent_level++;
+        indent(); output << "get exists() { return self._zenithMaterialProperty(materialPath, currentName) !== null; },\n";
+        indent(); output << "set exists(value) {},\n";
+        indent(); output << "get name() { return currentName; },\n";
+        indent(); output << "set name(value) {\n";
+        indent_level++;
+        indent(); output << "const nextName = value === undefined || value === null ? '' : String(value);\n";
+        indent(); output << "if (!nextName || nextName === currentName) return;\n";
+        indent(); output << "const material = materialPath ? self._zenithMaterials.get(materialPath) : null;\n";
+        indent(); output << "if (!material || !material.properties.has(currentName) || material.properties.has(nextName)) return;\n";
+        indent(); output << "const property = material.properties.get(currentName);\n";
+        indent(); output << "material.properties.delete(currentName);\n";
+        indent(); output << "property.name = nextName;\n";
+        indent(); output << "material.properties.set(nextName, property);\n";
+        indent(); output << "currentName = nextName;\n";
+        indent_level--;
+        indent(); output << "},\n";
+        indent(); output << "get label() { const property = self._zenithMaterialProperty(materialPath, currentName); return property ? (property.label || '') : ''; },\n";
+        indent(); output << "set label(value) { const property = self._zenithMaterialProperty(materialPath, currentName); if (property) property.label = value === undefined || value === null ? '' : String(value); },\n";
+        indent(); output << "get kind() { const property = self._zenithMaterialProperty(materialPath, currentName); return property ? (property.kind || '') : ''; },\n";
+        indent(); output << "set kind(value) { const property = self._zenithMaterialProperty(materialPath, currentName); const normalized = self._zenithNormalizeMaterialPropertyKind(value); if (property && normalized) { property.kind = normalized; if (normalized !== 'Radio') property.options = []; } },\n";
+        indent(); output << "get options() { const property = self._zenithMaterialProperty(materialPath, currentName); return (!property || !Array.isArray(property.options) || property.options.length === 0) ? '' : property.options.map((option) => option && option.value !== undefined ? option.value : (option && option.label !== undefined ? option.label : '')).join(','); },\n";
+        indent(); output << "set options(value) { const property = self._zenithMaterialProperty(materialPath, currentName); if (property) property.options = self._zenithParseMaterialOptions(value); },\n";
+        indent(); output << "get callback() { const property = self._zenithMaterialProperty(materialPath, currentName); return property ? (property.callbackName || '') : ''; },\n";
+        indent(); output << "set callback(value) { const property = self._zenithMaterialProperty(materialPath, currentName); if (property) property.callbackName = value === undefined || value === null ? '' : String(value); },\n";
+        indent(); output << "get stringValue() { const property = self._zenithMaterialProperty(materialPath, currentName); return property ? (property.stringValue || '') : ''; },\n";
+        indent(); output << "set stringValue(value) { const property = self._zenithMaterialProperty(materialPath, currentName); if (property) property.stringValue = value === undefined || value === null ? '' : String(value); },\n";
+        indent(); output << "get numberValue() { const property = self._zenithMaterialProperty(materialPath, currentName); return property ? (property.numberValue || 0) : 0; },\n";
+        indent(); output << "set numberValue(value) { const property = self._zenithMaterialProperty(materialPath, currentName); if (property) property.numberValue = Number(value) || 0; },\n";
+        indent(); output << "get boolValue() { const property = self._zenithMaterialProperty(materialPath, currentName); return property ? property.boolValue === true : false; },\n";
+        indent(); output << "set boolValue(value) { const property = self._zenithMaterialProperty(materialPath, currentName); if (property) property.boolValue = value === true; },\n";
+        indent(); output << "get triggerCount() { const property = self._zenithMaterialProperty(materialPath, currentName); return property ? Math.max(0, Math.trunc(Number(property.triggerCount) || 0)) : 0; },\n";
+        indent(); output << "set triggerCount(value) { const property = self._zenithMaterialProperty(materialPath, currentName); if (property) property.triggerCount = Math.max(0, Math.trunc(Number(value) || 0)); }\n";
+        indent_level--;
+        indent(); output << "};\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "materialPropertyAt(materialPath, index) {\n";
+        indent_level++;
+        indent(); output << "return this.materialProperty(materialPath, this.materialPropertyNameAt(materialPath, index));\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "materialPropertyOption(materialPath, propertyName, index) {\n";
+        indent_level++;
+        indent(); output << "const self = this;\n";
+        indent(); output << "const optionIndex = index;\n";
+        indent(); output << "return {\n";
+        indent_level++;
+        indent(); output << "get exists() { return self._zenithMaterialPropertyOption(materialPath, propertyName, optionIndex) !== null; },\n";
+        indent(); output << "set exists(value) {},\n";
+        indent(); output << "get label() { const option = self._zenithMaterialPropertyOption(materialPath, propertyName, optionIndex); return option ? (option.label !== undefined && option.label !== null && option.label !== '' ? option.label : (option.value || '')) : ''; },\n";
+        indent(); output << "set label(value) { const option = self._zenithMaterialPropertyOption(materialPath, propertyName, optionIndex); if (option) option.label = value === undefined || value === null ? '' : String(value); },\n";
+        indent(); output << "get value() { const option = self._zenithMaterialPropertyOption(materialPath, propertyName, optionIndex); return option ? (option.value || '') : ''; },\n";
+        indent(); output << "set value(value) { const option = self._zenithMaterialPropertyOption(materialPath, propertyName, optionIndex); if (option) option.value = value === undefined || value === null ? '' : String(value); }\n";
+        indent_level--;
+        indent(); output << "};\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "setMeshMaterial(entity, materialPath) {\n";
+        indent_level++;
+        indent(); output << "const target = this._zenithEnsureMesh3D(entity);\n";
+        indent(); output << "if (!target) return false;\n";
+        indent(); output << "target.materialPath = materialPath || '';\n";
+        indent(); output << "if (materialPath) this._zenithEnsureMaterial(materialPath);\n";
+        indent(); output << "return true;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "meshMaterialPath(entity) {\n";
+        indent_level++;
+        indent(); output << "return entity ? (entity.materialPath !== undefined ? entity.materialPath : '') : '';\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "meshMaterialHandle(entity) {\n";
+        indent_level++;
+        indent(); output << "const materialPath = entity && entity.materialPath ? entity.materialPath : '';\n";
+        indent(); output << "const shaderPath = entity && entity.shaderPath ? entity.shaderPath : '';\n";
+        indent(); output << "return this._zenithMaterialHandle(materialPath, shaderPath);\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "playAudio(entity) {\n";
+        indent_level++;
+        indent(); output << "if (!entity) return false;\n";
+        indent(); output << "if (entity.hasAudio2D === true) {\n";
+        indent_level++;
+        indent(); output << "const target = this._zenithEnsureAudioSource2D(entity);\n";
+        indent(); output << "if (!target) return false;\n";
+        indent(); output << "target.isPlaying = true;\n";
+        indent(); output << "return true;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "if (entity.hasAudio3D === true) {\n";
+        indent_level++;
+        indent(); output << "const target = this._zenithEnsureAudioSource3D(entity);\n";
+        indent(); output << "if (!target) return false;\n";
+        indent(); output << "target.isPlaying = true;\n";
+        indent(); output << "return true;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "return false;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "stopAudio(entity) {\n";
+        indent_level++;
+        indent(); output << "if (!entity) return false;\n";
+        indent(); output << "if (entity.hasAudio2D === true) {\n";
+        indent_level++;
+        indent(); output << "const target = this._zenithEnsureAudioSource2D(entity);\n";
+        indent(); output << "if (!target) return false;\n";
+        indent(); output << "target.isPlaying = false;\n";
+        indent(); output << "return true;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "if (entity.hasAudio3D === true) {\n";
+        indent_level++;
+        indent(); output << "const target = this._zenithEnsureAudioSource3D(entity);\n";
+        indent(); output << "if (!target) return false;\n";
+        indent(); output << "target.isPlaying = false;\n";
+        indent(); output << "return true;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "return false;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "spawnCamera3D(name, x, y, z, fov, primary) {\n";
+        indent_level++;
+        indent(); output << "const entity = {\n";
+        indent_level++;
+        indent(); output << "id: this._zenithNextEntityId++,\n";
+        indent(); output << "name,\n";
+        indent(); output << "tag: '',\n";
+        indent(); output << "kind: 'camera3d',\n";
+        indent(); output << "x,\n";
+        indent(); output << "y,\n";
+        indent(); output << "z,\n";
+        indent(); output << "rotation: 0,\n";
+        indent(); output << "rotationX: 0,\n";
+        indent(); output << "rotationY: 0,\n";
+        indent(); output << "rotationZ: 0,\n";
+        indent(); output << "scaleX: 1,\n";
+        indent(); output << "scaleY: 1,\n";
+        indent(); output << "scaleZ: 1,\n";
+        indent(); output << "fov,\n";
+        indent(); output << "nearClip: 0.1,\n";
+        indent(); output << "farClip: 1000,\n";
+        indent(); output << "primary,\n";
+        indent(); output << "viewportX: 0,\n";
+        indent(); output << "viewportY: 0,\n";
+        indent(); output << "viewportWidth: 1,\n";
+        indent(); output << "viewportHeight: 1,\n";
+        indent(); output << "parent: null,\n";
+        indent(); output << "children: []\n";
+        indent_level--;
+        indent(); output << "};\n";
+        indent(); output << "if (primary) {\n";
+        indent_level++;
+        indent(); output << "for (const existing of this._zenithEntities) {\n";
+        indent_level++;
+        indent(); output << "if (existing.kind === 'camera3d') existing.primary = false;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "this._zenithPrimaryCamera3D = entity;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "this._zenithEntities.push(entity);\n";
+        indent(); output << "return entity;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "setEntityPosition3D(entity, x, y, z) {\n";
+        indent_level++;
+        indent(); output << "if (!entity) return;\n";
+        indent(); output << "entity.x = x;\n";
+        indent(); output << "entity.y = y;\n";
+        indent(); output << "entity.z = z;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "moveEntity3D(entity, dx, dy, dz) {\n";
+        indent_level++;
+        indent(); output << "if (!entity) return;\n";
+        indent(); output << "entity.x = (entity.x || 0) + dx;\n";
+        indent(); output << "entity.y = (entity.y || 0) + dy;\n";
+        indent(); output << "entity.z = (entity.z || 0) + dz;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "entityPositionZ(entity) {\n";
+        indent_level++;
+        indent(); output << "return entity ? (entity.z || 0) : 0;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "transform2D(entity) {\n";
+        indent_level++;
+        indent(); output << "const self = this;\n";
+        indent(); output << "return {\n";
+        indent_level++;
+        indent(); output << "get x() { return entity ? (entity.x !== undefined ? entity.x : 0) : 0; },\n";
+        indent(); output << "set x(value) { const target = self._zenithEnsureTransform2D(entity); if (target) target.x = value; },\n";
+        indent(); output << "get y() { return entity ? (entity.y !== undefined ? entity.y : 0) : 0; },\n";
+        indent(); output << "set y(value) { const target = self._zenithEnsureTransform2D(entity); if (target) target.y = value; },\n";
+        indent(); output << "get rotation() { return entity ? (entity.rotation !== undefined ? entity.rotation : 0) : 0; },\n";
+        indent(); output << "set rotation(value) { const target = self._zenithEnsureTransform2D(entity); if (target) target.rotation = value; },\n";
+        indent(); output << "get scaleX() { return entity ? (entity.scaleX !== undefined ? entity.scaleX : 1) : 1; },\n";
+        indent(); output << "set scaleX(value) { const target = self._zenithEnsureTransform2D(entity); if (target) target.scaleX = value; },\n";
+        indent(); output << "get scaleY() { return entity ? (entity.scaleY !== undefined ? entity.scaleY : 1) : 1; },\n";
+        indent(); output << "set scaleY(value) { const target = self._zenithEnsureTransform2D(entity); if (target) target.scaleY = value; }\n";
+        indent_level--;
+        indent(); output << "};\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "body2D(entity) {\n";
+        indent_level++;
+        indent(); output << "const self = this;\n";
+        indent(); output << "return {\n";
+        indent_level++;
+        indent(); output << "get x() { return entity ? (entity.x !== undefined ? entity.x : 0) : 0; },\n";
+        indent(); output << "set x(value) { const target = self._zenithEnsureBody2D(entity); if (target) target.x = value; },\n";
+        indent(); output << "get y() { return entity ? (entity.y !== undefined ? entity.y : 0) : 0; },\n";
+        indent(); output << "set y(value) { const target = self._zenithEnsureBody2D(entity); if (target) target.y = value; },\n";
+        indent(); output << "get vx() { return entity ? (entity.vx !== undefined ? entity.vx : 0) : 0; },\n";
+        indent(); output << "set vx(value) { const target = self._zenithEnsureBody2D(entity); if (target) target.vx = value; },\n";
+        indent(); output << "get vy() { return entity ? (entity.vy !== undefined ? entity.vy : 0) : 0; },\n";
+        indent(); output << "set vy(value) { const target = self._zenithEnsureBody2D(entity); if (target) target.vy = value; },\n";
+        indent(); output << "get mass() { return entity ? (entity.mass !== undefined ? entity.mass : 1) : 1; },\n";
+        indent(); output << "set mass(value) { const target = self._zenithEnsureBody2D(entity); if (target) target.mass = value > 0 ? value : 1; },\n";
+        indent(); output << "get gravityScale() { return entity ? (entity.gravityScale !== undefined ? entity.gravityScale : 1) : 1; },\n";
+        indent(); output << "set gravityScale(value) { const target = self._zenithEnsureBody2D(entity); if (target) target.gravityScale = value; },\n";
+        indent(); output << "get friction() { return entity ? (entity.friction !== undefined ? entity.friction : 0.2) : 0.2; },\n";
+        indent(); output << "set friction(value) { const target = self._zenithEnsureBody2D(entity); if (target) target.friction = value; },\n";
+        indent(); output << "get restitution() { return entity ? (entity.restitution !== undefined ? entity.restitution : 0) : 0; },\n";
+        indent(); output << "set restitution(value) { const target = self._zenithEnsureBody2D(entity); if (target) target.restitution = value; }\n";
+        indent_level--;
+        indent(); output << "};\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "boxCollider2D(entity) {\n";
+        indent_level++;
+        indent(); output << "const self = this;\n";
+        indent(); output << "return {\n";
+        indent_level++;
+        indent(); output << "get offsetX() { return entity ? (entity.boxColliderOffsetX !== undefined ? entity.boxColliderOffsetX : 0) : 0; },\n";
+        indent(); output << "set offsetX(value) { const target = self._zenithEnsureBoxCollider2D(entity); if (target) target.boxColliderOffsetX = value; },\n";
+        indent(); output << "get offsetY() { return entity ? (entity.boxColliderOffsetY !== undefined ? entity.boxColliderOffsetY : 0) : 0; },\n";
+        indent(); output << "set offsetY(value) { const target = self._zenithEnsureBoxCollider2D(entity); if (target) target.boxColliderOffsetY = value; },\n";
+        indent(); output << "get width() { return entity ? (entity.boxColliderWidth !== undefined ? entity.boxColliderWidth : 1) : 1; },\n";
+        indent(); output << "set width(value) { const target = self._zenithEnsureBoxCollider2D(entity); if (target) target.boxColliderWidth = value > 0 ? value : 0.01; },\n";
+        indent(); output << "get height() { return entity ? (entity.boxColliderHeight !== undefined ? entity.boxColliderHeight : 1) : 1; },\n";
+        indent(); output << "set height(value) { const target = self._zenithEnsureBoxCollider2D(entity); if (target) target.boxColliderHeight = value > 0 ? value : 0.01; },\n";
+        indent(); output << "get isTrigger() { return entity ? entity.boxColliderIsTrigger === true : false; },\n";
+        indent(); output << "set isTrigger(value) { const target = self._zenithEnsureBoxCollider2D(entity); if (target) target.boxColliderIsTrigger = value === true; },\n";
+        indent(); output << "get enabled() { return entity ? entity.boxColliderEnabled !== false : true; },\n";
+        indent(); output << "set enabled(value) { const target = self._zenithEnsureBoxCollider2D(entity); if (target) target.boxColliderEnabled = value !== false; }\n";
+        indent_level--;
+        indent(); output << "};\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "circleCollider2D(entity) {\n";
+        indent_level++;
+        indent(); output << "const self = this;\n";
+        indent(); output << "return {\n";
+        indent_level++;
+        indent(); output << "get offsetX() { return entity ? (entity.circleColliderOffsetX !== undefined ? entity.circleColliderOffsetX : 0) : 0; },\n";
+        indent(); output << "set offsetX(value) { const target = self._zenithEnsureCircleCollider2D(entity); if (target) target.circleColliderOffsetX = value; },\n";
+        indent(); output << "get offsetY() { return entity ? (entity.circleColliderOffsetY !== undefined ? entity.circleColliderOffsetY : 0) : 0; },\n";
+        indent(); output << "set offsetY(value) { const target = self._zenithEnsureCircleCollider2D(entity); if (target) target.circleColliderOffsetY = value; },\n";
+        indent(); output << "get radius() { return entity ? (entity.circleColliderRadius !== undefined ? entity.circleColliderRadius : 0.5) : 0.5; },\n";
+        indent(); output << "set radius(value) { const target = self._zenithEnsureCircleCollider2D(entity); if (target) target.circleColliderRadius = value > 0 ? value : 0.01; },\n";
+        indent(); output << "get isTrigger() { return entity ? entity.circleColliderIsTrigger === true : false; },\n";
+        indent(); output << "set isTrigger(value) { const target = self._zenithEnsureCircleCollider2D(entity); if (target) target.circleColliderIsTrigger = value === true; },\n";
+        indent(); output << "get enabled() { return entity ? entity.circleColliderEnabled !== false : true; },\n";
+        indent(); output << "set enabled(value) { const target = self._zenithEnsureCircleCollider2D(entity); if (target) target.circleColliderEnabled = value !== false; }\n";
+        indent_level--;
+        indent(); output << "};\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "capsuleCollider2D(entity) {\n";
+        indent_level++;
+        indent(); output << "const self = this;\n";
+        indent(); output << "return {\n";
+        indent_level++;
+        indent(); output << "get offsetX() { return entity ? (entity.capsuleColliderOffsetX !== undefined ? entity.capsuleColliderOffsetX : 0) : 0; },\n";
+        indent(); output << "set offsetX(value) { const target = self._zenithEnsureCapsuleCollider2D(entity); if (target) target.capsuleColliderOffsetX = value; },\n";
+        indent(); output << "get offsetY() { return entity ? (entity.capsuleColliderOffsetY !== undefined ? entity.capsuleColliderOffsetY : 0) : 0; },\n";
+        indent(); output << "set offsetY(value) { const target = self._zenithEnsureCapsuleCollider2D(entity); if (target) target.capsuleColliderOffsetY = value; },\n";
+        indent(); output << "get height() { return entity ? (entity.capsuleColliderHeight !== undefined ? entity.capsuleColliderHeight : 2) : 2; },\n";
+        indent(); output << "set height(value) { const target = self._zenithEnsureCapsuleCollider2D(entity); if (target) target.capsuleColliderHeight = Math.max(value, (target.capsuleColliderRadius !== undefined ? target.capsuleColliderRadius : 0.5) * 2); },\n";
+        indent(); output << "get radius() { return entity ? (entity.capsuleColliderRadius !== undefined ? entity.capsuleColliderRadius : 0.5) : 0.5; },\n";
+        indent(); output << "set radius(value) { const target = self._zenithEnsureCapsuleCollider2D(entity); if (target) { target.capsuleColliderRadius = value > 0 ? value : 0.01; target.capsuleColliderHeight = Math.max(target.capsuleColliderHeight !== undefined ? target.capsuleColliderHeight : 2, target.capsuleColliderRadius * 2); } },\n";
+        indent(); output << "get isTrigger() { return entity ? entity.capsuleColliderIsTrigger === true : false; },\n";
+        indent(); output << "set isTrigger(value) { const target = self._zenithEnsureCapsuleCollider2D(entity); if (target) target.capsuleColliderIsTrigger = value === true; },\n";
+        indent(); output << "get enabled() { return entity ? entity.capsuleColliderEnabled !== false : true; },\n";
+        indent(); output << "set enabled(value) { const target = self._zenithEnsureCapsuleCollider2D(entity); if (target) target.capsuleColliderEnabled = value !== false; }\n";
+        indent_level--;
+        indent(); output << "};\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "camera2D(entity) {\n";
+        indent_level++;
+        indent(); output << "const self = this;\n";
+        indent(); output << "return {\n";
+        indent_level++;
+        indent(); output << "get x() { return entity ? (entity.x !== undefined ? entity.x : 0) : 0; },\n";
+        indent(); output << "set x(value) { const target = self._zenithEnsureCamera2D(entity); if (target) target.x = value; },\n";
+        indent(); output << "get y() { return entity ? (entity.y !== undefined ? entity.y : 0) : 0; },\n";
+        indent(); output << "set y(value) { const target = self._zenithEnsureCamera2D(entity); if (target) target.y = value; },\n";
+        indent(); output << "get zoom() { return entity ? (entity.zoom !== undefined ? entity.zoom : 1) : 1; },\n";
+        indent(); output << "set zoom(value) { const target = self._zenithEnsureCamera2D(entity); if (target) target.zoom = value; },\n";
+        indent(); output << "get primary() { return entity ? entity.primary === true : false; },\n";
+        indent(); output << "set primary(value) {\n";
+        indent_level++;
+        indent(); output << "const target = self._zenithEnsureCamera2D(entity);\n";
+        indent(); output << "if (!target) return;\n";
+        indent(); output << "if (value) {\n";
+        indent_level++;
+        indent(); output << "for (const existing of self._zenithEntities) {\n";
+        indent_level++;
+        indent(); output << "if (existing !== target && existing.kind === 'camera2d') existing.primary = false;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "self._zenithPrimaryCamera = target;\n";
+        indent_level--;
+        indent(); output << "} else if (self._zenithPrimaryCamera === target) {\n";
+        indent_level++;
+        indent(); output << "self._zenithPrimaryCamera = null;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "target.primary = value === true;\n";
+        indent_level--;
+        indent(); output << "},\n";
+        indent(); output << "get viewportX() { return entity ? (entity.viewportX !== undefined ? entity.viewportX : 0) : 0; },\n";
+        indent(); output << "set viewportX(value) { const target = self._zenithEnsureCamera2D(entity); if (target) target.viewportX = value; },\n";
+        indent(); output << "get viewportY() { return entity ? (entity.viewportY !== undefined ? entity.viewportY : 0) : 0; },\n";
+        indent(); output << "set viewportY(value) { const target = self._zenithEnsureCamera2D(entity); if (target) target.viewportY = value; },\n";
+        indent(); output << "get viewportWidth() { return entity ? (entity.viewportWidth !== undefined ? entity.viewportWidth : 1) : 1; },\n";
+        indent(); output << "set viewportWidth(value) { const target = self._zenithEnsureCamera2D(entity); if (target) target.viewportWidth = value; },\n";
+        indent(); output << "get viewportHeight() { return entity ? (entity.viewportHeight !== undefined ? entity.viewportHeight : 1) : 1; },\n";
+        indent(); output << "set viewportHeight(value) { const target = self._zenithEnsureCamera2D(entity); if (target) target.viewportHeight = value; }\n";
+        indent_level--;
+        indent(); output << "};\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "audioListener2D(entity) {\n";
+        indent_level++;
+        indent(); output << "const self = this;\n";
+        indent(); output << "return {\n";
+        indent_level++;
+        indent(); output << "get x() { return entity ? (entity.x !== undefined ? entity.x : 0) : 0; },\n";
+        indent(); output << "set x(value) { const target = self._zenithEnsureAudioListener2D(entity); if (target) target.x = value; },\n";
+        indent(); output << "get y() { return entity ? (entity.y !== undefined ? entity.y : 0) : 0; },\n";
+        indent(); output << "set y(value) { const target = self._zenithEnsureAudioListener2D(entity); if (target) target.y = value; },\n";
+        indent(); output << "get gain() { return entity ? (entity.gain !== undefined ? entity.gain : 1) : 1; },\n";
+        indent(); output << "set gain(value) { const target = self._zenithEnsureAudioListener2D(entity); if (target) target.gain = value; },\n";
+        indent(); output << "get primary() { return entity ? entity.primary === true : false; },\n";
+        indent(); output << "set primary(value) {\n";
+        indent_level++;
+        indent(); output << "const target = self._zenithEnsureAudioListener2D(entity);\n";
+        indent(); output << "if (!target) return;\n";
+        indent(); output << "if (value) {\n";
+        indent_level++;
+        indent(); output << "for (const existing of self._zenithEntities) {\n";
+        indent_level++;
+        indent(); output << "if (existing !== target && existing.kind === 'listener2d') existing.primary = false;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "self._zenithPrimaryAudioListener = target;\n";
+        indent_level--;
+        indent(); output << "} else if (self._zenithPrimaryAudioListener === target) {\n";
+        indent_level++;
+        indent(); output << "self._zenithPrimaryAudioListener = null;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "target.primary = value === true;\n";
+        indent_level--;
+        indent(); output << "},\n";
+        indent(); output << "get enabled() { return entity ? entity.enabled !== false : true; },\n";
+        indent(); output << "set enabled(value) { const target = self._zenithEnsureAudioListener2D(entity); if (target) target.enabled = value !== false; }\n";
+        indent_level--;
+        indent(); output << "};\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "sprite2D(entity) {\n";
+        indent_level++;
+        indent(); output << "const self = this;\n";
+        indent(); output << "return {\n";
+        indent_level++;
+        indent(); output << "get width() { return entity ? (entity.w !== undefined ? entity.w : 1) : 1; },\n";
+        indent(); output << "set width(value) { const target = self._zenithEnsureSprite2D(entity); if (target) target.w = value; },\n";
+        indent(); output << "get height() { return entity ? (entity.h !== undefined ? entity.h : 1) : 1; },\n";
+        indent(); output << "set height(value) { const target = self._zenithEnsureSprite2D(entity); if (target) target.h = value; },\n";
+        indent(); output << "get anchorX() { return entity ? (entity.anchorX !== undefined ? entity.anchorX : 0.5) : 0.5; },\n";
+        indent(); output << "set anchorX(value) { const target = self._zenithEnsureSprite2D(entity); if (target) target.anchorX = value; },\n";
+        indent(); output << "get anchorY() { return entity ? (entity.anchorY !== undefined ? entity.anchorY : 0.5) : 0.5; },\n";
+        indent(); output << "set anchorY(value) { const target = self._zenithEnsureSprite2D(entity); if (target) target.anchorY = value; },\n";
+        indent(); output << "get color() { return entity ? (entity.color !== undefined ? entity.color : 'white') : 'white'; },\n";
+        indent(); output << "set color(value) { const target = self._zenithEnsureSprite2D(entity); if (target) target.color = value; },\n";
+        indent(); output << "get texturePath() { return entity ? (entity.texturePath !== undefined ? entity.texturePath : '') : ''; },\n";
+        indent(); output << "set texturePath(value) { const target = self._zenithEnsureSprite2D(entity); if (target) target.texturePath = value; },\n";
+        indent(); output << "get texture() { return self._zenithTextureHandle(entity ? entity.texturePath : ''); },\n";
+        indent(); output << "set texture(value) { const target = self._zenithEnsureSprite2D(entity); if (target) target.texturePath = value && value.path ? String(value.path) : ''; },\n";
+        indent(); output << "get sortOrder() { return entity ? (entity.sortOrder !== undefined ? entity.sortOrder : 0) : 0; },\n";
+        indent(); output << "set sortOrder(value) { const target = self._zenithEnsureSprite2D(entity); if (target) target.sortOrder = value; },\n";
+        indent(); output << "get visible() { return entity ? entity.visible !== false : true; },\n";
+        indent(); output << "set visible(value) { const target = self._zenithEnsureSprite2D(entity); if (target) target.visible = value !== false; }\n";
+        indent_level--;
+        indent(); output << "};\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "tilemap2D(entity) {\n";
+        indent_level++;
+        indent(); output << "const self = this;\n";
+        indent(); output << "return {\n";
+        indent_level++;
+        indent(); output << "get columns() { return entity ? (entity.columns !== undefined ? entity.columns : 1) : 1; },\n";
+        indent(); output << "set columns(value) { const target = self._zenithEnsureTilemap2D(entity); if (target) self.resizeTilemap2D(target, value, target.rows !== undefined ? target.rows : 1, 0); },\n";
+        indent(); output << "get rows() { return entity ? (entity.rows !== undefined ? entity.rows : 1) : 1; },\n";
+        indent(); output << "set rows(value) { const target = self._zenithEnsureTilemap2D(entity); if (target) self.resizeTilemap2D(target, target.columns !== undefined ? target.columns : 1, value, 0); },\n";
+        indent(); output << "get tileWidth() { return entity ? (entity.tileWidth !== undefined ? entity.tileWidth : 1) : 1; },\n";
+        indent(); output << "set tileWidth(value) { const target = self._zenithEnsureTilemap2D(entity); if (target) target.tileWidth = value > 0 ? value : 1; },\n";
+        indent(); output << "get tileHeight() { return entity ? (entity.tileHeight !== undefined ? entity.tileHeight : 1) : 1; },\n";
+        indent(); output << "set tileHeight(value) { const target = self._zenithEnsureTilemap2D(entity); if (target) target.tileHeight = value > 0 ? value : 1; },\n";
+        indent(); output << "get anchorX() { return entity ? (entity.anchorX !== undefined ? entity.anchorX : 0) : 0; },\n";
+        indent(); output << "set anchorX(value) { const target = self._zenithEnsureTilemap2D(entity); if (target) target.anchorX = value; },\n";
+        indent(); output << "get anchorY() { return entity ? (entity.anchorY !== undefined ? entity.anchorY : 0) : 0; },\n";
+        indent(); output << "set anchorY(value) { const target = self._zenithEnsureTilemap2D(entity); if (target) target.anchorY = value; },\n";
+        indent(); output << "get sortOrder() { return entity ? (entity.sortOrder !== undefined ? entity.sortOrder : 0) : 0; },\n";
+        indent(); output << "set sortOrder(value) { const target = self._zenithEnsureTilemap2D(entity); if (target) target.sortOrder = value; },\n";
+        indent(); output << "get visible() { return entity ? entity.visible !== false : true; },\n";
+        indent(); output << "set visible(value) { const target = self._zenithEnsureTilemap2D(entity); if (target) target.visible = value !== false; }\n";
+        indent_level--;
+        indent(); output << "};\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "character2D(entity) {\n";
+        indent_level++;
+        indent(); output << "const self = this;\n";
+        indent(); output << "return {\n";
+        indent_level++;
+        indent(); output << "get x() { return entity ? (entity.x !== undefined ? entity.x : 0) : 0; },\n";
+        indent(); output << "set x(value) { const target = self._zenithEnsureCharacter2D(entity); if (target) target.x = value; },\n";
+        indent(); output << "get y() { return entity ? (entity.y !== undefined ? entity.y : 0) : 0; },\n";
+        indent(); output << "set y(value) { const target = self._zenithEnsureCharacter2D(entity); if (target) target.y = value; },\n";
+        indent(); output << "get vx() { return entity ? (entity.vx !== undefined ? entity.vx : 0) : 0; },\n";
+        indent(); output << "set vx(value) { const target = self._zenithEnsureCharacter2D(entity); if (target) target.vx = value; },\n";
+        indent(); output << "get vy() { return entity ? (entity.vy !== undefined ? entity.vy : 0) : 0; },\n";
+        indent(); output << "set vy(value) { const target = self._zenithEnsureCharacter2D(entity); if (target) target.vy = value; },\n";
+        indent(); output << "get moveSpeed() { return entity ? (entity.moveSpeed !== undefined ? entity.moveSpeed : 10) : 10; },\n";
+        indent(); output << "set moveSpeed(value) { const target = self._zenithEnsureCharacter2D(entity); if (target) target.moveSpeed = value; },\n";
+        indent(); output << "get jumpForce() { return entity ? (entity.jumpForce !== undefined ? entity.jumpForce : 12) : 12; },\n";
+        indent(); output << "set jumpForce(value) { const target = self._zenithEnsureCharacter2D(entity); if (target) target.jumpForce = value; },\n";
+        indent(); output << "get isGrounded() { return entity ? entity.isGrounded === true : false; },\n";
+        indent(); output << "set isGrounded(value) { const target = self._zenithEnsureCharacter2D(entity); if (target) target.isGrounded = value === true; },\n";
+        indent(); output << "get facingRight() { return entity ? entity.facingRight !== false : true; },\n";
+        indent(); output << "set facingRight(value) { const target = self._zenithEnsureCharacter2D(entity); if (target) target.facingRight = value !== false; },\n";
+        indent(); output << "get texturePath() { return entity ? (entity.texturePath !== undefined ? entity.texturePath : '') : ''; },\n";
+        indent(); output << "set texturePath(value) { const target = self._zenithEnsureCharacter2D(entity); if (target) target.texturePath = value || ''; },\n";
+        indent(); output << "get texture() { return self._zenithTextureHandle(entity ? entity.texturePath : ''); },\n";
+        indent(); output << "set texture(value) { const target = self._zenithEnsureCharacter2D(entity); if (target) target.texturePath = value && value.path ? String(value.path) : ''; },\n";
+        indent(); output << "get color() { return entity ? (entity.color !== undefined ? entity.color : 'white') : 'white'; },\n";
+        indent(); output << "set color(value) { const target = self._zenithEnsureCharacter2D(entity); if (target) target.color = value; }\n";
+        indent_level--;
+        indent(); output << "};\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "audioSource2D(entity) {\n";
+        indent_level++;
+        indent(); output << "const self = this;\n";
+        indent(); output << "return {\n";
+        indent_level++;
+        indent(); output << "get x() { return entity ? (entity.x !== undefined ? entity.x : 0) : 0; },\n";
+        indent(); output << "set x(value) { const target = self._zenithEnsureAudioSource2D(entity); if (target) target.x = value; },\n";
+        indent(); output << "get y() { return entity ? (entity.y !== undefined ? entity.y : 0) : 0; },\n";
+        indent(); output << "set y(value) { const target = self._zenithEnsureAudioSource2D(entity); if (target) target.y = value; },\n";
+        indent(); output << "get clipPath() { return entity ? (entity.clipPath !== undefined ? entity.clipPath : '') : ''; },\n";
+        indent(); output << "set clipPath(value) { const target = self._zenithEnsureAudioSource2D(entity); if (target) target.clipPath = value || ''; },\n";
+        indent(); output << "get clip() { return self._zenithAudioHandle(entity ? entity.clipPath : '', false); },\n";
+        indent(); output << "set clip(value) { const target = self._zenithEnsureAudioSource2D(entity); if (target) target.clipPath = value && value.path ? String(value.path) : ''; },\n";
+        indent(); output << "get volume() { return entity ? (entity.volume !== undefined ? entity.volume : 1) : 1; },\n";
+        indent(); output << "set volume(value) { const target = self._zenithEnsureAudioSource2D(entity); if (target) target.volume = value; },\n";
+        indent(); output << "get pitch() { return entity ? (entity.pitch !== undefined ? entity.pitch : 1) : 1; },\n";
+        indent(); output << "set pitch(value) { const target = self._zenithEnsureAudioSource2D(entity); if (target) target.pitch = value; },\n";
+        indent(); output << "get loop() { return entity ? entity.loop === true : false; },\n";
+        indent(); output << "set loop(value) { const target = self._zenithEnsureAudioSource2D(entity); if (target) target.loop = value === true; },\n";
+        indent(); output << "get playOnAwake() { return entity ? entity.playOnAwake === true : false; },\n";
+        indent(); output << "set playOnAwake(value) { const target = self._zenithEnsureAudioSource2D(entity); if (target) target.playOnAwake = value === true; },\n";
+        indent(); output << "get isPlaying() { return entity ? entity.isPlaying === true : false; },\n";
+        indent(); output << "set isPlaying(value) { const target = self._zenithEnsureAudioSource2D(entity); if (target) target.isPlaying = value === true; }\n";
+        indent_level--;
+        indent(); output << "};\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "transform3D(entity) {\n";
+        indent_level++;
+        indent(); output << "const self = this;\n";
+        indent(); output << "return {\n";
+        indent_level++;
+        indent(); output << "get x() { return entity ? (entity.x !== undefined ? entity.x : 0) : 0; },\n";
+        indent(); output << "set x(value) { const target = self._zenithEnsureTransform3D(entity); if (target) target.x = value; },\n";
+        indent(); output << "get y() { return entity ? (entity.y !== undefined ? entity.y : 0) : 0; },\n";
+        indent(); output << "set y(value) { const target = self._zenithEnsureTransform3D(entity); if (target) target.y = value; },\n";
+        indent(); output << "get z() { return entity ? (entity.z !== undefined ? entity.z : 0) : 0; },\n";
+        indent(); output << "set z(value) { const target = self._zenithEnsureTransform3D(entity); if (target) target.z = value; },\n";
+        indent(); output << "get rotationX() { return entity ? (entity.rotationX !== undefined ? entity.rotationX : 0) : 0; },\n";
+        indent(); output << "set rotationX(value) { const target = self._zenithEnsureTransform3D(entity); if (target) target.rotationX = value; },\n";
+        indent(); output << "get rotationY() { return entity ? (entity.rotationY !== undefined ? entity.rotationY : 0) : 0; },\n";
+        indent(); output << "set rotationY(value) { const target = self._zenithEnsureTransform3D(entity); if (target) target.rotationY = value; },\n";
+        indent(); output << "get rotationZ() { return entity ? (entity.rotationZ !== undefined ? entity.rotationZ : 0) : 0; },\n";
+        indent(); output << "set rotationZ(value) { const target = self._zenithEnsureTransform3D(entity); if (target) target.rotationZ = value; },\n";
+        indent(); output << "get scaleX() { return entity ? (entity.scaleX !== undefined ? entity.scaleX : 1) : 1; },\n";
+        indent(); output << "set scaleX(value) { const target = self._zenithEnsureTransform3D(entity); if (target) target.scaleX = value; },\n";
+        indent(); output << "get scaleY() { return entity ? (entity.scaleY !== undefined ? entity.scaleY : 1) : 1; },\n";
+        indent(); output << "set scaleY(value) { const target = self._zenithEnsureTransform3D(entity); if (target) target.scaleY = value; },\n";
+        indent(); output << "get scaleZ() { return entity ? (entity.scaleZ !== undefined ? entity.scaleZ : 1) : 1; },\n";
+        indent(); output << "set scaleZ(value) { const target = self._zenithEnsureTransform3D(entity); if (target) target.scaleZ = value; }\n";
+        indent_level--;
+        indent(); output << "};\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "body3D(entity) {\n";
+        indent_level++;
+        indent(); output << "const self = this;\n";
+        indent(); output << "return {\n";
+        indent_level++;
+        indent(); output << "get x() { return entity ? (entity.x !== undefined ? entity.x : 0) : 0; },\n";
+        indent(); output << "set x(value) { const target = self._zenithEnsureBody3D(entity); if (target) target.x = value; },\n";
+        indent(); output << "get y() { return entity ? (entity.y !== undefined ? entity.y : 0) : 0; },\n";
+        indent(); output << "set y(value) { const target = self._zenithEnsureBody3D(entity); if (target) target.y = value; },\n";
+        indent(); output << "get z() { return entity ? (entity.z !== undefined ? entity.z : 0) : 0; },\n";
+        indent(); output << "set z(value) { const target = self._zenithEnsureBody3D(entity); if (target) target.z = value; },\n";
+        indent(); output << "get vx() { return entity ? (entity.vx !== undefined ? entity.vx : 0) : 0; },\n";
+        indent(); output << "set vx(value) { const target = self._zenithEnsureBody3D(entity); if (target) target.vx = value; },\n";
+        indent(); output << "get vy() { return entity ? (entity.vy !== undefined ? entity.vy : 0) : 0; },\n";
+        indent(); output << "set vy(value) { const target = self._zenithEnsureBody3D(entity); if (target) target.vy = value; },\n";
+        indent(); output << "get vz() { return entity ? (entity.vz !== undefined ? entity.vz : 0) : 0; },\n";
+        indent(); output << "set vz(value) { const target = self._zenithEnsureBody3D(entity); if (target) target.vz = value; },\n";
+        indent(); output << "get mass() { return entity ? (entity.mass !== undefined ? entity.mass : 1) : 1; },\n";
+        indent(); output << "set mass(value) { const target = self._zenithEnsureBody3D(entity); if (target) target.mass = value > 0 ? value : 1; },\n";
+        indent(); output << "get gravityScale() { return entity ? (entity.gravityScale !== undefined ? entity.gravityScale : 1) : 1; },\n";
+        indent(); output << "set gravityScale(value) { const target = self._zenithEnsureBody3D(entity); if (target) target.gravityScale = value; },\n";
+        indent(); output << "get friction() { return entity ? (entity.friction !== undefined ? entity.friction : 0.2) : 0.2; },\n";
+        indent(); output << "set friction(value) { const target = self._zenithEnsureBody3D(entity); if (target) target.friction = value; },\n";
+        indent(); output << "get restitution() { return entity ? (entity.restitution !== undefined ? entity.restitution : 0) : 0; },\n";
+        indent(); output << "set restitution(value) { const target = self._zenithEnsureBody3D(entity); if (target) target.restitution = value; },\n";
+        indent(); output << "get useGravity() { return entity ? entity.useGravity !== false : true; },\n";
+        indent(); output << "set useGravity(value) { const target = self._zenithEnsureBody3D(entity); if (target) target.useGravity = value !== false; },\n";
+        indent(); output << "get isGrounded() { return entity ? entity.isGrounded === true : false; },\n";
+        indent(); output << "set isGrounded(value) { const target = self._zenithEnsureBody3D(entity); if (target) target.isGrounded = value === true; }\n";
+        indent_level--;
+        indent(); output << "};\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "boxCollider3D(entity) {\n";
+        indent_level++;
+        indent(); output << "const self = this;\n";
+        indent(); output << "return {\n";
+        indent_level++;
+        indent(); output << "get offsetX() { return entity ? (entity.boxCollider3DOffsetX !== undefined ? entity.boxCollider3DOffsetX : 0) : 0; },\n";
+        indent(); output << "set offsetX(value) { const target = self._zenithEnsureBoxCollider3D(entity); if (target) target.boxCollider3DOffsetX = value; },\n";
+        indent(); output << "get offsetY() { return entity ? (entity.boxCollider3DOffsetY !== undefined ? entity.boxCollider3DOffsetY : 0) : 0; },\n";
+        indent(); output << "set offsetY(value) { const target = self._zenithEnsureBoxCollider3D(entity); if (target) target.boxCollider3DOffsetY = value; },\n";
+        indent(); output << "get offsetZ() { return entity ? (entity.boxCollider3DOffsetZ !== undefined ? entity.boxCollider3DOffsetZ : 0) : 0; },\n";
+        indent(); output << "set offsetZ(value) { const target = self._zenithEnsureBoxCollider3D(entity); if (target) target.boxCollider3DOffsetZ = value; },\n";
+        indent(); output << "get width() { return entity ? (entity.boxCollider3DWidth !== undefined ? entity.boxCollider3DWidth : 1) : 1; },\n";
+        indent(); output << "set width(value) { const target = self._zenithEnsureBoxCollider3D(entity); if (target) target.boxCollider3DWidth = value > 0 ? value : 0.01; },\n";
+        indent(); output << "get height() { return entity ? (entity.boxCollider3DHeight !== undefined ? entity.boxCollider3DHeight : 1) : 1; },\n";
+        indent(); output << "set height(value) { const target = self._zenithEnsureBoxCollider3D(entity); if (target) target.boxCollider3DHeight = value > 0 ? value : 0.01; },\n";
+        indent(); output << "get depth() { return entity ? (entity.boxCollider3DDepth !== undefined ? entity.boxCollider3DDepth : 1) : 1; },\n";
+        indent(); output << "set depth(value) { const target = self._zenithEnsureBoxCollider3D(entity); if (target) target.boxCollider3DDepth = value > 0 ? value : 0.01; },\n";
+        indent(); output << "get isTrigger() { return entity ? entity.boxCollider3DIsTrigger === true : false; },\n";
+        indent(); output << "set isTrigger(value) { const target = self._zenithEnsureBoxCollider3D(entity); if (target) target.boxCollider3DIsTrigger = value === true; },\n";
+        indent(); output << "get enabled() { return entity ? entity.boxCollider3DEnabled !== false : true; },\n";
+        indent(); output << "set enabled(value) { const target = self._zenithEnsureBoxCollider3D(entity); if (target) target.boxCollider3DEnabled = value !== false; }\n";
+        indent_level--;
+        indent(); output << "};\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "sphereCollider3D(entity) {\n";
+        indent_level++;
+        indent(); output << "const self = this;\n";
+        indent(); output << "return {\n";
+        indent_level++;
+        indent(); output << "get offsetX() { return entity ? (entity.sphereCollider3DOffsetX !== undefined ? entity.sphereCollider3DOffsetX : 0) : 0; },\n";
+        indent(); output << "set offsetX(value) { const target = self._zenithEnsureSphereCollider3D(entity); if (target) target.sphereCollider3DOffsetX = value; },\n";
+        indent(); output << "get offsetY() { return entity ? (entity.sphereCollider3DOffsetY !== undefined ? entity.sphereCollider3DOffsetY : 0) : 0; },\n";
+        indent(); output << "set offsetY(value) { const target = self._zenithEnsureSphereCollider3D(entity); if (target) target.sphereCollider3DOffsetY = value; },\n";
+        indent(); output << "get offsetZ() { return entity ? (entity.sphereCollider3DOffsetZ !== undefined ? entity.sphereCollider3DOffsetZ : 0) : 0; },\n";
+        indent(); output << "set offsetZ(value) { const target = self._zenithEnsureSphereCollider3D(entity); if (target) target.sphereCollider3DOffsetZ = value; },\n";
+        indent(); output << "get radius() { return entity ? (entity.sphereCollider3DRadius !== undefined ? entity.sphereCollider3DRadius : 0.5) : 0.5; },\n";
+        indent(); output << "set radius(value) { const target = self._zenithEnsureSphereCollider3D(entity); if (target) target.sphereCollider3DRadius = value > 0 ? value : 0.01; },\n";
+        indent(); output << "get isTrigger() { return entity ? entity.sphereCollider3DIsTrigger === true : false; },\n";
+        indent(); output << "set isTrigger(value) { const target = self._zenithEnsureSphereCollider3D(entity); if (target) target.sphereCollider3DIsTrigger = value === true; },\n";
+        indent(); output << "get enabled() { return entity ? entity.sphereCollider3DEnabled !== false : true; },\n";
+        indent(); output << "set enabled(value) { const target = self._zenithEnsureSphereCollider3D(entity); if (target) target.sphereCollider3DEnabled = value !== false; }\n";
+        indent_level--;
+        indent(); output << "};\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "camera3D(entity) {\n";
+        indent_level++;
+        indent(); output << "const self = this;\n";
+        indent(); output << "return {\n";
+        indent_level++;
+        indent(); output << "get x() { return entity ? (entity.x !== undefined ? entity.x : 0) : 0; },\n";
+        indent(); output << "set x(value) { const target = self._zenithEnsureCamera3D(entity); if (target) target.x = value; },\n";
+        indent(); output << "get y() { return entity ? (entity.y !== undefined ? entity.y : 0) : 0; },\n";
+        indent(); output << "set y(value) { const target = self._zenithEnsureCamera3D(entity); if (target) target.y = value; },\n";
+        indent(); output << "get z() { return entity ? (entity.z !== undefined ? entity.z : 0) : 0; },\n";
+        indent(); output << "set z(value) { const target = self._zenithEnsureCamera3D(entity); if (target) target.z = value; },\n";
+        indent(); output << "get rotationX() { return entity ? (entity.rotationX !== undefined ? entity.rotationX : 0) : 0; },\n";
+        indent(); output << "set rotationX(value) { const target = self._zenithEnsureCamera3D(entity); if (target) target.rotationX = value; },\n";
+        indent(); output << "get rotationY() { return entity ? (entity.rotationY !== undefined ? entity.rotationY : 0) : 0; },\n";
+        indent(); output << "set rotationY(value) { const target = self._zenithEnsureCamera3D(entity); if (target) target.rotationY = value; },\n";
+        indent(); output << "get rotationZ() { return entity ? (entity.rotationZ !== undefined ? entity.rotationZ : 0) : 0; },\n";
+        indent(); output << "set rotationZ(value) { const target = self._zenithEnsureCamera3D(entity); if (target) target.rotationZ = value; },\n";
+        indent(); output << "get fov() { return entity ? (entity.fov !== undefined ? entity.fov : 60) : 60; },\n";
+        indent(); output << "set fov(value) { const target = self._zenithEnsureCamera3D(entity); if (target) target.fov = value; },\n";
+        indent(); output << "get nearClip() { return entity ? (entity.nearClip !== undefined ? entity.nearClip : 0.1) : 0.1; },\n";
+        indent(); output << "set nearClip(value) { const target = self._zenithEnsureCamera3D(entity); if (target) target.nearClip = value; },\n";
+        indent(); output << "get farClip() { return entity ? (entity.farClip !== undefined ? entity.farClip : 1000) : 1000; },\n";
+        indent(); output << "set farClip(value) { const target = self._zenithEnsureCamera3D(entity); if (target) target.farClip = value; },\n";
+        indent(); output << "get primary() { return entity ? entity.primary === true : false; },\n";
+        indent(); output << "set primary(value) {\n";
+        indent_level++;
+        indent(); output << "const target = self._zenithEnsureCamera3D(entity);\n";
+        indent(); output << "if (!target) return;\n";
+        indent(); output << "if (value) {\n";
+        indent_level++;
+        indent(); output << "for (const existing of self._zenithEntities) {\n";
+        indent_level++;
+        indent(); output << "if (existing !== target && existing.kind === 'camera3d') existing.primary = false;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "self._zenithPrimaryCamera3D = target;\n";
+        indent_level--;
+        indent(); output << "} else if (self._zenithPrimaryCamera3D === target) {\n";
+        indent_level++;
+        indent(); output << "self._zenithPrimaryCamera3D = null;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "target.primary = value === true;\n";
+        indent_level--;
+        indent(); output << "},\n";
+        indent(); output << "get viewportX() { return entity ? (entity.viewportX !== undefined ? entity.viewportX : 0) : 0; },\n";
+        indent(); output << "set viewportX(value) { const target = self._zenithEnsureCamera3D(entity); if (target) target.viewportX = value; },\n";
+        indent(); output << "get viewportY() { return entity ? (entity.viewportY !== undefined ? entity.viewportY : 0) : 0; },\n";
+        indent(); output << "set viewportY(value) { const target = self._zenithEnsureCamera3D(entity); if (target) target.viewportY = value; },\n";
+        indent(); output << "get viewportWidth() { return entity ? (entity.viewportWidth !== undefined ? entity.viewportWidth : 1) : 1; },\n";
+        indent(); output << "set viewportWidth(value) { const target = self._zenithEnsureCamera3D(entity); if (target) target.viewportWidth = value; },\n";
+        indent(); output << "get viewportHeight() { return entity ? (entity.viewportHeight !== undefined ? entity.viewportHeight : 1) : 1; },\n";
+        indent(); output << "set viewportHeight(value) { const target = self._zenithEnsureCamera3D(entity); if (target) target.viewportHeight = value; }\n";
+        indent_level--;
+        indent(); output << "};\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "audioListener3D(entity) {\n";
+        indent_level++;
+        indent(); output << "const self = this;\n";
+        indent(); output << "return {\n";
+        indent_level++;
+        indent(); output << "get x() { return entity ? (entity.x !== undefined ? entity.x : 0) : 0; },\n";
+        indent(); output << "set x(value) { const target = self._zenithEnsureAudioListener3D(entity); if (target) target.x = value; },\n";
+        indent(); output << "get y() { return entity ? (entity.y !== undefined ? entity.y : 0) : 0; },\n";
+        indent(); output << "set y(value) { const target = self._zenithEnsureAudioListener3D(entity); if (target) target.y = value; },\n";
+        indent(); output << "get z() { return entity ? (entity.z !== undefined ? entity.z : 0) : 0; },\n";
+        indent(); output << "set z(value) { const target = self._zenithEnsureAudioListener3D(entity); if (target) target.z = value; },\n";
+        indent(); output << "get gain() { return entity ? (entity.gain !== undefined ? entity.gain : 1) : 1; },\n";
+        indent(); output << "set gain(value) { const target = self._zenithEnsureAudioListener3D(entity); if (target) target.gain = value; },\n";
+        indent(); output << "get primary() { return entity ? entity.primary === true : false; },\n";
+        indent(); output << "set primary(value) {\n";
+        indent_level++;
+        indent(); output << "const target = self._zenithEnsureAudioListener3D(entity);\n";
+        indent(); output << "if (!target) return;\n";
+        indent(); output << "if (value) {\n";
+        indent_level++;
+        indent(); output << "for (const existing of self._zenithEntities) {\n";
+        indent_level++;
+        indent(); output << "if (existing !== target && existing.kind === 'listener3d') existing.primary = false;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "self._zenithPrimaryAudioListener3D = target;\n";
+        indent_level--;
+        indent(); output << "} else if (self._zenithPrimaryAudioListener3D === target) {\n";
+        indent_level++;
+        indent(); output << "self._zenithPrimaryAudioListener3D = null;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "target.primary = value === true;\n";
+        indent_level--;
+        indent(); output << "},\n";
+        indent(); output << "get enabled() { return entity ? entity.enabled !== false : true; },\n";
+        indent(); output << "set enabled(value) { const target = self._zenithEnsureAudioListener3D(entity); if (target) target.enabled = value !== false; }\n";
+        indent_level--;
+        indent(); output << "};\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "pointLight3D(entity) {\n";
+        indent_level++;
+        indent(); output << "const self = this;\n";
+        indent(); output << "return {\n";
+        indent_level++;
+        indent(); output << "get x() { return entity ? (entity.x !== undefined ? entity.x : 0) : 0; },\n";
+        indent(); output << "set x(value) { const target = self._zenithEnsurePointLight3D(entity); if (target) target.x = value; },\n";
+        indent(); output << "get y() { return entity ? (entity.y !== undefined ? entity.y : 0) : 0; },\n";
+        indent(); output << "set y(value) { const target = self._zenithEnsurePointLight3D(entity); if (target) target.y = value; },\n";
+        indent(); output << "get z() { return entity ? (entity.z !== undefined ? entity.z : 0) : 0; },\n";
+        indent(); output << "set z(value) { const target = self._zenithEnsurePointLight3D(entity); if (target) target.z = value; },\n";
+        indent(); output << "get intensity() { return entity ? (entity.intensity !== undefined ? entity.intensity : 1) : 1; },\n";
+        indent(); output << "set intensity(value) { const target = self._zenithEnsurePointLight3D(entity); if (target) target.intensity = value; },\n";
+        indent(); output << "get range() { return entity ? (entity.range !== undefined ? entity.range : 10) : 10; },\n";
+        indent(); output << "set range(value) { const target = self._zenithEnsurePointLight3D(entity); if (target) target.range = value; },\n";
+        indent(); output << "get color() { return entity ? (entity.color !== undefined ? entity.color : 'white') : 'white'; },\n";
+        indent(); output << "set color(value) { const target = self._zenithEnsurePointLight3D(entity); if (target) target.color = value || 'white'; },\n";
+        indent(); output << "get enabled() { return entity ? entity.enabled !== false : true; },\n";
+        indent(); output << "set enabled(value) { const target = self._zenithEnsurePointLight3D(entity); if (target) target.enabled = value !== false; }\n";
+        indent_level--;
+        indent(); output << "};\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "directionalLight3D(entity) {\n";
+        indent_level++;
+        indent(); output << "const self = this;\n";
+        indent(); output << "return {\n";
+        indent_level++;
+        indent(); output << "get x() { return entity ? (entity.x !== undefined ? entity.x : 0) : 0; },\n";
+        indent(); output << "set x(value) { const target = self._zenithEnsureDirectionalLight3D(entity); if (target) target.x = value; },\n";
+        indent(); output << "get y() { return entity ? (entity.y !== undefined ? entity.y : 0) : 0; },\n";
+        indent(); output << "set y(value) { const target = self._zenithEnsureDirectionalLight3D(entity); if (target) target.y = value; },\n";
+        indent(); output << "get z() { return entity ? (entity.z !== undefined ? entity.z : 0) : 0; },\n";
+        indent(); output << "set z(value) { const target = self._zenithEnsureDirectionalLight3D(entity); if (target) target.z = value; },\n";
+        indent(); output << "get directionX() { return entity ? (entity.directionX !== undefined ? entity.directionX : 0) : 0; },\n";
+        indent(); output << "set directionX(value) { const target = self._zenithEnsureDirectionalLight3D(entity); if (target) target.directionX = value; },\n";
+        indent(); output << "get directionY() { return entity ? (entity.directionY !== undefined ? entity.directionY : -1) : -1; },\n";
+        indent(); output << "set directionY(value) { const target = self._zenithEnsureDirectionalLight3D(entity); if (target) target.directionY = value; },\n";
+        indent(); output << "get directionZ() { return entity ? (entity.directionZ !== undefined ? entity.directionZ : 0) : 0; },\n";
+        indent(); output << "set directionZ(value) { const target = self._zenithEnsureDirectionalLight3D(entity); if (target) target.directionZ = value; },\n";
+        indent(); output << "get intensity() { return entity ? (entity.intensity !== undefined ? entity.intensity : 1) : 1; },\n";
+        indent(); output << "set intensity(value) { const target = self._zenithEnsureDirectionalLight3D(entity); if (target) target.intensity = value; },\n";
+        indent(); output << "get color() { return entity ? (entity.color !== undefined ? entity.color : 'white') : 'white'; },\n";
+        indent(); output << "set color(value) { const target = self._zenithEnsureDirectionalLight3D(entity); if (target) target.color = value || 'white'; },\n";
+        indent(); output << "get castShadows() { return entity ? entity.castShadows !== false : true; },\n";
+        indent(); output << "set castShadows(value) { const target = self._zenithEnsureDirectionalLight3D(entity); if (target) target.castShadows = value !== false; },\n";
+        indent(); output << "get enabled() { return entity ? entity.enabled !== false : true; },\n";
+        indent(); output << "set enabled(value) { const target = self._zenithEnsureDirectionalLight3D(entity); if (target) target.enabled = value !== false; }\n";
+        indent_level--;
+        indent(); output << "};\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "mesh3D(entity) {\n";
+        indent_level++;
+        indent(); output << "const self = this;\n";
+        indent(); output << "return {\n";
+        indent_level++;
+        indent(); output << "get meshPath() { return entity ? (entity.meshPath !== undefined ? entity.meshPath : '') : ''; },\n";
+        indent(); output << "set meshPath(value) { const target = self._zenithEnsureMesh3D(entity); if (target) target.meshPath = value; },\n";
+        indent(); output << "get shaderPath() { return entity ? (entity.shaderPath !== undefined ? entity.shaderPath : '') : ''; },\n";
+        indent(); output << "set shaderPath(value) { const target = self._zenithEnsureMesh3D(entity); if (target) target.shaderPath = value; },\n";
+        indent(); output << "get materialPath() { return entity ? (entity.materialPath !== undefined ? entity.materialPath : '') : ''; },\n";
+        indent(); output << "set materialPath(value) { const target = self._zenithEnsureMesh3D(entity); if (target) { target.materialPath = value || ''; if (value) self._zenithEnsureMaterial(value); } },\n";
+        indent(); output << "get mesh() { return self._zenithMeshHandle(entity ? entity.meshPath : ''); },\n";
+        indent(); output << "set mesh(value) { const target = self._zenithEnsureMesh3D(entity); if (target) target.meshPath = value && value.path ? String(value.path) : ''; },\n";
+        indent(); output << "get shader() { return self._zenithShaderHandle(entity ? entity.shaderPath : ''); },\n";
+        indent(); output << "set shader(value) { const target = self._zenithEnsureMesh3D(entity); if (target) target.shaderPath = value && value.path ? String(value.path) : ''; },\n";
+        indent(); output << "get material() { return self._zenithMaterialHandle(entity ? entity.materialPath : '', entity ? entity.shaderPath : ''); },\n";
+        indent(); output << "set material(value) { const target = self._zenithEnsureMesh3D(entity); if (target) { target.materialPath = value && value.path ? String(value.path) : ''; const shaderPath = value && value.shaderPath ? String(value.shaderPath) : ''; if (target.materialPath) self._zenithEnsureMaterial(target.materialPath, shaderPath); } },\n";
+        indent(); output << "get visible() { return entity ? entity.visible !== false : true; },\n";
+        indent(); output << "set visible(value) { const target = self._zenithEnsureMesh3D(entity); if (target) target.visible = value !== false; },\n";
+        indent(); output << "get castShadows() { return entity ? entity.castShadows !== false : true; },\n";
+        indent(); output << "set castShadows(value) { const target = self._zenithEnsureMesh3D(entity); if (target) target.castShadows = value !== false; }\n";
+        indent_level--;
+        indent(); output << "};\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "character3D(entity) {\n";
+        indent_level++;
+        indent(); output << "const self = this;\n";
+        indent(); output << "return {\n";
+        indent_level++;
+        indent(); output << "get x() { return entity ? (entity.x !== undefined ? entity.x : 0) : 0; },\n";
+        indent(); output << "set x(value) { const target = self._zenithEnsureCharacter3D(entity); if (target) target.x = value; },\n";
+        indent(); output << "get y() { return entity ? (entity.y !== undefined ? entity.y : 0) : 0; },\n";
+        indent(); output << "set y(value) { const target = self._zenithEnsureCharacter3D(entity); if (target) target.y = value; },\n";
+        indent(); output << "get z() { return entity ? (entity.z !== undefined ? entity.z : 0) : 0; },\n";
+        indent(); output << "set z(value) { const target = self._zenithEnsureCharacter3D(entity); if (target) target.z = value; },\n";
+        indent(); output << "get vx() { return entity ? (entity.vx !== undefined ? entity.vx : 0) : 0; },\n";
+        indent(); output << "set vx(value) { const target = self._zenithEnsureCharacter3D(entity); if (target) target.vx = value; },\n";
+        indent(); output << "get vy() { return entity ? (entity.vy !== undefined ? entity.vy : 0) : 0; },\n";
+        indent(); output << "set vy(value) { const target = self._zenithEnsureCharacter3D(entity); if (target) target.vy = value; },\n";
+        indent(); output << "get vz() { return entity ? (entity.vz !== undefined ? entity.vz : 0) : 0; },\n";
+        indent(); output << "set vz(value) { const target = self._zenithEnsureCharacter3D(entity); if (target) target.vz = value; },\n";
+        indent(); output << "get moveSpeed() { return entity ? (entity.moveSpeed !== undefined ? entity.moveSpeed : 6) : 6; },\n";
+        indent(); output << "set moveSpeed(value) { const target = self._zenithEnsureCharacter3D(entity); if (target) target.moveSpeed = value; },\n";
+        indent(); output << "get turnSpeed() { return entity ? (entity.turnSpeed !== undefined ? entity.turnSpeed : 4) : 4; },\n";
+        indent(); output << "set turnSpeed(value) { const target = self._zenithEnsureCharacter3D(entity); if (target) target.turnSpeed = value; },\n";
+        indent(); output << "get jumpSpeed() { return entity ? (entity.jumpSpeed !== undefined ? entity.jumpSpeed : 7.5) : 7.5; },\n";
+        indent(); output << "set jumpSpeed(value) { const target = self._zenithEnsureCharacter3D(entity); if (target) target.jumpSpeed = Math.max(0, value); },\n";
+        indent(); output << "get groundAcceleration() { return entity ? (entity.groundAcceleration !== undefined ? entity.groundAcceleration : 36) : 36; },\n";
+        indent(); output << "set groundAcceleration(value) { const target = self._zenithEnsureCharacter3D(entity); if (target) target.groundAcceleration = Math.max(0, value); },\n";
+        indent(); output << "get airAcceleration() { return entity ? (entity.airAcceleration !== undefined ? entity.airAcceleration : 14) : 14; },\n";
+        indent(); output << "set airAcceleration(value) { const target = self._zenithEnsureCharacter3D(entity); if (target) target.airAcceleration = Math.max(0, value); },\n";
+        indent(); output << "get groundFriction() { return entity ? (entity.groundFriction !== undefined ? entity.groundFriction : 20) : 20; },\n";
+        indent(); output << "set groundFriction(value) { const target = self._zenithEnsureCharacter3D(entity); if (target) target.groundFriction = Math.max(0, value); },\n";
+        indent(); output << "get airControl() { return entity ? (entity.airControl !== undefined ? entity.airControl : 0.35) : 0.35; },\n";
+        indent(); output << "set airControl(value) { const target = self._zenithEnsureCharacter3D(entity); if (target) target.airControl = Math.max(0, Math.min(1, value)); },\n";
+        indent(); output << "get groundSnapDistance() { return entity ? (entity.groundSnapDistance !== undefined ? entity.groundSnapDistance : 0.2) : 0.2; },\n";
+        indent(); output << "set groundSnapDistance(value) { const target = self._zenithEnsureCharacter3D(entity); if (target) target.groundSnapDistance = Math.max(0, value); },\n";
+        indent(); output << "get maxSlopeAngle() { return entity ? (entity.maxSlopeAngle !== undefined ? entity.maxSlopeAngle : 55) : 55; },\n";
+        indent(); output << "set maxSlopeAngle(value) { const target = self._zenithEnsureCharacter3D(entity); if (target) target.maxSlopeAngle = Math.max(0, Math.min(89, value)); },\n";
+        indent(); output << "get moveInputX() { return entity ? (entity.moveInputX !== undefined ? entity.moveInputX : 0) : 0; },\n";
+        indent(); output << "set moveInputX(value) { const target = self._zenithEnsureCharacter3D(entity); if (target) target.moveInputX = value; },\n";
+        indent(); output << "get moveInputY() { return entity ? (entity.moveInputY !== undefined ? entity.moveInputY : 0) : 0; },\n";
+        indent(); output << "set moveInputY(value) { const target = self._zenithEnsureCharacter3D(entity); if (target) target.moveInputY = value; },\n";
+        indent(); output << "get moveInputZ() { return entity ? (entity.moveInputZ !== undefined ? entity.moveInputZ : 0) : 0; },\n";
+        indent(); output << "set moveInputZ(value) { const target = self._zenithEnsureCharacter3D(entity); if (target) target.moveInputZ = value; },\n";
+        indent(); output << "get isGrounded() { return entity ? entity.isGrounded === true : false; },\n";
+        indent(); output << "set isGrounded(value) { const target = self._zenithEnsureCharacter3D(entity); if (target) target.isGrounded = value === true; },\n";
+        indent(); output << "get useGravity() { return entity ? entity.useGravity !== false : true; },\n";
+        indent(); output << "set useGravity(value) { const target = self._zenithEnsureCharacter3D(entity); if (target) target.useGravity = value !== false; },\n";
+        indent(); output << "get meshPath() { return entity ? (entity.meshPath !== undefined ? entity.meshPath : '') : ''; },\n";
+        indent(); output << "set meshPath(value) { const target = self._zenithEnsureCharacter3D(entity); if (target) target.meshPath = value || ''; },\n";
+        indent(); output << "get shaderPath() { return entity ? (entity.shaderPath !== undefined ? entity.shaderPath : '') : ''; },\n";
+        indent(); output << "set shaderPath(value) { const target = self._zenithEnsureCharacter3D(entity); if (target) target.shaderPath = value || ''; },\n";
+        indent(); output << "get materialPath() { return entity ? (entity.materialPath !== undefined ? entity.materialPath : '') : ''; },\n";
+        indent(); output << "set materialPath(value) { const target = self._zenithEnsureCharacter3D(entity); if (target) { target.materialPath = value || ''; if (value) self._zenithEnsureMaterial(value); } },\n";
+        indent(); output << "get mesh() { return self._zenithMeshHandle(entity ? entity.meshPath : ''); },\n";
+        indent(); output << "set mesh(value) { const target = self._zenithEnsureCharacter3D(entity); if (target) target.meshPath = value && value.path ? String(value.path) : ''; },\n";
+        indent(); output << "get shader() { return self._zenithShaderHandle(entity ? entity.shaderPath : ''); },\n";
+        indent(); output << "set shader(value) { const target = self._zenithEnsureCharacter3D(entity); if (target) target.shaderPath = value && value.path ? String(value.path) : ''; },\n";
+        indent(); output << "get material() { return self._zenithMaterialHandle(entity ? entity.materialPath : '', entity ? entity.shaderPath : ''); },\n";
+        indent(); output << "set material(value) { const target = self._zenithEnsureCharacter3D(entity); if (target) { target.materialPath = value && value.path ? String(value.path) : ''; const shaderPath = value && value.shaderPath ? String(value.shaderPath) : ''; if (target.materialPath) self._zenithEnsureMaterial(target.materialPath, shaderPath); } }\n";
+        indent_level--;
+        indent(); output << "};\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "audioSource3D(entity) {\n";
+        indent_level++;
+        indent(); output << "const self = this;\n";
+        indent(); output << "return {\n";
+        indent_level++;
+        indent(); output << "get x() { return entity ? (entity.x !== undefined ? entity.x : 0) : 0; },\n";
+        indent(); output << "set x(value) { const target = self._zenithEnsureAudioSource3D(entity); if (target) target.x = value; },\n";
+        indent(); output << "get y() { return entity ? (entity.y !== undefined ? entity.y : 0) : 0; },\n";
+        indent(); output << "set y(value) { const target = self._zenithEnsureAudioSource3D(entity); if (target) target.y = value; },\n";
+        indent(); output << "get z() { return entity ? (entity.z !== undefined ? entity.z : 0) : 0; },\n";
+        indent(); output << "set z(value) { const target = self._zenithEnsureAudioSource3D(entity); if (target) target.z = value; },\n";
+        indent(); output << "get clipPath() { return entity ? (entity.clipPath !== undefined ? entity.clipPath : '') : ''; },\n";
+        indent(); output << "set clipPath(value) { const target = self._zenithEnsureAudioSource3D(entity); if (target) target.clipPath = value || ''; },\n";
+        indent(); output << "get clip() { return self._zenithAudioHandle(entity ? entity.clipPath : '', true); },\n";
+        indent(); output << "set clip(value) { const target = self._zenithEnsureAudioSource3D(entity); if (target) target.clipPath = value && value.path ? String(value.path) : ''; },\n";
+        indent(); output << "get volume() { return entity ? (entity.volume !== undefined ? entity.volume : 1) : 1; },\n";
+        indent(); output << "set volume(value) { const target = self._zenithEnsureAudioSource3D(entity); if (target) target.volume = value; },\n";
+        indent(); output << "get pitch() { return entity ? (entity.pitch !== undefined ? entity.pitch : 1) : 1; },\n";
+        indent(); output << "set pitch(value) { const target = self._zenithEnsureAudioSource3D(entity); if (target) target.pitch = value; },\n";
+        indent(); output << "get loop() { return entity ? entity.loop === true : false; },\n";
+        indent(); output << "set loop(value) { const target = self._zenithEnsureAudioSource3D(entity); if (target) target.loop = value === true; },\n";
+        indent(); output << "get playOnAwake() { return entity ? entity.playOnAwake === true : false; },\n";
+        indent(); output << "set playOnAwake(value) { const target = self._zenithEnsureAudioSource3D(entity); if (target) target.playOnAwake = value === true; },\n";
+        indent(); output << "get isPlaying() { return entity ? entity.isPlaying === true : false; },\n";
+        indent(); output << "set isPlaying(value) { const target = self._zenithEnsureAudioSource3D(entity); if (target) target.isPlaying = value === true; },\n";
+        indent(); output << "get minDistance() { return entity ? (entity.minDistance !== undefined ? entity.minDistance : 1) : 1; },\n";
+        indent(); output << "set minDistance(value) { const target = self._zenithEnsureAudioSource3D(entity); if (target) target.minDistance = value; },\n";
+        indent(); output << "get maxDistance() { return entity ? (entity.maxDistance !== undefined ? entity.maxDistance : 20) : 20; },\n";
+        indent(); output << "set maxDistance(value) { const target = self._zenithEnsureAudioSource3D(entity); if (target) target.maxDistance = value; }\n";
+        indent_level--;
+        indent(); output << "};\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "setSpriteColor(entity, color) {\n";
+        indent_level++;
+        indent(); output << "if (entity) entity.color = color;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "setSpriteTexture(entity, texturePath) {\n";
+        indent_level++;
+        indent(); output << "if (entity) entity.texturePath = texturePath;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "spriteTexturePath(entity) {\n";
+        indent_level++;
+        indent(); output << "return entity && entity.texturePath ? entity.texturePath : '';\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "attachBody2D(entity, mass, gravityScale, friction, restitution) {\n";
+        indent_level++;
+        indent(); output << "if (!entity) return;\n";
+        indent(); output << "entity.hasBody = true;\n";
+        indent(); output << "entity.mass = mass > 0 ? mass : 1;\n";
+        indent(); output << "entity.gravityScale = gravityScale;\n";
+        indent(); output << "entity.friction = friction;\n";
+        indent(); output << "entity.restitution = restitution;\n";
+        indent(); output << "entity.vx = entity.vx || 0;\n";
+        indent(); output << "entity.vy = entity.vy || 0;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "attachBoxCollider2D(entity, width, height, isTrigger) {\n";
+        indent_level++;
+        indent(); output << "const target = this._zenithEnsureBoxCollider2D(entity);\n";
+        indent(); output << "if (!target) return;\n";
+        indent(); output << "target.boxColliderWidth = width > 0 ? width : 0.01;\n";
+        indent(); output << "target.boxColliderHeight = height > 0 ? height : 0.01;\n";
+        indent(); output << "target.boxColliderIsTrigger = isTrigger === true;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "attachCircleCollider2D(entity, radius, isTrigger) {\n";
+        indent_level++;
+        indent(); output << "const target = this._zenithEnsureCircleCollider2D(entity);\n";
+        indent(); output << "if (!target) return;\n";
+        indent(); output << "target.circleColliderRadius = radius > 0 ? radius : 0.01;\n";
+        indent(); output << "target.circleColliderIsTrigger = isTrigger === true;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "attachCapsuleCollider2D(entity, height, radius, isTrigger) {\n";
+        indent_level++;
+        indent(); output << "const target = this._zenithEnsureCapsuleCollider2D(entity);\n";
+        indent(); output << "if (!target) return;\n";
+        indent(); output << "target.capsuleColliderRadius = radius > 0 ? radius : 0.01;\n";
+        indent(); output << "target.capsuleColliderHeight = Math.max(height, target.capsuleColliderRadius * 2);\n";
+        indent(); output << "target.capsuleColliderIsTrigger = isTrigger === true;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "setBodyVelocity2D(entity, vx, vy) {\n";
+        indent_level++;
+        indent(); output << "if (!entity) return;\n";
+        indent(); output << "entity.vx = vx;\n";
+        indent(); output << "entity.vy = vy;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "applyBodyImpulse2D(entity, ix, iy) {\n";
+        indent_level++;
+        indent(); output << "if (!entity) return;\n";
+        indent(); output << "const mass = entity.mass && entity.mass > 0 ? entity.mass : 1;\n";
+        indent(); output << "entity.vx = (entity.vx || 0) + (ix / mass);\n";
+        indent(); output << "entity.vy = (entity.vy || 0) + (iy / mass);\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "bodyVelocityX(entity) {\n";
+        indent_level++;
+        indent(); output << "return entity ? (entity.vx || 0) : 0;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "bodyVelocityY(entity) {\n";
+        indent_level++;
+        indent(); output << "return entity ? (entity.vy || 0) : 0;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "overlaps2D(first, second) {\n";
+        indent_level++;
+        indent(); output << "if (!first || !second) return false;\n";
+        indent(); output << "if (!this._zenithCanEntitiesInteract(first, second)) return false;\n";
+        indent(); output << "const firstBox = this._zenithBoxColliderBounds2D(first);\n";
+        indent(); output << "const secondBox = this._zenithBoxColliderBounds2D(second);\n";
+        indent(); output << "const firstCircle = this._zenithCircleColliderState2D(first);\n";
+        indent(); output << "const secondCircle = this._zenithCircleColliderState2D(second);\n";
+        indent(); output << "const firstCapsule = this._zenithCapsuleColliderState2D(first);\n";
+        indent(); output << "const secondCapsule = this._zenithCapsuleColliderState2D(second);\n";
+        indent(); output << "if (firstBox && secondBox) {\n";
+        indent_level++;
+        indent(); output << "if (firstBox.minX <= secondBox.maxX && firstBox.maxX >= secondBox.minX && firstBox.minY <= secondBox.maxY && firstBox.maxY >= secondBox.minY) return true;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "if (firstBox && secondCircle && this._zenithBoxIntersectsCircle2D(firstBox, secondCircle)) return true;\n";
+        indent(); output << "if (firstBox && secondCapsule && this._zenithCapsuleIntersectsBox2D(secondCapsule, firstBox)) return true;\n";
+        indent(); output << "if (firstCircle && secondBox && this._zenithBoxIntersectsCircle2D(secondBox, firstCircle)) return true;\n";
+        indent(); output << "if (firstCircle && secondCapsule && this._zenithCapsuleIntersectsCircle2D(secondCapsule, firstCircle)) return true;\n";
+        indent(); output << "if (firstCircle && secondCircle) {\n";
+        indent_level++;
+        indent(); output << "const dx = firstCircle.x - secondCircle.x;\n";
+        indent(); output << "const dy = firstCircle.y - secondCircle.y;\n";
+        indent(); output << "const radius = firstCircle.radius + secondCircle.radius;\n";
+        indent(); output << "if ((dx * dx) + (dy * dy) <= (radius * radius)) return true;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "if (firstCapsule && secondBox && this._zenithCapsuleIntersectsBox2D(firstCapsule, secondBox)) return true;\n";
+        indent(); output << "if (firstCapsule && secondCircle && this._zenithCapsuleIntersectsCircle2D(firstCapsule, secondCircle)) return true;\n";
+        indent(); output << "if (firstCapsule && secondCapsule && this._zenithCapsuleIntersectsCapsule2D(firstCapsule, secondCapsule)) return true;\n";
+        indent(); output << "return false;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "containsPoint2D(entity, x, y) {\n";
+        indent_level++;
+        indent(); output << "const box = this._zenithBoxColliderBounds2D(entity);\n";
+        indent(); output << "if (box && x >= box.minX && x <= box.maxX && y >= box.minY && y <= box.maxY) return true;\n";
+        indent(); output << "const circle = this._zenithCircleColliderState2D(entity);\n";
+        indent(); output << "if (circle) {\n";
+        indent_level++;
+        indent(); output << "const dx = x - circle.x;\n";
+        indent(); output << "const dy = y - circle.y;\n";
+        indent(); output << "if ((dx * dx) + (dy * dy) <= (circle.radius * circle.radius)) return true;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "const capsule = this._zenithCapsuleColliderState2D(entity);\n";
+        indent(); output << "if (capsule && this._zenithCapsuleContainsPoint2D(capsule, x, y)) return true;\n";
+        indent(); output << "return false;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithRaycastCircle2D(originX, originY, dirX, dirY, circle, maxDistance) {\n";
+        indent_level++;
+        indent(); output << "if (!circle || maxDistance < 0) return null;\n";
+        indent(); output << "const ocX = originX - circle.x;\n";
+        indent(); output << "const ocY = originY - circle.y;\n";
+        indent(); output << "const b = (ocX * dirX) + (ocY * dirY);\n";
+        indent(); output << "const c = (ocX * ocX) + (ocY * ocY) - (circle.radius * circle.radius);\n";
+        indent(); output << "if (c > 0 && b > 0) return null;\n";
+        indent(); output << "const discriminant = (b * b) - c;\n";
+        indent(); output << "if (discriminant < 0) return null;\n";
+        indent(); output << "let distance = -b - Math.sqrt(discriminant);\n";
+        indent(); output << "if (distance < 0) distance = 0;\n";
+        indent(); output << "if (distance > maxDistance) return null;\n";
+        indent(); output << "const pointX = originX + (dirX * distance);\n";
+        indent(); output << "const pointY = originY + (dirY * distance);\n";
+        indent(); output << "let normalX = pointX - circle.x;\n";
+        indent(); output << "let normalY = pointY - circle.y;\n";
+        indent(); output << "const normalLength = Math.sqrt((normalX * normalX) + (normalY * normalY));\n";
+        indent(); output << "if (normalLength > 0.0000001) {\n";
+        indent_level++;
+        indent(); output << "normalX /= normalLength;\n";
+        indent(); output << "normalY /= normalLength;\n";
+        indent_level--;
+        indent(); output << "} else {\n";
+        indent_level++;
+        indent(); output << "normalX = -dirX;\n";
+        indent(); output << "normalY = -dirY;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "return { distance, pointX, pointY, normalX, normalY };\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithRaycastBox2D(originX, originY, dirX, dirY, bounds, maxDistance) {\n";
+        indent_level++;
+        indent(); output << "if (!bounds || maxDistance < 0) return null;\n";
+        indent(); output << "const dirEpsilon = 0.0000001;\n";
+        indent(); output << "let tMin = 0;\n";
+        indent(); output << "let tMax = maxDistance;\n";
+        indent(); output << "let normalX = 0;\n";
+        indent(); output << "let normalY = 0;\n";
+        indent(); output << "const axisTest = (origin, dir, min, max, nx, ny) => {\n";
+        indent_level++;
+        indent(); output << "if (Math.abs(dir) <= dirEpsilon) {\n";
+        indent_level++;
+        indent(); output << "return origin >= min && origin <= max;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "let near = (min - origin) / dir;\n";
+        indent(); output << "let far = (max - origin) / dir;\n";
+        indent(); output << "let hitNx = nx;\n";
+        indent(); output << "let hitNy = ny;\n";
+        indent(); output << "if (near > far) {\n";
+        indent_level++;
+        indent(); output << "const swap = near;\n";
+        indent(); output << "near = far;\n";
+        indent(); output << "far = swap;\n";
+        indent(); output << "hitNx = -nx;\n";
+        indent(); output << "hitNy = -ny;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "if (near > tMin) {\n";
+        indent_level++;
+        indent(); output << "tMin = near;\n";
+        indent(); output << "normalX = hitNx;\n";
+        indent(); output << "normalY = hitNy;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "if (far < tMax) tMax = far;\n";
+        indent(); output << "return tMin <= tMax;\n";
+        indent_level--;
+        indent(); output << "};\n";
+        indent(); output << "if (!axisTest(originX, dirX, bounds.minX, bounds.maxX, -1, 0)) return null;\n";
+        indent(); output << "if (!axisTest(originY, dirY, bounds.minY, bounds.maxY, 0, -1)) return null;\n";
+        indent(); output << "if (tMax < 0) return null;\n";
+        indent(); output << "const distance = tMin >= 0 ? tMin : 0;\n";
+        indent(); output << "if (distance > maxDistance) return null;\n";
+        indent(); output << "const pointX = originX + (dirX * distance);\n";
+        indent(); output << "const pointY = originY + (dirY * distance);\n";
+        indent(); output << "if (distance === 0 && normalX === 0 && normalY === 0) {\n";
+        indent_level++;
+        indent(); output << "normalX = -dirX;\n";
+        indent(); output << "normalY = -dirY;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "return { distance, pointX, pointY, normalX, normalY };\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "raycast2D(originX, originY, directionX, directionY, maxDistance) {\n";
+        indent_level++;
+        indent(); output << "return this.raycast2DMask(originX, originY, directionX, directionY, maxDistance, 0xFFFFFFFF);\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "raycast2DMask(originX, originY, directionX, directionY, maxDistance, layerMask) {\n";
+        indent_level++;
+        indent(); output << "const dirLength = Math.sqrt((directionX * directionX) + (directionY * directionY));\n";
+        indent(); output << "if (dirLength <= 0.0000001 || maxDistance < 0) {\n";
+        indent_level++;
+        indent(); output << "return { hit: false, entity: null, distance: 0, pointX: 0, pointY: 0, normalX: 0, normalY: 0 };\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "const dirX = directionX / dirLength;\n";
+        indent(); output << "const dirY = directionY / dirLength;\n";
+        indent(); output << "let bestHit = { hit: false, entity: null, distance: 0, pointX: 0, pointY: 0, normalX: 0, normalY: 0 };\n";
+        indent(); output << "let bestDistance = maxDistance;\n";
+        indent(); output << "for (const entity of this._zenithEntities) {\n";
+        indent_level++;
+        indent(); output << "if (!entity) continue;\n";
+        indent(); output << "if (!this._zenithLayerMaskMatches(layerMask, this._zenithEntityLayer(entity))) continue;\n";
+        indent(); output << "const box = this._zenithBoxColliderBounds2D(entity);\n";
+        indent(); output << "if (box) {\n";
+        indent_level++;
+        indent(); output << "const hit = this._zenithRaycastBox2D(originX, originY, dirX, dirY, box, bestDistance);\n";
+        indent(); output << "if (hit && hit.distance <= bestDistance) {\n";
+        indent_level++;
+        indent(); output << "bestDistance = hit.distance;\n";
+        indent(); output << "bestHit = { hit: true, entity, distance: hit.distance, pointX: hit.pointX, pointY: hit.pointY, normalX: hit.normalX, normalY: hit.normalY };\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "const circle = this._zenithCircleColliderState2D(entity);\n";
+        indent(); output << "if (circle) {\n";
+        indent_level++;
+        indent(); output << "const hit = this._zenithRaycastCircle2D(originX, originY, dirX, dirY, circle, bestDistance);\n";
+        indent(); output << "if (hit && hit.distance <= bestDistance) {\n";
+        indent_level++;
+        indent(); output << "bestDistance = hit.distance;\n";
+        indent(); output << "bestHit = { hit: true, entity, distance: hit.distance, pointX: hit.pointX, pointY: hit.pointY, normalX: hit.normalX, normalY: hit.normalY };\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "const capsule = this._zenithCapsuleColliderState2D(entity);\n";
+        indent(); output << "if (capsule) {\n";
+        indent_level++;
+        indent(); output << "const hit = this._zenithRaycastCapsule2D(originX, originY, dirX, dirY, capsule, bestDistance);\n";
+        indent(); output << "if (hit && hit.distance <= bestDistance) {\n";
+        indent_level++;
+        indent(); output << "bestDistance = hit.distance;\n";
+        indent(); output << "bestHit = { hit: true, entity, distance: hit.distance, pointX: hit.pointX, pointY: hit.pointY, normalX: hit.normalX, normalY: hit.normalY };\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "return bestHit;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "attachBoxCollider3D(entity, width, height, depth, isTrigger) {\n";
+        indent_level++;
+        indent(); output << "const target = this._zenithEnsureBoxCollider3D(entity);\n";
+        indent(); output << "if (!target) return;\n";
+        indent(); output << "target.boxCollider3DWidth = width > 0 ? width : 0.01;\n";
+        indent(); output << "target.boxCollider3DHeight = height > 0 ? height : 0.01;\n";
+        indent(); output << "target.boxCollider3DDepth = depth > 0 ? depth : 0.01;\n";
+        indent(); output << "target.boxCollider3DIsTrigger = isTrigger === true;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "attachSphereCollider3D(entity, radius, isTrigger) {\n";
+        indent_level++;
+        indent(); output << "const target = this._zenithEnsureSphereCollider3D(entity);\n";
+        indent(); output << "if (!target) return;\n";
+        indent(); output << "target.sphereCollider3DRadius = radius > 0 ? radius : 0.01;\n";
+        indent(); output << "target.sphereCollider3DIsTrigger = isTrigger === true;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "setCharacterMove3D(entity, x, y, z) {\n";
+        indent_level++;
+        indent(); output << "const target = this._zenithEnsureCharacter3D(entity);\n";
+        indent(); output << "if (!target) return;\n";
+        indent(); output << "target.moveInputX = x;\n";
+        indent(); output << "target.moveInputY = y;\n";
+        indent(); output << "target.moveInputZ = z;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "jumpCharacter3D(entity) {\n";
+        indent_level++;
+        indent(); output << "const target = this._zenithEnsureCharacter3D(entity);\n";
+        indent(); output << "if (!target) return;\n";
+        indent(); output << "target.jumpQueued = true;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "overlaps3D(first, second) {\n";
+        indent_level++;
+        indent(); output << "if (!first || !second) return false;\n";
+        indent(); output << "if (!this._zenithCanEntitiesInteract(first, second)) return false;\n";
+        indent(); output << "const firstBox = this._zenithBoxColliderBounds3D(first);\n";
+        indent(); output << "const secondBox = this._zenithBoxColliderBounds3D(second);\n";
+        indent(); output << "const firstSphere = this._zenithSphereColliderState3D(first);\n";
+        indent(); output << "const secondSphere = this._zenithSphereColliderState3D(second);\n";
+        indent(); output << "if (firstBox && secondBox) {\n";
+        indent_level++;
+        indent(); output << "if (firstBox.minX <= secondBox.maxX && firstBox.maxX >= secondBox.minX && firstBox.minY <= secondBox.maxY && firstBox.maxY >= secondBox.minY && firstBox.minZ <= secondBox.maxZ && firstBox.maxZ >= secondBox.minZ) return true;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "if (firstBox && secondSphere && this._zenithBoxIntersectsSphere3D(firstBox, secondSphere)) return true;\n";
+        indent(); output << "if (firstSphere && secondBox && this._zenithBoxIntersectsSphere3D(secondBox, firstSphere)) return true;\n";
+        indent(); output << "if (firstSphere && secondSphere) {\n";
+        indent_level++;
+        indent(); output << "const dx = firstSphere.x - secondSphere.x;\n";
+        indent(); output << "const dy = firstSphere.y - secondSphere.y;\n";
+        indent(); output << "const dz = firstSphere.z - secondSphere.z;\n";
+        indent(); output << "const radius = firstSphere.radius + secondSphere.radius;\n";
+        indent(); output << "if ((dx * dx) + (dy * dy) + (dz * dz) <= (radius * radius)) return true;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "return false;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "containsPoint3D(entity, x, y, z) {\n";
+        indent_level++;
+        indent(); output << "const box = this._zenithBoxColliderBounds3D(entity);\n";
+        indent(); output << "if (box && x >= box.minX && x <= box.maxX && y >= box.minY && y <= box.maxY && z >= box.minZ && z <= box.maxZ) return true;\n";
+        indent(); output << "const sphere = this._zenithSphereColliderState3D(entity);\n";
+        indent(); output << "if (sphere) {\n";
+        indent_level++;
+        indent(); output << "const dx = x - sphere.x;\n";
+        indent(); output << "const dy = y - sphere.y;\n";
+        indent(); output << "const dz = z - sphere.z;\n";
+        indent(); output << "if ((dx * dx) + (dy * dy) + (dz * dz) <= (sphere.radius * sphere.radius)) return true;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "return false;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "raycast3D(originX, originY, originZ, directionX, directionY, directionZ, maxDistance) {\n";
+        indent_level++;
+        indent(); output << "return this.raycast3DMask(originX, originY, originZ, directionX, directionY, directionZ, maxDistance, 0xFFFFFFFF);\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "raycast3DMask(originX, originY, originZ, directionX, directionY, directionZ, maxDistance, layerMask) {\n";
+        indent_level++;
+        indent(); output << "const dirLength = Math.sqrt((directionX * directionX) + (directionY * directionY) + (directionZ * directionZ));\n";
+        indent(); output << "if (dirLength <= 0.0000001 || maxDistance < 0) {\n";
+        indent_level++;
+        indent(); output << "return { hit: false, entity: null, distance: 0, pointX: 0, pointY: 0, pointZ: 0, normalX: 0, normalY: 0, normalZ: 0 };\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "const dirX = directionX / dirLength;\n";
+        indent(); output << "const dirY = directionY / dirLength;\n";
+        indent(); output << "const dirZ = directionZ / dirLength;\n";
+        indent(); output << "let bestHit = { hit: false, entity: null, distance: 0, pointX: 0, pointY: 0, pointZ: 0, normalX: 0, normalY: 0, normalZ: 0 };\n";
+        indent(); output << "let bestDistance = maxDistance;\n";
+        indent(); output << "for (const entity of this._zenithEntities) {\n";
+        indent_level++;
+        indent(); output << "if (!entity) continue;\n";
+        indent(); output << "if (!this._zenithLayerMaskMatches(layerMask, this._zenithEntityLayer(entity))) continue;\n";
+        indent(); output << "const box = this._zenithBoxColliderBounds3D(entity);\n";
+        indent(); output << "if (box) {\n";
+        indent_level++;
+        indent(); output << "const hit = this._zenithRaycastBox3D(originX, originY, originZ, dirX, dirY, dirZ, box, bestDistance);\n";
+        indent(); output << "if (hit && hit.distance <= bestDistance) {\n";
+        indent_level++;
+        indent(); output << "bestDistance = hit.distance;\n";
+        indent(); output << "bestHit = { hit: true, entity, distance: hit.distance, pointX: hit.pointX, pointY: hit.pointY, pointZ: hit.pointZ, normalX: hit.normalX, normalY: hit.normalY, normalZ: hit.normalZ };\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "const sphere = this._zenithSphereColliderState3D(entity);\n";
+        indent(); output << "if (sphere) {\n";
+        indent_level++;
+        indent(); output << "const hit = this._zenithRaycastSphere3D(originX, originY, originZ, dirX, dirY, dirZ, sphere, bestDistance);\n";
+        indent(); output << "if (hit && hit.distance <= bestDistance) {\n";
+        indent_level++;
+        indent(); output << "bestDistance = hit.distance;\n";
+        indent(); output << "bestHit = { hit: true, entity, distance: hit.distance, pointX: hit.pointX, pointY: hit.pointY, pointZ: hit.pointZ, normalX: hit.normalX, normalY: hit.normalY, normalZ: hit.normalZ };\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "return bestHit;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "followPrimaryCamera2D(target, offsetX, offsetY, smoothing) {\n";
+        indent_level++;
+        indent(); output << "if (!this._zenithPrimaryCamera || !target) return false;\n";
+        indent(); output << "const blend = Math.max(0, Math.min(1, smoothing));\n";
+        indent(); output << "const desiredX = (target.x || 0) + offsetX;\n";
+        indent(); output << "const desiredY = (target.y || 0) + offsetY;\n";
+        indent(); output << "this._zenithPrimaryCamera.x += (desiredX - (this._zenithPrimaryCamera.x || 0)) * blend;\n";
+        indent(); output << "this._zenithPrimaryCamera.y += (desiredY - (this._zenithPrimaryCamera.y || 0)) * blend;\n";
+        indent(); output << "if (blend >= 1) {\n";
+        indent_level++;
+        indent(); output << "this._zenithPrimaryCamera.x = desiredX;\n";
+        indent(); output << "this._zenithPrimaryCamera.y = desiredY;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "return true;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "followPrimaryCamera3D(target, offsetX, offsetY, offsetZ, smoothing) {\n";
+        indent_level++;
+        indent(); output << "if (!this._zenithPrimaryCamera3D || !target) return false;\n";
+        indent(); output << "const blend = Math.max(0, Math.min(1, smoothing));\n";
+        indent(); output << "const desiredX = (target.x || 0) + offsetX;\n";
+        indent(); output << "const desiredY = (target.y || 0) + offsetY;\n";
+        indent(); output << "const desiredZ = (target.z || 0) + offsetZ;\n";
+        indent(); output << "this._zenithPrimaryCamera3D.x += (desiredX - (this._zenithPrimaryCamera3D.x || 0)) * blend;\n";
+        indent(); output << "this._zenithPrimaryCamera3D.y += (desiredY - (this._zenithPrimaryCamera3D.y || 0)) * blend;\n";
+        indent(); output << "this._zenithPrimaryCamera3D.z += (desiredZ - (this._zenithPrimaryCamera3D.z || 0)) * blend;\n";
+        indent(); output << "if (blend >= 1) {\n";
+        indent_level++;
+        indent(); output << "this._zenithPrimaryCamera3D.x = desiredX;\n";
+        indent(); output << "this._zenithPrimaryCamera3D.y = desiredY;\n";
+        indent(); output << "this._zenithPrimaryCamera3D.z = desiredZ;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "return true;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithWorld2DViewState(canvas) {\n";
+        indent_level++;
+        indent(); output << "const camera = this._zenithPrimaryCamera;\n";
+        indent(); output << "const zoom = camera && camera.zoom > 0 ? camera.zoom : 1;\n";
+        indent(); output << "const canvasWidth = canvas && canvas.width ? canvas.width : 80;\n";
+        indent(); output << "const canvasHeight = canvas && canvas.height ? canvas.height : 24;\n";
+        indent(); output << "const viewportX = camera ? canvasWidth * (camera.viewportX || 0) : 0;\n";
+        indent(); output << "const viewportY = camera ? canvasHeight * (camera.viewportY || 0) : 0;\n";
+        indent(); output << "const viewportWidth = camera ? Math.max(0, canvasWidth * (camera.viewportWidth !== undefined ? camera.viewportWidth : 1)) : canvasWidth;\n";
+        indent(); output << "const viewportHeight = camera ? Math.max(0, canvasHeight * (camera.viewportHeight !== undefined ? camera.viewportHeight : 1)) : canvasHeight;\n";
+        indent(); output << "const safeViewportWidth = viewportWidth > 0 ? viewportWidth : canvasWidth;\n";
+        indent(); output << "const safeViewportHeight = viewportHeight > 0 ? viewportHeight : canvasHeight;\n";
+        indent(); output << "const centerX = viewportX + (safeViewportWidth * 0.5);\n";
+        indent(); output << "const centerY = viewportY + (safeViewportHeight * 0.5);\n";
+        indent(); output << "const cameraX = camera ? (camera.x || 0) : 0;\n";
+        indent(); output << "const cameraY = camera ? (camera.y || 0) : 0;\n";
+        indent(); output << "const worldLeft = camera ? (cameraX - (safeViewportWidth / (2 * zoom))) : 0;\n";
+        indent(); output << "const worldTop = camera ? (cameraY - (safeViewportHeight / (2 * zoom))) : 0;\n";
+        indent(); output << "const worldRight = camera ? (cameraX + (safeViewportWidth / (2 * zoom))) : canvasWidth;\n";
+        indent(); output << "const worldBottom = camera ? (cameraY + (safeViewportHeight / (2 * zoom))) : canvasHeight;\n";
+        indent(); output << "return { camera, zoom, viewportX, viewportY, viewportWidth: safeViewportWidth, viewportHeight: safeViewportHeight, centerX, centerY, cameraX, cameraY, worldLeft, worldTop, worldRight, worldBottom };\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithProjectWorld2DX(view, worldX) {\n";
+        indent_level++;
+        indent(); output << "return view.camera ? (((worldX - view.cameraX) * view.zoom) + view.centerX) : worldX;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithProjectWorld2DY(view, worldY) {\n";
+        indent_level++;
+        indent(); output << "return view.camera ? (((worldY - view.cameraY) * view.zoom) + view.centerY) : worldY;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithScaleWorld2D(view, value) {\n";
+        indent_level++;
+        indent(); output << "return value * view.zoom;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithEntityVisible2D(camera, entity) {\n";
+        indent_level++;
+        indent(); output << "if (!camera || !entity) return true;\n";
+        indent(); output << "return this._zenithLayerMaskMatches(this._zenithEntityMask(camera), this._zenithEntityLayer(entity));\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithDrawWorld2D(canvas) {\n";
+        indent_level++;
+        indent(); output << "const view = this._zenithWorld2DViewState(canvas);\n";
+        indent(); output << "const renderables = [];\n";
+        indent(); output << "for (const entity of this._zenithEntities) {\n";
+        indent_level++;
+        indent(); output << "if (!entity) continue;\n";
+        indent(); output << "const kind = entity.kind || '';\n";
+        indent(); output << "if (kind !== 'sprite2d' && kind !== 'character2d' && kind !== 'tilemap2d') continue;\n";
+        indent(); output << "if (entity.visible === false) continue;\n";
+        indent(); output << "if (!this._zenithEntityVisible2D(view.camera, entity)) continue;\n";
+        indent(); output << "renderables.push({ entity, sortOrder: entity.sortOrder || 0, kindRank: kind === 'tilemap2d' ? 0 : 1 });\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "renderables.sort((lhs, rhs) => {\n";
+        indent_level++;
+        indent(); output << "if (lhs.sortOrder !== rhs.sortOrder) return lhs.sortOrder - rhs.sortOrder;\n";
+        indent(); output << "if (lhs.kindRank !== rhs.kindRank) return lhs.kindRank - rhs.kindRank;\n";
+        indent(); output << "return (lhs.entity.id || 0) - (rhs.entity.id || 0);\n";
+        indent_level--;
+        indent(); output << "});\n";
+        indent(); output << "for (const entry of renderables) {\n";
+        indent_level++;
+        indent(); output << "const entity = entry.entity;\n";
+        indent(); output << "if (entity.kind === 'tilemap2d') {\n";
+        indent_level++;
+        indent(); output << "const columns = entity.columns !== undefined ? Math.max(1, Math.trunc(entity.columns)) : 1;\n";
+        indent(); output << "const rows = entity.rows !== undefined ? Math.max(1, Math.trunc(entity.rows)) : 1;\n";
+        indent(); output << "const tileWidth = entity.tileWidth !== undefined && entity.tileWidth > 0 ? entity.tileWidth : 1;\n";
+        indent(); output << "const tileHeight = entity.tileHeight !== undefined && entity.tileHeight > 0 ? entity.tileHeight : 1;\n";
+        indent(); output << "const totalWidth = columns * tileWidth;\n";
+        indent(); output << "const totalHeight = rows * tileHeight;\n";
+        indent(); output << "const baseWorldX = (entity.x || 0) - (totalWidth * (entity.anchorX || 0));\n";
+        indent(); output << "const baseWorldY = (entity.y || 0) - (totalHeight * (entity.anchorY || 0));\n";
+        indent(); output << "const drawTileWidth = this._zenithScaleWorld2D(view, tileWidth);\n";
+        indent(); output << "const drawTileHeight = this._zenithScaleWorld2D(view, tileHeight);\n";
+        indent(); output << "const palette = Array.isArray(entity.palette) ? entity.palette : ['', 'white'];\n";
+        indent(); output << "const cells = Array.isArray(entity.cells) ? entity.cells : [];\n";
+        indent(); output << "for (let row = 0; row < rows; row += 1) {\n";
+        indent_level++;
+        indent(); output << "for (let column = 0; column < columns; column += 1) {\n";
+        indent_level++;
+        indent(); output << "const tileId = Number(cells[(row * columns) + column]) || 0;\n";
+        indent(); output << "if (tileId === 0) continue;\n";
+        indent(); output << "const color = palette[tileId] || '';\n";
+        indent(); output << "if (!color) continue;\n";
+        indent(); output << "const worldX = baseWorldX + (column * tileWidth);\n";
+        indent(); output << "const worldY = baseWorldY + (row * tileHeight);\n";
+        indent(); output << "canvas.drawRect(this._zenithProjectWorld2DX(view, worldX), this._zenithProjectWorld2DY(view, worldY), drawTileWidth, drawTileHeight, color);\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "if (this.drawEntityNames && entity.name) canvas.drawText(entity.name, this._zenithProjectWorld2DX(view, baseWorldX), this._zenithProjectWorld2DY(view, baseWorldY) - 1, 'white');\n";
+        indent(); output << "continue;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "const drawW = this._zenithScaleWorld2D(view, entity.w || 1);\n";
+        indent(); output << "const drawH = this._zenithScaleWorld2D(view, entity.h || 1);\n";
+        indent(); output << "let drawX = this._zenithProjectWorld2DX(view, entity.x || 0);\n";
+        indent(); output << "let drawY = this._zenithProjectWorld2DY(view, entity.y || 0);\n";
+        indent(); output << "drawX -= drawW * (entity.anchorX !== undefined ? entity.anchorX : 0.5);\n";
+        indent(); output << "drawY -= drawH * (entity.anchorY !== undefined ? entity.anchorY : 0.5);\n";
+        indent(); output << "canvas.drawRect(drawX, drawY, drawW, drawH, entity.color || 'white');\n";
+        indent(); output << "if (this.drawEntityNames && entity.name) canvas.drawText(entity.name, drawX, drawY - 1, 'white');\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithDrawDebugOverlay2D(canvas) {\n";
+        indent_level++;
+        indent(); output << "const view = this._zenithWorld2DViewState(canvas);\n";
+        indent(); output << "const overlayColor = this.debugOverlayColor || 'cyan';\n";
+        indent(); output << "if (this.debugDrawGrid2D) {\n";
+        indent_level++;
+        indent(); output << "const cellWidth = Math.max(0.25, this.debugGridCellWidth || 1);\n";
+        indent(); output << "const cellHeight = Math.max(0.25, this.debugGridCellHeight || 1);\n";
+        indent(); output << "const startWorldX = Math.floor(view.worldLeft / cellWidth) * cellWidth;\n";
+        indent(); output << "const startWorldY = Math.floor(view.worldTop / cellHeight) * cellHeight;\n";
+        indent(); output << "const maxScreenX = view.viewportX + Math.max(1, view.viewportWidth - 1);\n";
+        indent(); output << "const maxScreenY = view.viewportY + Math.max(1, view.viewportHeight - 1);\n";
+        indent(); output << "for (let worldX = startWorldX; worldX <= view.worldRight + cellWidth; worldX += cellWidth) {\n";
+        indent_level++;
+        indent(); output << "const screenX = this._zenithProjectWorld2DX(view, worldX);\n";
+        indent(); output << "canvas.drawLine(screenX, view.viewportY, screenX, maxScreenY, overlayColor);\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "for (let worldY = startWorldY; worldY <= view.worldBottom + cellHeight; worldY += cellHeight) {\n";
+        indent_level++;
+        indent(); output << "const screenY = this._zenithProjectWorld2DY(view, worldY);\n";
+        indent(); output << "canvas.drawLine(view.viewportX, screenY, maxScreenX, screenY, overlayColor);\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "if (this.debugDrawColliders2D) {\n";
+        indent_level++;
+        indent(); output << "for (const entity of this._zenithEntities) {\n";
+        indent_level++;
+        indent(); output << "if (!entity || !this._zenithEntityVisible2D(view.camera, entity)) continue;\n";
+        indent(); output << "if (entity.hasBoxCollider2D === true && entity.boxColliderEnabled !== false) {\n";
+        indent_level++;
+        indent(); output << "const width = entity.boxColliderWidth !== undefined && entity.boxColliderWidth > 0 ? entity.boxColliderWidth : 1;\n";
+        indent(); output << "const height = entity.boxColliderHeight !== undefined && entity.boxColliderHeight > 0 ? entity.boxColliderHeight : 1;\n";
+        indent(); output << "const centerX = (entity.x || 0) + (entity.boxColliderOffsetX || 0);\n";
+        indent(); output << "const centerY = (entity.y || 0) + (entity.boxColliderOffsetY || 0);\n";
+        indent(); output << "canvas.drawFrameRect(this._zenithProjectWorld2DX(view, centerX - (width * 0.5)), this._zenithProjectWorld2DY(view, centerY - (height * 0.5)), this._zenithScaleWorld2D(view, width), this._zenithScaleWorld2D(view, height), entity.boxColliderIsTrigger === true ? 'yellow' : overlayColor);\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "if (entity.hasCircleCollider2D === true && entity.circleColliderEnabled !== false) {\n";
+        indent_level++;
+        indent(); output << "const radius = entity.circleColliderRadius !== undefined && entity.circleColliderRadius > 0 ? entity.circleColliderRadius : 0.5;\n";
+        indent(); output << "const centerX = (entity.x || 0) + (entity.circleColliderOffsetX || 0);\n";
+        indent(); output << "const centerY = (entity.y || 0) + (entity.circleColliderOffsetY || 0);\n";
+        indent(); output << "canvas.drawCircleOutline(this._zenithProjectWorld2DX(view, centerX), this._zenithProjectWorld2DY(view, centerY), this._zenithScaleWorld2D(view, radius), entity.circleColliderIsTrigger === true ? 'yellow' : overlayColor);\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "if (entity.hasCapsuleCollider2D === true && entity.capsuleColliderEnabled !== false) {\n";
+        indent_level++;
+        indent(); output << "const radius = entity.capsuleColliderRadius !== undefined && entity.capsuleColliderRadius > 0 ? entity.capsuleColliderRadius : 0.5;\n";
+        indent(); output << "const height = entity.capsuleColliderHeight !== undefined ? Math.max(entity.capsuleColliderHeight, radius * 2) : Math.max(2, radius * 2);\n";
+        indent(); output << "const halfSegment = Math.max(0, (height * 0.5) - radius);\n";
+        indent(); output << "const centerX = (entity.x || 0) + (entity.capsuleColliderOffsetX || 0);\n";
+        indent(); output << "const centerY = (entity.y || 0) + (entity.capsuleColliderOffsetY || 0);\n";
+        indent(); output << "const color = entity.capsuleColliderIsTrigger === true ? 'yellow' : overlayColor;\n";
+        indent(); output << "if (halfSegment > 0) {\n";
+        indent_level++;
+        indent(); output << "canvas.drawFrameRect(this._zenithProjectWorld2DX(view, centerX - radius), this._zenithProjectWorld2DY(view, centerY - halfSegment), this._zenithScaleWorld2D(view, radius * 2), this._zenithScaleWorld2D(view, halfSegment * 2), color);\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "canvas.drawCircleOutline(this._zenithProjectWorld2DX(view, centerX), this._zenithProjectWorld2DY(view, centerY - halfSegment), this._zenithScaleWorld2D(view, radius), color);\n";
+        indent(); output << "canvas.drawCircleOutline(this._zenithProjectWorld2DX(view, centerX), this._zenithProjectWorld2DY(view, centerY + halfSegment), this._zenithScaleWorld2D(view, radius), color);\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "if (this.debugDrawTransforms2D) {\n";
+        indent_level++;
+        indent(); output << "for (const entity of this._zenithEntities) {\n";
+        indent_level++;
+        indent(); output << "if (!entity || !this._zenithEntityVisible2D(view.camera, entity)) continue;\n";
+        indent(); output << "const screenX = this._zenithProjectWorld2DX(view, entity.x || 0);\n";
+        indent(); output << "const screenY = this._zenithProjectWorld2DY(view, entity.y || 0);\n";
+        indent(); output << "canvas.drawPoint(screenX, screenY, overlayColor);\n";
+        indent(); output << "canvas.drawLine(screenX - 1, screenY, screenX + 1, screenY, overlayColor);\n";
+        indent(); output << "canvas.drawLine(screenX, screenY - 1, screenX, screenY + 1, overlayColor);\n";
+        indent(); output << "if (entity.hasBody === true) canvas.drawLine(screenX, screenY, this._zenithProjectWorld2DX(view, (entity.x || 0) + ((entity.vx || 0) * 0.15)), this._zenithProjectWorld2DY(view, (entity.y || 0) + ((entity.vy || 0) * 0.15)), 'green');\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "if (this.debugDrawCameraBounds2D) {\n";
+        indent_level++;
+        indent(); output << "canvas.drawFrameRect(view.viewportX, view.viewportY, Math.max(1, view.viewportWidth - 1), Math.max(1, view.viewportHeight - 1), overlayColor);\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "if (this.debugDrawRuntimeStats) {\n";
+        indent_level++;
+        indent(); output << "let spriteCount = 0;\n";
+        indent(); output << "let tilemapCount = 0;\n";
+        indent(); output << "for (const entity of this._zenithEntities) {\n";
+        indent_level++;
+        indent(); output << "if (!entity) continue;\n";
+        indent(); output << "if (entity.kind === 'tilemap2d') tilemapCount += 1;\n";
+        indent(); output << "if (entity.kind === 'sprite2d' || entity.kind === 'character2d') spriteCount += 1;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "const originX = view.viewportX + 1;\n";
+        indent(); output << "let lineY = view.viewportY + 1;\n";
+        indent(); output << "const frameMs = Math.round((this._zenithLastFrameDelta || 0) * 1000);\n";
+        indent(); output << "const accumulatorMs = Math.round((this._zenithAccumulator || 0) * 1000);\n";
+        indent(); output << "canvas.drawText('frame:' + this._zenithFrameCount + ' dt_ms:' + frameMs, originX, lineY, overlayColor);\n";
+        indent(); output << "lineY += 1;\n";
+        indent(); output << "canvas.drawText('fixed:' + this._zenithFixedStepCount + ' last:' + this._zenithLastFixedSteps + ' acc_ms:' + accumulatorMs, originX, lineY, overlayColor);\n";
+        indent(); output << "lineY += 1;\n";
+        indent(); output << "canvas.drawText('dropped:' + this._zenithDroppedStepFrames + ' entities:' + this._zenithEntities.length, originX, lineY, overlayColor);\n";
+        indent(); output << "lineY += 1;\n";
+        indent(); output << "canvas.drawText('sprites:' + spriteCount + ' tilemaps:' + tilemapCount, originX, lineY, overlayColor);\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithClipOverlayText(text, maxChars) {\n";
+        indent_level++;
+        indent(); output << "const value = text === undefined || text === null ? '' : String(text);\n";
+        indent(); output << "if (value.length <= maxChars) return value;\n";
+        indent(); output << "if (maxChars <= 3) return value.slice(0, maxChars);\n";
+        indent(); output << "return value.slice(0, maxChars - 3) + '...';\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithInspectorPropertyValue(property) {\n";
+        indent_level++;
+        indent(); output << "if (!property) return '';\n";
+        indent(); output << "if (property.kind === 'Number') return String(Number(property.numberValue || 0));\n";
+        indent(); output << "if (property.kind === 'Toggle') return property.boolValue === true ? 'true' : 'false';\n";
+        indent(); output << "return property.stringValue || '';\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "_zenithDrawInspector(canvas) {\n";
+        indent_level++;
+        indent(); output << "if (this.minimalInspectorEnabled !== true) return;\n";
+        indent(); output << "const width = canvas && canvas.width ? canvas.width : 80;\n";
+        indent(); output << "const height = canvas && canvas.height ? canvas.height : 24;\n";
+        indent(); output << "const panelWidth = Math.max(24, Math.min(width - 2, 30));\n";
+        indent(); output << "const panelHeight = Math.max(8, height - 2);\n";
+        indent(); output << "if (panelWidth < 12 || panelHeight < 6) return;\n";
+        indent(); output << "const borderColor = this.debugOverlayColor || 'cyan';\n";
+        indent(); output << "const originX = Math.max(0, width - panelWidth - 1);\n";
+        indent(); output << "const originY = 1;\n";
+        indent(); output << "const innerWidth = Math.max(1, panelWidth - 2);\n";
+        indent(); output << "let line = 1;\n";
+        indent(); output << "const drawLine = (text, color = 'white') => {\n";
+        indent_level++;
+        indent(); output << "if (line >= panelHeight - 1) return false;\n";
+        indent(); output << "canvas.drawText(this._zenithClipOverlayText(text, innerWidth), originX + 1, originY + line, color);\n";
+        indent(); output << "line += 1;\n";
+        indent(); output << "return true;\n";
+        indent_level--;
+        indent(); output << "};\n";
+        indent(); output << "canvas.drawFrameRect(originX, originY, panelWidth, panelHeight, borderColor);\n";
+        indent(); output << "drawLine('Inspector', borderColor);\n";
+        indent(); output << "drawLine('scene:' + (this.name || 'Scene'));\n";
+        indent(); output << "let target = this.inspectedEntity();\n";
+        indent(); output << "let materialPath = this.inspectedMaterialPath();\n";
+        indent(); output << "if (target) {\n";
+        indent_level++;
+        indent(); output << "drawLine('entity:' + (target.name || 'unnamed'), 'yellow');\n";
+        indent(); output << "drawLine('id:' + String(target.id || 0));\n";
+        indent(); output << "if (target.tag) drawLine('tag:' + target.tag);\n";
+        indent(); output << "drawLine('layer:' + this._zenithEntityLayer(target) + ' mask:' + this._zenithEntityMask(target));\n";
+        indent(); output << "if (target.z !== undefined) drawLine('pos3:' + (target.x || 0) + ',' + (target.y || 0) + ',' + (target.z || 0));\n";
+        indent(); output << "else drawLine('pos2:' + (target.x || 0) + ',' + (target.y || 0));\n";
+        indent(); output << "if (target.vz !== undefined) drawLine('vel3:' + (target.vx || 0) + ',' + (target.vy || 0) + ',' + (target.vz || 0), 'green');\n";
+        indent(); output << "else if (target.hasBody === true || target.vx !== undefined || target.vy !== undefined) drawLine('vel2:' + (target.vx || 0) + ',' + (target.vy || 0), 'green');\n";
+        indent(); output << "if ((target.kind === 'sprite2d' || target.kind === 'character2d') && target.color) drawLine('sprite:' + target.color);\n";
+        indent(); output << "if (target.texturePath) drawLine('tex:' + target.texturePath);\n";
+        indent(); output << "if (target.meshPath) drawLine('mesh:' + target.meshPath);\n";
+        indent(); output << "if (target.shaderPath) drawLine('shader:' + target.shaderPath);\n";
+        indent(); output << "if (target.materialPath) {\n";
+        indent_level++;
+        indent(); output << "materialPath = target.materialPath;\n";
+        indent(); output << "drawLine('mat:' + materialPath, 'magenta');\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "if (target.clipPath) drawLine('audio:' + target.clipPath);\n";
+        indent_level--;
+        indent(); output << "} else if (materialPath) {\n";
+        indent_level++;
+        indent(); output << "drawLine('material:' + materialPath, 'magenta');\n";
+        indent_level--;
+        indent(); output << "} else {\n";
+        indent_level++;
+        indent(); output << "let spriteCount = 0;\n";
+        indent(); output << "let tilemapCount = 0;\n";
+        indent(); output << "for (const entity of this._zenithEntities) {\n";
+        indent_level++;
+        indent(); output << "if (!entity) continue;\n";
+        indent(); output << "if (entity.kind === 'tilemap2d') tilemapCount += 1;\n";
+        indent(); output << "if (entity.kind === 'sprite2d' || entity.kind === 'character2d') spriteCount += 1;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "drawLine('entities:' + this._zenithEntities.length);\n";
+        indent(); output << "drawLine('sprites:' + spriteCount);\n";
+        indent(); output << "drawLine('tilemaps:' + tilemapCount);\n";
+        indent(); output << "if (this._zenithEntities.length > 0) drawLine('next:' + (this._zenithEntities[0].name || 'entity'));\n";
+        indent(); output << "drawLine('inspectEntity(...)', borderColor);\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "if (materialPath) {\n";
+        indent_level++;
+        indent(); output << "const propertyCount = this.materialPropertyCount(materialPath);\n";
+        indent(); output << "drawLine('props:' + propertyCount, borderColor);\n";
+        indent(); output << "const visibleProperties = Math.min(propertyCount, Math.max(0, panelHeight - line - 1));\n";
+        indent(); output << "for (let i = 0; i < visibleProperties; i += 1) {\n";
+        indent_level++;
+        indent(); output << "const property = this.materialPropertyAt(materialPath, i);\n";
+        indent(); output << "if (!property || property.exists !== true) continue;\n";
+        indent(); output << "drawLine(property.name + '=' + this._zenithInspectorPropertyValue(property));\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "load() {\n";
+        indent_level++;
+        indent(); output << "if (this._zenithLoaded) return;\n";
+        indent(); output << "this._zenithLoaded = true;\n";
+        indent(); output << "if (this.onLoad) this.onLoad();\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "updateFrame(frameDt) {\n";
+        indent_level++;
+        indent(); output << "this.load();\n";
+        indent(); output << "if (frameDt < 0) frameDt = 0;\n";
+        indent(); output << "if (frameDt > this.maxFrameDelta) frameDt = this.maxFrameDelta;\n";
+        indent(); output << "this._zenithFrameCount += 1;\n";
+        indent(); output << "this._zenithLastFrameDelta = frameDt;\n";
+        indent(); output << "this._zenithLastFixedSteps = 0;\n";
+        indent(); output << "if (this.onFrame) this.onFrame(frameDt);\n";
+        indent(); output << "if (this.paused || this.fixedDeltaTime <= 0) return;\n";
+        indent(); output << "this._zenithAccumulator += frameDt;\n";
+        indent(); output << "while (this._zenithAccumulator + 0.000001 >= this.fixedDeltaTime && this._zenithLastFixedSteps < this.maxFixedStepsPerFrame) {\n";
+        indent_level++;
+        indent(); output << "this.simulateFixedStep(this.fixedDeltaTime);\n";
+        indent(); output << "this._zenithAccumulator -= this.fixedDeltaTime;\n";
+        indent(); output << "this._zenithLastFixedSteps += 1;\n";
+        indent(); output << "this._zenithFixedStepCount += 1;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "if (this._zenithLastFixedSteps === this.maxFixedStepsPerFrame && this._zenithAccumulator >= this.fixedDeltaTime) {\n";
+        indent_level++;
+        indent(); output << "this._zenithAccumulator = this._zenithAccumulator % this.fixedDeltaTime;\n";
+        indent(); output << "this._zenithDroppedStepFrames += 1;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "simulateFixedStep(dt) {\n";
+        indent_level++;
+        indent(); output << "this.load();\n";
+        indent(); output << "if (this.onFixedUpdate) this.onFixedUpdate(dt);\n";
+        indent(); output << "if (this.autoSimulatePhysics) {\n";
+        indent_level++;
+        indent(); output << "const moveTowards = (current, target, maxDelta) => {\n";
+        indent_level++;
+        indent(); output << "if (maxDelta <= 0) return current;\n";
+        indent(); output << "if (current < target) return Math.min(current + maxDelta, target);\n";
+        indent(); output << "return Math.max(current - maxDelta, target);\n";
+        indent_level--;
+        indent(); output << "};\n";
+        indent(); output << "for (const entity of this._zenithEntities) {\n";
+        indent_level++;
+        indent(); output << "if (entity.moveSpeed === undefined || !entity.hasBody3D) continue;\n";
+        indent(); output << "let inputX = entity.moveInputX || 0;\n";
+        indent(); output << "let inputY = entity.moveInputY || 0;\n";
+        indent(); output << "let inputZ = entity.moveInputZ || 0;\n";
+        indent(); output << "const inputLength = Math.sqrt((inputX * inputX) + (inputY * inputY) + (inputZ * inputZ));\n";
+        indent(); output << "if (inputLength > 1) {\n";
+        indent_level++;
+        indent(); output << "inputX /= inputLength;\n";
+        indent(); output << "inputY /= inputLength;\n";
+        indent(); output << "inputZ /= inputLength;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "const useGravity = entity.useGravity !== false;\n";
+        indent(); output << "if (useGravity) {\n";
+        indent_level++;
+        indent(); output << "const grounded = entity.isGrounded === true;\n";
+        indent(); output << "const accel = grounded ? Math.max(0, entity.groundAcceleration ?? 36) : Math.max(0, (entity.airAcceleration ?? 14) * Math.max(0, Math.min(1, entity.airControl ?? 0.35)));\n";
+        indent(); output << "entity.vx = moveTowards(entity.vx || 0, inputX * (entity.moveSpeed || 0), accel * dt);\n";
+        indent(); output << "entity.vz = moveTowards(entity.vz || 0, inputZ * (entity.moveSpeed || 0), accel * dt);\n";
+        indent(); output << "if (grounded && Math.abs(inputX) <= 0.0001 && Math.abs(inputZ) <= 0.0001) {\n";
+        indent_level++;
+        indent(); output << "const friction = Math.max(0, entity.groundFriction ?? 20) * dt;\n";
+        indent(); output << "entity.vx = moveTowards(entity.vx || 0, 0, friction);\n";
+        indent(); output << "entity.vz = moveTowards(entity.vz || 0, 0, friction);\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "if (entity.jumpQueued === true && grounded) {\n";
+        indent_level++;
+        indent(); output << "entity.vy = Math.max(entity.vy || 0, entity.jumpSpeed ?? 7.5);\n";
+        indent(); output << "entity.isGrounded = false;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent_level--;
+        indent(); output << "} else {\n";
+        indent_level++;
+        indent(); output << "const accel = Math.max(0, entity.groundAcceleration ?? 36) * dt;\n";
+        indent(); output << "entity.vx = moveTowards(entity.vx || 0, inputX * (entity.moveSpeed || 0), accel);\n";
+        indent(); output << "entity.vy = moveTowards(entity.vy || 0, inputY * (entity.moveSpeed || 0), accel);\n";
+        indent(); output << "entity.vz = moveTowards(entity.vz || 0, inputZ * (entity.moveSpeed || 0), accel);\n";
+        indent(); output << "if (entity.jumpQueued === true) entity.vy = entity.jumpSpeed ?? 7.5;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "entity.jumpQueued = false;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "for (const entity of this._zenithEntities) {\n";
+        indent_level++;
+        indent(); output << "if (!entity.hasBody) continue;\n";
+        indent(); output << "if (entity.useGravity !== false) entity.vy = (entity.vy || 0) + (9.81 * (entity.gravityScale == null ? 1 : entity.gravityScale) * dt);\n";
+        indent(); output << "entity.x = (entity.x || 0) + ((entity.vx || 0) * dt);\n";
+        indent(); output << "entity.y = (entity.y || 0) + ((entity.vy || 0) * dt);\n";
+        indent(); output << "entity.z = (entity.z || 0) + ((entity.vz || 0) * dt);\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "if (this.onPostPhysics) this.onPostPhysics(dt);\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "render(canvas) {\n";
+        indent_level++;
+        indent(); output << "this.load();\n";
+        indent(); output << "if (this.onDraw) this.onDraw(canvas, this.interpolationAlpha());\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "setPaused(value) {\n";
+        indent_level++;
+        indent(); output << "this.paused = value;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "isLoaded() {\n";
+        indent_level++;
+        indent(); output << "return this._zenithLoaded;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "interpolationAlpha() {\n";
+        indent_level++;
+        indent(); output << "if (this.fixedDeltaTime <= 0) return 0.0;\n";
+        indent(); output << "const alpha = this._zenithAccumulator / this.fixedDeltaTime;\n";
+        indent(); output << "if (alpha < 0) return 0.0;\n";
+        indent(); output << "if (alpha > 1) return 1.0;\n";
+        indent(); output << "return alpha;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "totalFrames() {\n";
+        indent_level++;
+        indent(); output << "return this._zenithFrameCount;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "totalFixedSteps() {\n";
+        indent_level++;
+        indent(); output << "return this._zenithFixedStepCount;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "framesWithDroppedSteps() {\n";
+        indent_level++;
+        indent(); output << "return this._zenithDroppedStepFrames;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "lastSubstepCount() {\n";
+        indent_level++;
+        indent(); output << "return this._zenithLastFixedSteps;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "accumulatedTime() {\n";
+        indent_level++;
+        indent(); output << "return this._zenithAccumulator;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "frameDelta() {\n";
+        indent_level++;
+        indent(); output << "return this._zenithLastFrameDelta;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "inspectEntity(entity) {\n";
+        indent_level++;
+        indent(); output << "if (entity && this._zenithEntities.includes(entity)) {\n";
+        indent_level++;
+        indent(); output << "this._zenithInspectorEntity = entity;\n";
+        indent(); output << "this._zenithInspectorMaterialPath = '';\n";
+        indent(); output << "return;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "this._zenithInspectorEntity = null;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "inspectedEntity() {\n";
+        indent_level++;
+        indent(); output << "if (this._zenithInspectorEntity && this._zenithEntities.includes(this._zenithInspectorEntity)) return this._zenithInspectorEntity;\n";
+        indent(); output << "return null;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "inspectMaterial(materialPath) {\n";
+        indent_level++;
+        indent(); output << "this._zenithInspectorMaterialPath = materialPath === undefined || materialPath === null ? '' : String(materialPath);\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "inspectedMaterialPath() {\n";
+        indent_level++;
+        indent(); output << "return this._zenithInspectorMaterialPath || '';\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "clearInspectorTarget() {\n";
+        indent_level++;
+        indent(); output << "this._zenithInspectorEntity = null;\n";
+        indent(); output << "this._zenithInspectorMaterialPath = '';\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "selectNextInspectorEntity() {\n";
+        indent_level++;
+        indent(); output << "if (this._zenithEntities.length === 0) {\n";
+        indent_level++;
+        indent(); output << "this._zenithInspectorEntity = null;\n";
+        indent(); output << "return false;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "const current = this.inspectedEntity();\n";
+        indent(); output << "if (!current) {\n";
+        indent_level++;
+        indent(); output << "this.inspectEntity(this._zenithEntities[0]);\n";
+        indent(); output << "return true;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "const index = this._zenithEntities.indexOf(current);\n";
+        indent(); output << "if (index < 0 || index + 1 >= this._zenithEntities.length) {\n";
+        indent_level++;
+        indent(); output << "this.inspectEntity(this._zenithEntities[0]);\n";
+        indent(); output << "return true;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "this.inspectEntity(this._zenithEntities[index + 1]);\n";
+        indent(); output << "return true;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "selectPreviousInspectorEntity() {\n";
+        indent_level++;
+        indent(); output << "if (this._zenithEntities.length === 0) {\n";
+        indent_level++;
+        indent(); output << "this._zenithInspectorEntity = null;\n";
+        indent(); output << "return false;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "const current = this.inspectedEntity();\n";
+        indent(); output << "if (!current) {\n";
+        indent_level++;
+        indent(); output << "this.inspectEntity(this._zenithEntities[this._zenithEntities.length - 1]);\n";
+        indent(); output << "return true;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "const index = this._zenithEntities.indexOf(current);\n";
+        indent(); output << "if (index <= 0) {\n";
+        indent_level++;
+        indent(); output << "this.inspectEntity(this._zenithEntities[this._zenithEntities.length - 1]);\n";
+        indent(); output << "return true;\n";
+        indent_level--;
+        indent(); output << "}\n";
+        indent(); output << "this.inspectEntity(this._zenithEntities[index - 1]);\n";
+        indent(); output << "return true;\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "init() {\n";
+        indent_level++;
+        indent(); output << "this.load();\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "update(dt) {\n";
+        indent_level++;
+        indent(); output << "this.updateFrame(dt);\n";
+        indent_level--;
+        indent(); output << "}\n";
+
+        indent();
+        output << "draw(canvas) {\n";
+        indent_level++;
+        indent(); output << "canvas.clear(this.clearColor || 'black');\n";
+        indent(); output << "if (this.autoRenderWorld2D) this._zenithDrawWorld2D(canvas);\n";
+        indent(); output << "this.render(canvas);\n";
+        indent(); output << "if (this.debugOverlayEnabled === true && (this.debugDrawGrid2D || this.debugDrawColliders2D || this.debugDrawTransforms2D || this.debugDrawCameraBounds2D || this.debugDrawRuntimeStats)) this._zenithDrawDebugOverlay2D(canvas);\n";
+        indent(); output << "if (this.minimalInspectorEnabled === true) this._zenithDrawInspector(canvas);\n";
+        indent_level--;
+        indent(); output << "}\n";
     }
     
     // Special render method if it has build()
@@ -1054,8 +6613,16 @@ void JSCodeGenerator::generateFunction(FunctionNode* node) {
             }
             output << ") {\n";
             indent_level++;
+            std::string first_arg = node->parameters.empty() ? "arg0" : node->parameters[0]->var_name;
+            std::string second_arg = node->parameters.size() > 1 ? node->parameters[1]->var_name : "arg1";
             if (node->function_name == "isKeyPressed") {
-                indent(); output << "return !!window._zenith_keys[key];\n";
+                indent(); output << "return !!window._zenith_keys[" << first_arg << "];\n";
+            } else if (node->function_name == "wasKeyPressed") {
+                indent(); output << "return !!window._zenith_justPressed[" << first_arg << "];\n";
+            } else if (node->function_name == "wasKeyReleased") {
+                indent(); output << "return !!window._zenith_justReleased[" << first_arg << "];\n";
+            } else if (node->function_name == "getAxis") {
+                indent(); output << "return (window._zenith_keys[" << second_arg << "] ? 1 : 0) - (window._zenith_keys[" << first_arg << "] ? 1 : 0);\n";
             } else if (node->function_name == "getMouseX") {
                 indent(); output << "return window._zenith_mouseX || 0;\n";
             } else if (node->function_name == "getMouseY") {
@@ -1605,6 +7172,8 @@ std::string JSCodeGenerator::generate(ProgramNode* program, bool is_module_mode)
     output << "                root.appendChild(canvasEl);\n";
     output << "                const ctx = canvasEl.getContext('2d');\n";
     output << "                const canvas = {\n";
+    output << "                    width: canvasEl.width / 8,\n";
+    output << "                    height: canvasEl.height / 20,\n";
     output << "                    clear: function(color = 'black') {\n";
     output << "                        ctx.fillStyle = color;\n";
     output << "                        ctx.fillRect(0, 0, canvasEl.width, canvasEl.height);\n";
@@ -1619,6 +7188,30 @@ std::string JSCodeGenerator::generate(ProgramNode* program, bool is_module_mode)
     output << "                        ctx.arc(cx * 8, cy * 20, r * 14, 0, Math.PI * 2);\n";
     output << "                        ctx.fill();\n";
     output << "                    },\n";
+    output << "                    drawPoint: function(x, y, color = 'white') {\n";
+    output << "                        ctx.fillStyle = color;\n";
+    output << "                        ctx.fillRect((x * 8) - 2, (y * 20) - 2, 4, 4);\n";
+    output << "                    },\n";
+    output << "                    drawLine: function(x1, y1, x2, y2, color = 'white') {\n";
+    output << "                        ctx.strokeStyle = color;\n";
+    output << "                        ctx.lineWidth = 1.5;\n";
+    output << "                        ctx.beginPath();\n";
+    output << "                        ctx.moveTo(x1 * 8, y1 * 20);\n";
+    output << "                        ctx.lineTo(x2 * 8, y2 * 20);\n";
+    output << "                        ctx.stroke();\n";
+    output << "                    },\n";
+    output << "                    drawFrameRect: function(x, y, w, h, color = 'white') {\n";
+    output << "                        ctx.strokeStyle = color;\n";
+    output << "                        ctx.lineWidth = 1.5;\n";
+    output << "                        ctx.strokeRect(x * 8, y * 20, w * 8, h * 20);\n";
+    output << "                    },\n";
+    output << "                    drawCircleOutline: function(cx, cy, r, color = 'white') {\n";
+    output << "                        ctx.strokeStyle = color;\n";
+    output << "                        ctx.lineWidth = 1.5;\n";
+    output << "                        ctx.beginPath();\n";
+    output << "                        ctx.arc(cx * 8, cy * 20, r * 14, 0, Math.PI * 2);\n";
+    output << "                        ctx.stroke();\n";
+    output << "                    },\n";
     output << "                    drawText: function(text, x, y, color = 'white') {\n";
     output << "                        ctx.fillStyle = color;\n";
     output << "                        ctx.font = '16px monospace';\n";
@@ -1627,8 +7220,16 @@ std::string JSCodeGenerator::generate(ProgramNode* program, bool is_module_mode)
     output << "                    present: function() {}\n";
     output << "                };\n";
     output << "                window._zenith_keys = {};\n";
-    output << "                window.addEventListener('keydown', (e) => { window._zenith_keys[e.key] = true; });\n";
-    output << "                window.addEventListener('keyup', (e) => { window._zenith_keys[e.key] = false; });\n";
+    output << "                window._zenith_justPressed = {};\n";
+    output << "                window._zenith_justReleased = {};\n";
+    output << "                window.addEventListener('keydown', (e) => {\n";
+    output << "                    if (!window._zenith_keys[e.key]) window._zenith_justPressed[e.key] = true;\n";
+    output << "                    window._zenith_keys[e.key] = true;\n";
+    output << "                });\n";
+    output << "                window.addEventListener('keyup', (e) => {\n";
+    output << "                    if (window._zenith_keys[e.key]) window._zenith_justReleased[e.key] = true;\n";
+    output << "                    window._zenith_keys[e.key] = false;\n";
+    output << "                });\n";
     output << "                window._zenith_mouseX = 0;\n";
     output << "                window._zenith_mouseY = 0;\n";
     output << "                canvasEl.addEventListener('mousemove', (e) => {\n";
@@ -1643,6 +7244,8 @@ std::string JSCodeGenerator::generate(ProgramNode* program, bool is_module_mode)
     output << "                    if (game.update) game.update(dt);\n";
     output << "                    canvas.clear('black');\n";
     output << "                    if (game.draw) game.draw(canvas);\n";
+    output << "                    window._zenith_justPressed = {};\n";
+    output << "                    window._zenith_justReleased = {};\n";
     output << "                    requestAnimationFrame(loop);\n";
     output << "                };\n";
     output << "                requestAnimationFrame(loop);\n";
@@ -1658,6 +7261,126 @@ std::string JSCodeGenerator::generate(ProgramNode* program, bool is_module_mode)
     output << "            },\n";
     output << "            println: function(msg) {\n";
     output << "                this.print(msg + '\\n');\n";
+    output << "            },\n";
+    output << "            makeVec2: function(x = 0, y = 0) {\n";
+    output << "                return {\n";
+    output << "                    __zenithType: 'Vec2',\n";
+    output << "                    x: x,\n";
+    output << "                    y: y,\n";
+    output << "                    length: function() { return Math.hypot(this.x, this.y); },\n";
+    output << "                    lengthSquared: function() { return this.x * this.x + this.y * this.y; },\n";
+    output << "                    normalized: function() {\n";
+    output << "                        const len = this.length();\n";
+    output << "                        return len > 0.0001 ? zenith.makeVec2(this.x / len, this.y / len) : zenith.makeVec2(0, 0);\n";
+    output << "                    }\n";
+    output << "                };\n";
+    output << "            },\n";
+    output << "            makeVec3: function(x = 0, y = 0, z = 0) {\n";
+    output << "                return {\n";
+    output << "                    __zenithType: 'Vec3',\n";
+    output << "                    x: x,\n";
+    output << "                    y: y,\n";
+    output << "                    z: z,\n";
+    output << "                    length: function() { return Math.hypot(this.x, this.y, this.z); },\n";
+    output << "                    lengthSquared: function() { return this.x * this.x + this.y * this.y + this.z * this.z; },\n";
+    output << "                    normalized: function() {\n";
+    output << "                        const len = this.length();\n";
+    output << "                        return len > 0.0001 ? zenith.makeVec3(this.x / len, this.y / len, this.z / len) : zenith.makeVec3(0, 0, 0);\n";
+    output << "                    }\n";
+    output << "                };\n";
+    output << "            },\n";
+    output << "            makeVec4: function(x = 0, y = 0, z = 0, w = 0) {\n";
+    output << "                return {\n";
+    output << "                    __zenithType: 'Vec4',\n";
+    output << "                    x: x,\n";
+    output << "                    y: y,\n";
+    output << "                    z: z,\n";
+    output << "                    w: w,\n";
+    output << "                    length: function() { return Math.hypot(this.x, this.y, this.z, this.w); },\n";
+    output << "                    lengthSquared: function() { return this.x * this.x + this.y * this.y + this.z * this.z + this.w * this.w; },\n";
+    output << "                    normalized: function() {\n";
+    output << "                        const len = this.length();\n";
+    output << "                        return len > 0.0001 ? zenith.makeVec4(this.x / len, this.y / len, this.z / len, this.w / len) : zenith.makeVec4(0, 0, 0, 0);\n";
+    output << "                    }\n";
+    output << "                };\n";
+    output << "            },\n";
+    output << "            makeMat4: function(m00 = 1, m01 = 0, m02 = 0, m03 = 0, m10 = 0, m11 = 1, m12 = 0, m13 = 0, m20 = 0, m21 = 0, m22 = 1, m23 = 0, m30 = 0, m31 = 0, m32 = 0, m33 = 1) {\n";
+    output << "                return {\n";
+    output << "                    __zenithType: 'Mat4',\n";
+    output << "                    m00: m00, m01: m01, m02: m02, m03: m03,\n";
+    output << "                    m10: m10, m11: m11, m12: m12, m13: m13,\n";
+    output << "                    m20: m20, m21: m21, m22: m22, m23: m23,\n";
+    output << "                    m30: m30, m31: m31, m32: m32, m33: m33\n";
+    output << "                };\n";
+    output << "            },\n";
+    output << "            mathEqual: function(lhs, rhs) {\n";
+    output << "                if (!lhs || !rhs || lhs.__zenithType !== rhs.__zenithType) return lhs === rhs;\n";
+    output << "                if (lhs.__zenithType === 'Vec2') return lhs.x === rhs.x && lhs.y === rhs.y;\n";
+    output << "                if (lhs.__zenithType === 'Vec3') return lhs.x === rhs.x && lhs.y === rhs.y && lhs.z === rhs.z;\n";
+    output << "                if (lhs.__zenithType === 'Vec4') return lhs.x === rhs.x && lhs.y === rhs.y && lhs.z === rhs.z && lhs.w === rhs.w;\n";
+    output << "                if (lhs.__zenithType === 'Mat4') {\n";
+    output << "                    return lhs.m00 === rhs.m00 && lhs.m01 === rhs.m01 && lhs.m02 === rhs.m02 && lhs.m03 === rhs.m03 &&\n";
+    output << "                           lhs.m10 === rhs.m10 && lhs.m11 === rhs.m11 && lhs.m12 === rhs.m12 && lhs.m13 === rhs.m13 &&\n";
+    output << "                           lhs.m20 === rhs.m20 && lhs.m21 === rhs.m21 && lhs.m22 === rhs.m22 && lhs.m23 === rhs.m23 &&\n";
+    output << "                           lhs.m30 === rhs.m30 && lhs.m31 === rhs.m31 && lhs.m32 === rhs.m32 && lhs.m33 === rhs.m33;\n";
+    output << "                }\n";
+    output << "                return lhs === rhs;\n";
+    output << "            },\n";
+    output << "            mathAdd: function(lhs, rhs) {\n";
+    output << "                if (lhs && rhs && lhs.__zenithType === 'Vec2' && rhs.__zenithType === 'Vec2') return zenith.makeVec2(lhs.x + rhs.x, lhs.y + rhs.y);\n";
+    output << "                if (lhs && rhs && lhs.__zenithType === 'Vec3' && rhs.__zenithType === 'Vec3') return zenith.makeVec3(lhs.x + rhs.x, lhs.y + rhs.y, lhs.z + rhs.z);\n";
+    output << "                if (lhs && rhs && lhs.__zenithType === 'Vec4' && rhs.__zenithType === 'Vec4') return zenith.makeVec4(lhs.x + rhs.x, lhs.y + rhs.y, lhs.z + rhs.z, lhs.w + rhs.w);\n";
+    output << "                if (lhs && rhs && lhs.__zenithType === 'Mat4' && rhs.__zenithType === 'Mat4') {\n";
+    output << "                    return zenith.makeMat4(lhs.m00 + rhs.m00, lhs.m01 + rhs.m01, lhs.m02 + rhs.m02, lhs.m03 + rhs.m03, lhs.m10 + rhs.m10, lhs.m11 + rhs.m11, lhs.m12 + rhs.m12, lhs.m13 + rhs.m13, lhs.m20 + rhs.m20, lhs.m21 + rhs.m21, lhs.m22 + rhs.m22, lhs.m23 + rhs.m23, lhs.m30 + rhs.m30, lhs.m31 + rhs.m31, lhs.m32 + rhs.m32, lhs.m33 + rhs.m33);\n";
+    output << "                }\n";
+    output << "                return lhs + rhs;\n";
+    output << "            },\n";
+    output << "            mathSub: function(lhs, rhs) {\n";
+    output << "                if (lhs && rhs && lhs.__zenithType === 'Vec2' && rhs.__zenithType === 'Vec2') return zenith.makeVec2(lhs.x - rhs.x, lhs.y - rhs.y);\n";
+    output << "                if (lhs && rhs && lhs.__zenithType === 'Vec3' && rhs.__zenithType === 'Vec3') return zenith.makeVec3(lhs.x - rhs.x, lhs.y - rhs.y, lhs.z - rhs.z);\n";
+    output << "                if (lhs && rhs && lhs.__zenithType === 'Vec4' && rhs.__zenithType === 'Vec4') return zenith.makeVec4(lhs.x - rhs.x, lhs.y - rhs.y, lhs.z - rhs.z, lhs.w - rhs.w);\n";
+    output << "                if (lhs && rhs && lhs.__zenithType === 'Mat4' && rhs.__zenithType === 'Mat4') {\n";
+    output << "                    return zenith.makeMat4(lhs.m00 - rhs.m00, lhs.m01 - rhs.m01, lhs.m02 - rhs.m02, lhs.m03 - rhs.m03, lhs.m10 - rhs.m10, lhs.m11 - rhs.m11, lhs.m12 - rhs.m12, lhs.m13 - rhs.m13, lhs.m20 - rhs.m20, lhs.m21 - rhs.m21, lhs.m22 - rhs.m22, lhs.m23 - rhs.m23, lhs.m30 - rhs.m30, lhs.m31 - rhs.m31, lhs.m32 - rhs.m32, lhs.m33 - rhs.m33);\n";
+    output << "                }\n";
+    output << "                return lhs - rhs;\n";
+    output << "            },\n";
+    output << "            mathMul: function(lhs, rhs) {\n";
+    output << "                if (lhs && lhs.__zenithType === 'Vec2' && typeof rhs === 'number') return zenith.makeVec2(lhs.x * rhs, lhs.y * rhs);\n";
+    output << "                if (typeof lhs === 'number' && rhs && rhs.__zenithType === 'Vec2') return zenith.makeVec2(lhs * rhs.x, lhs * rhs.y);\n";
+    output << "                if (lhs && lhs.__zenithType === 'Vec3' && typeof rhs === 'number') return zenith.makeVec3(lhs.x * rhs, lhs.y * rhs, lhs.z * rhs);\n";
+    output << "                if (typeof lhs === 'number' && rhs && rhs.__zenithType === 'Vec3') return zenith.makeVec3(lhs * rhs.x, lhs * rhs.y, lhs * rhs.z);\n";
+    output << "                if (lhs && lhs.__zenithType === 'Vec4' && typeof rhs === 'number') return zenith.makeVec4(lhs.x * rhs, lhs.y * rhs, lhs.z * rhs, lhs.w * rhs);\n";
+    output << "                if (typeof lhs === 'number' && rhs && rhs.__zenithType === 'Vec4') return zenith.makeVec4(lhs * rhs.x, lhs * rhs.y, lhs * rhs.z, lhs * rhs.w);\n";
+    output << "                if (lhs && lhs.__zenithType === 'Mat4' && typeof rhs === 'number') return zenith.makeMat4(lhs.m00 * rhs, lhs.m01 * rhs, lhs.m02 * rhs, lhs.m03 * rhs, lhs.m10 * rhs, lhs.m11 * rhs, lhs.m12 * rhs, lhs.m13 * rhs, lhs.m20 * rhs, lhs.m21 * rhs, lhs.m22 * rhs, lhs.m23 * rhs, lhs.m30 * rhs, lhs.m31 * rhs, lhs.m32 * rhs, lhs.m33 * rhs);\n";
+    output << "                if (lhs && rhs && lhs.__zenithType === 'Mat4' && rhs.__zenithType === 'Vec4') return zenith.makeVec4(lhs.m00 * rhs.x + lhs.m01 * rhs.y + lhs.m02 * rhs.z + lhs.m03 * rhs.w, lhs.m10 * rhs.x + lhs.m11 * rhs.y + lhs.m12 * rhs.z + lhs.m13 * rhs.w, lhs.m20 * rhs.x + lhs.m21 * rhs.y + lhs.m22 * rhs.z + lhs.m23 * rhs.w, lhs.m30 * rhs.x + lhs.m31 * rhs.y + lhs.m32 * rhs.z + lhs.m33 * rhs.w);\n";
+    output << "                if (lhs && rhs && lhs.__zenithType === 'Mat4' && rhs.__zenithType === 'Mat4') {\n";
+    output << "                    return zenith.makeMat4(\n";
+    output << "                        lhs.m00 * rhs.m00 + lhs.m01 * rhs.m10 + lhs.m02 * rhs.m20 + lhs.m03 * rhs.m30,\n";
+    output << "                        lhs.m00 * rhs.m01 + lhs.m01 * rhs.m11 + lhs.m02 * rhs.m21 + lhs.m03 * rhs.m31,\n";
+    output << "                        lhs.m00 * rhs.m02 + lhs.m01 * rhs.m12 + lhs.m02 * rhs.m22 + lhs.m03 * rhs.m32,\n";
+    output << "                        lhs.m00 * rhs.m03 + lhs.m01 * rhs.m13 + lhs.m02 * rhs.m23 + lhs.m03 * rhs.m33,\n";
+    output << "                        lhs.m10 * rhs.m00 + lhs.m11 * rhs.m10 + lhs.m12 * rhs.m20 + lhs.m13 * rhs.m30,\n";
+    output << "                        lhs.m10 * rhs.m01 + lhs.m11 * rhs.m11 + lhs.m12 * rhs.m21 + lhs.m13 * rhs.m31,\n";
+    output << "                        lhs.m10 * rhs.m02 + lhs.m11 * rhs.m12 + lhs.m12 * rhs.m22 + lhs.m13 * rhs.m32,\n";
+    output << "                        lhs.m10 * rhs.m03 + lhs.m11 * rhs.m13 + lhs.m12 * rhs.m23 + lhs.m13 * rhs.m33,\n";
+    output << "                        lhs.m20 * rhs.m00 + lhs.m21 * rhs.m10 + lhs.m22 * rhs.m20 + lhs.m23 * rhs.m30,\n";
+    output << "                        lhs.m20 * rhs.m01 + lhs.m21 * rhs.m11 + lhs.m22 * rhs.m21 + lhs.m23 * rhs.m31,\n";
+    output << "                        lhs.m20 * rhs.m02 + lhs.m21 * rhs.m12 + lhs.m22 * rhs.m22 + lhs.m23 * rhs.m32,\n";
+    output << "                        lhs.m20 * rhs.m03 + lhs.m21 * rhs.m13 + lhs.m22 * rhs.m23 + lhs.m23 * rhs.m33,\n";
+    output << "                        lhs.m30 * rhs.m00 + lhs.m31 * rhs.m10 + lhs.m32 * rhs.m20 + lhs.m33 * rhs.m30,\n";
+    output << "                        lhs.m30 * rhs.m01 + lhs.m31 * rhs.m11 + lhs.m32 * rhs.m21 + lhs.m33 * rhs.m31,\n";
+    output << "                        lhs.m30 * rhs.m02 + lhs.m31 * rhs.m12 + lhs.m32 * rhs.m22 + lhs.m33 * rhs.m32,\n";
+    output << "                        lhs.m30 * rhs.m03 + lhs.m31 * rhs.m13 + lhs.m32 * rhs.m23 + lhs.m33 * rhs.m33\n";
+    output << "                    );\n";
+    output << "                }\n";
+    output << "                return lhs * rhs;\n";
+    output << "            },\n";
+    output << "            mathDiv: function(lhs, rhs) {\n";
+    output << "                if (lhs && lhs.__zenithType === 'Vec2' && typeof rhs === 'number') return zenith.makeVec2(lhs.x / rhs, lhs.y / rhs);\n";
+    output << "                if (lhs && lhs.__zenithType === 'Vec3' && typeof rhs === 'number') return zenith.makeVec3(lhs.x / rhs, lhs.y / rhs, lhs.z / rhs);\n";
+    output << "                if (lhs && lhs.__zenithType === 'Vec4' && typeof rhs === 'number') return zenith.makeVec4(lhs.x / rhs, lhs.y / rhs, lhs.z / rhs, lhs.w / rhs);\n";
+    output << "                if (lhs && lhs.__zenithType === 'Mat4' && typeof rhs === 'number') return zenith.makeMat4(lhs.m00 / rhs, lhs.m01 / rhs, lhs.m02 / rhs, lhs.m03 / rhs, lhs.m10 / rhs, lhs.m11 / rhs, lhs.m12 / rhs, lhs.m13 / rhs, lhs.m20 / rhs, lhs.m21 / rhs, lhs.m22 / rhs, lhs.m23 / rhs, lhs.m30 / rhs, lhs.m31 / rhs, lhs.m32 / rhs, lhs.m33 / rhs);\n";
+    output << "                return lhs / rhs;\n";
     output << "            },\n";
     output << "            encodeImageToBase64: async function(pathOrUrl) {\n";
     output << "                if (!pathOrUrl) return \"\";\n";

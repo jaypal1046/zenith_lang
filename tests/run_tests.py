@@ -82,7 +82,7 @@ def main():
         "src/main.cpp", "src/frontend/lexer.cpp", "src/frontend/parser.cpp",
         "src/frontend/semantic.cpp", "src/frontend/formatter.cpp", "src/lsp/lsp.cpp",
         "src/backend/codegen.cpp", "src/backend/js_codegen.cpp", "src/backend/wasm_codegen.cpp",
-        "-I", "include", "-o", "zenith.exe", "-lwinhttp", "-lws2_32", "-lpthread"
+        "-I", "include", "-o", "zenith.exe", "-lwinhttp", "-lws2_32", "-lopengl32", "-lpthread"
     ]
     res = run_cmd(build_cmd, cwd=root_dir)
     if res.returncode != 0:
@@ -143,7 +143,7 @@ def main():
                 "g++", "-O3", "-std=c++17", "-DYOGA_AVAILABLE",
                 dest_cpp, os.path.join(root_dir, "src", "zenith", "ui", "yoga_layout.cpp")
             ] + yoga_sources + [
-                "-I", "include", "-I", "lib", "-o", exe_out, "-lwinhttp", "-lws2_32"
+                "-I", "include", "-I", "lib", "-o", exe_out, "-lwinhttp", "-lws2_32", "-lopengl32", "-lgdi32", "-luser32"
             ]
             if run_cmd(gpp_cmd, cwd=root_dir).returncode != 0:
                 success = False
@@ -197,7 +197,7 @@ def main():
 
         if success:
             exe_out = os.path.join(lang_sandbox, "main_app.exe")
-            gpp_cmd = ["g++", "-O3", "-std=c++17", dest_cpp, "-I", "include", "-o", exe_out, "-lws2_32", "-lwinhttp"]
+            gpp_cmd = ["g++", "-O3", "-std=c++17", dest_cpp, "-I", "include", "-o", exe_out, "-lws2_32", "-lwinhttp", "-lopengl32", "-lgdi32", "-luser32"]
             if run_cmd(gpp_cmd, cwd=root_dir).returncode != 0:
                 success = False
                 print(f"  [FAIL] Package Native C++ Build for {test_file}")

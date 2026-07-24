@@ -1,0 +1,71 @@
+import std.io;
+
+class RuntimeCoreHandleProbe() implements Scene {
+    EntityId spriteFromPath;
+    EntityId spriteFromHandle;
+    EntityId audioFromHandle;
+    EntityId meshFromHandle;
+    Int textureAssetId = 0;
+    Int audioAssetId = 0;
+    Int meshAssetId = 0;
+    Int shaderAssetId = 0;
+    Int materialAssetId = 0;
+
+    Void onLoad() {
+        TextureHandleView texture_asset = loadTexture("assets/runtime_core.png");
+        AudioHandleView audio_asset = loadAudio("assets/runtime_core.wav", false);
+        MeshHandleView mesh_asset = loadMesh("assets/runtime_core.glb");
+        ShaderHandleView shader_asset = loadShader("assets/runtime_core.shader");
+        MaterialHandleView material_asset = loadMaterial("assets/runtime_core.mat", "assets/runtime_core.shader");
+
+        textureAssetId = texture_asset.id;
+        audioAssetId = audio_asset.id;
+        meshAssetId = mesh_asset.id;
+        shaderAssetId = shader_asset.id;
+        materialAssetId = material_asset.id;
+
+        spriteFromPath = spawnTexturedSprite("SpriteFromPath", "assets/runtime_core.png", 0.0, 0.0, 2.0, 2.0, "white");
+        setSpriteTexture(spriteFromPath, "assets/runtime_core.png");
+
+        TextureHandleView texture_by_id = texture_asset;
+        texture_by_id.path = "";
+        spriteFromHandle = spawnTexturedSpriteHandle("SpriteFromHandle", texture_by_id, 2.0, 0.0, 2.0, 2.0, "white");
+
+        AudioHandleView audio_by_id = audio_asset;
+        audio_by_id.path = "";
+        audioFromHandle = spawnAudioSource2DHandle("AudioFromHandle", audio_by_id, 0.0, 0.0, false);
+
+        MeshHandleView mesh_by_id = mesh_asset;
+        mesh_by_id.path = "";
+        ShaderHandleView shader_by_id = shader_asset;
+        shader_by_id.path = "";
+        MaterialHandleView material_by_id = material_asset;
+        material_by_id.path = "";
+        material_by_id.shaderPath = "";
+        meshFromHandle = spawnCharacter3DHandle("MeshFromHandle", mesh_by_id, shader_by_id, material_by_id, 0.0, 0.0, 0.0);
+    }
+}
+
+Void main() {
+    RuntimeCoreHandleProbe scene = RuntimeCoreHandleProbe();
+    scene.load();
+
+    TextureHandleView path_sprite_texture = scene.sprite2D(scene.spriteFromPath).texture;
+    TextureHandleView handle_sprite_texture = scene.sprite2D(scene.spriteFromHandle).texture;
+    AudioHandleView handle_audio_clip = scene.audioSource2D(scene.audioFromHandle).clip;
+    MeshHandleView handle_mesh = scene.mesh3D(scene.meshFromHandle).mesh;
+    ShaderHandleView handle_shader = scene.mesh3D(scene.meshFromHandle).shader;
+    MaterialHandleView handle_material = scene.mesh3D(scene.meshFromHandle).material;
+
+    println("path_sprite_texture_path=" + scene.spriteTexturePath(scene.spriteFromPath));
+    println("path_sprite_handle_id=" + path_sprite_texture.id);
+    println("path_sprite_handle_ok=" + (path_sprite_texture.id == scene.textureAssetId));
+    println("handle_sprite_texture_path=" + scene.sprite2D(scene.spriteFromHandle).texturePath);
+    println("handle_sprite_handle_ok=" + (handle_sprite_texture.id == scene.textureAssetId));
+    println("audio_handle_ok=" + (handle_audio_clip.id == scene.audioAssetId));
+    println("mesh_handle_ok=" + (handle_mesh.id == scene.meshAssetId));
+    println("shader_handle_ok=" + (handle_shader.id == scene.shaderAssetId));
+    println("material_handle_ok=" + (handle_material.id == scene.materialAssetId));
+    println("material_shader_path=" + handle_material.shaderPath);
+    println("mesh_material_path=" + scene.meshMaterialPath(scene.meshFromHandle));
+}

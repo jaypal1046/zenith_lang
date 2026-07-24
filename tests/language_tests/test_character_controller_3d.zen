@@ -1,0 +1,88 @@
+import std.io;
+
+class ControllerScene() implements Scene {
+    EntityId floor;
+    EntityId wall;
+    EntityId player;
+
+    Void onLoad() {
+        floor = spawnMesh("Floor", "", "", 0.0, -1.0, 0.0);
+        attachBoxCollider3D(floor, 30.0, 2.0, 30.0, false);
+
+        wall = spawnMesh("Wall", "", "", 1.5, 1.0, 0.0);
+        attachBoxCollider3D(wall, 1.0, 4.0, 40.0, false);
+
+        player = spawnCharacter3D("Player", "", "", "", 0.0, 4.0, -1.0);
+        attachSphereCollider3D(player, 0.5, false);
+
+        Character3DView controller = character3D(player);
+        controller.moveSpeed = 4.0;
+        controller.jumpSpeed = 6.5;
+        controller.groundAcceleration = 50.0;
+        controller.airAcceleration = 20.0;
+        controller.airControl = 0.6;
+        controller.groundFriction = 30.0;
+        controller.groundSnapDistance = 0.25;
+        controller.maxSlopeAngle = 60.0;
+    }
+}
+
+Void main() {
+    ControllerScene scene = ControllerScene();
+    scene.load();
+
+    Int i = 0;
+    while (i < 240) {
+        scene.simulateFixedStep(scene.fixedDeltaTime);
+        i = i + 1;
+    }
+
+    Character3DView controller = scene.character3D(scene.player);
+    Body3DView body = scene.body3D(scene.player);
+
+    String landed = "landed=";
+    landed = landed + controller.isGrounded;
+    println(landed);
+
+    String landed_y = "landed_y_ok=";
+    landed_y = landed_y + (controller.y >= 0.35);
+    println(landed_y);
+
+    controller.moveInputX = 1.0;
+    controller.moveInputZ = 1.0;
+
+    i = 0;
+    while (i < 120) {
+        scene.simulateFixedStep(scene.fixedDeltaTime);
+        i = i + 1;
+    }
+
+    String wall_blocked = "wall_blocked=";
+    wall_blocked = wall_blocked + (controller.x <= 0.6);
+    println(wall_blocked);
+
+    String slide_forward = "slide_forward=";
+    slide_forward = slide_forward + (controller.z > 1.5);
+    println(slide_forward);
+
+    controller.moveInputX = 0.0;
+    controller.moveInputY = 0.0;
+    controller.moveInputZ = 0.0;
+
+    scene.jumpCharacter3D(scene.player);
+    scene.simulateFixedStep(scene.fixedDeltaTime);
+
+    String jump_air = "jump_air=";
+    jump_air = jump_air + ((!controller.isGrounded) && (body.vy > 0.0));
+    println(jump_air);
+
+    i = 0;
+    while (i < 240) {
+        scene.simulateFixedStep(scene.fixedDeltaTime);
+        i = i + 1;
+    }
+
+    String relanded = "relanded=";
+    relanded = relanded + (controller.isGrounded && body.isGrounded);
+    println(relanded);
+}

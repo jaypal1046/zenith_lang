@@ -1,0 +1,578 @@
+import std.io;
+
+class Scene3DProbe() implements Scene {
+    EntityId ship;
+    EntityId camera;
+    EntityId marker;
+    EntityId engineAudio;
+    EntityId listener;
+    EntityId beaconLight;
+    EntityId sunLight;
+    String shipMaterial = "";
+    Int inspectCount = 0;
+    String inspectTarget = "";
+    String displayNameEvent = "";
+    String surfaceModeEvent = "";
+    String previewEvent = "";
+    String tintEvent = "";
+    Bool glowEvent = false;
+    Float roughnessEvent = 0.0;
+
+    Void onLoad() {
+        name = "Scene3DProbe";
+        clearColor = "teal";
+        fixedDeltaTime = 0.05;
+        autoRenderWorld2D = false;
+        drawEntityNames = false;
+
+        MeshHandleView ship_mesh_asset = loadMesh("assets/ship.glb");
+        ShaderHandleView ship_shader_asset = loadShader("assets/ship.shader");
+        MaterialHandleView ship_material_asset = loadMaterial("assets/ship.mat", "assets/ship.shader");
+        AudioHandleView engine_clip_asset = loadAudio("assets/engine.wav", true);
+
+        ship = spawnCharacter3DHandle("Ship", ship_mesh_asset, ship_shader_asset, ship_material_asset, 3.0, 1.5, -7.0);
+        camera = spawnCamera3D("Camera3D", 0.0, 2.5, 6.0, 70.0, true);
+        engineAudio = spawnAudioSource3DHandle("EngineAudio", engine_clip_asset, 3.0, 1.5, -7.0, true);
+        listener = spawnAudioListener3D("Listener3D", 0.0, 2.5, 6.0, true);
+        beaconLight = spawnPointLight3D("BeaconLight", 3.0, 2.0, -6.0, "#44ccff", 1.5, 16.0);
+        sunLight = spawnDirectionalLight3D("SunLight", 0.0, 6.0, 0.0, -0.1, -1.0, 0.2, "#ffeeaa", 1.1, true);
+        marker = createEntity("Marker");
+        setEntityTag(ship, "hero3d");
+        setParent(marker, ship);
+        setParent(engineAudio, ship);
+        setParent(listener, camera);
+        setParent(beaconLight, ship);
+
+        Transform3DView ship_transform = transform3D(ship);
+        ship_transform.rotationY = 0.3;
+        ship_transform.scaleZ = 1.5;
+
+        Transform3DView marker_transform = transform3D(marker);
+        marker_transform.x = 3.4;
+        marker_transform.y = 1.5;
+        marker_transform.z = -7.3;
+
+        Body3DView ship_body = body3D(ship);
+        ship_body.mass = 5.0;
+        ship_body.vx = 6.0;
+        ship_body.vy = 0.0;
+        ship_body.vz = -2.0;
+
+        attachSphereCollider3D(ship, 1.4, false);
+        attachBoxCollider3D(marker, 2.2, 1.6, 2.5, true);
+
+        SphereCollider3DView ship_hull = sphereCollider3D(ship);
+        ship_hull.offsetZ = 0.1;
+
+        BoxCollider3DView marker_trigger = boxCollider3D(marker);
+        marker_trigger.offsetX = 0.2;
+        marker_trigger.depth = 2.5;
+
+        Character3DView ship_character = character3D(ship);
+        ship_character.moveSpeed = 9.0;
+        ship_character.turnSpeed = 2.5;
+        ship_character.isGrounded = true;
+        ship_character.useGravity = false;
+
+        AudioSource3DView engine_audio = audioSource3D(engineAudio);
+        engine_audio.volume = 0.7;
+        engine_audio.loop = true;
+        engine_audio.minDistance = 2.0;
+        engine_audio.maxDistance = 30.0;
+
+        AudioListener3DView main_listener = audioListener3D(listener);
+        main_listener.gain = 0.9;
+
+        PointLight3DView beacon_light = pointLight3D(beaconLight);
+        beacon_light.range = 18.0;
+        beacon_light.enabled = true;
+
+        DirectionalLight3DView sun_light = directionalLight3D(sunLight);
+        sun_light.directionX = -0.15;
+        sun_light.castShadows = true;
+
+        Camera3DView main_camera = camera3D(camera);
+        main_camera.nearClip = 0.2;
+        main_camera.viewportHeight = 0.75;
+
+        shipMaterial = ship_material_asset.path;
+        defineMaterialText(shipMaterial, "displayName", "Display Name", "Ship Commander");
+        defineMaterialRadio(shipMaterial, "surfaceMode", "Surface Mode", "opaque,transparent,wireframe", "opaque");
+        defineMaterialImage(shipMaterial, "preview", "Preview", "assets/ship_preview.png");
+        defineMaterialButton(shipMaterial, "inspect", "Inspect", "inspectShip");
+        defineMaterialColor(shipMaterial, "tint", "Tint", "#44ccff");
+        defineMaterialToggle(shipMaterial, "glow", "Glow", true);
+        defineMaterialNumber(shipMaterial, "roughness", "Roughness", 0.4);
+
+        MaterialPropertyView display_property = materialProperty(shipMaterial, "displayName");
+        display_property.stringValue = "Flagship";
+        display_property.callback = "applyDisplayName";
+
+        MaterialPropertyView surface_property = materialProperty(shipMaterial, "surfaceMode");
+        surface_property.stringValue = "transparent";
+        surface_property.options = "opaque,transparent,wireframe";
+        surface_property.callback = "applySurfaceMode";
+
+        MaterialPropertyView preview_property = materialProperty(shipMaterial, "preview");
+        preview_property.callback = "applyPreview";
+
+        MaterialPropertyView tint_property = materialProperty(shipMaterial, "tint");
+        tint_property.stringValue = "#88ffee";
+        tint_property.callback = "applyTint";
+
+        MaterialPropertyView glow_property = materialProperty(shipMaterial, "glow");
+        glow_property.callback = "applyGlow";
+
+        MaterialPropertyView roughness_property = materialProperty(shipMaterial, "roughness");
+        roughness_property.callback = "applyRoughness";
+
+        Mesh3DView ship_mesh = mesh3D(ship);
+        ship_mesh.mesh = ship_mesh_asset;
+        ship_mesh.shader = ship_shader_asset;
+        ship_mesh.material = ship_material_asset;
+        ship_mesh.castShadows = false;
+    }
+
+    Void inspectShip() {
+        inspectCount = inspectCount + 1;
+        inspectTarget = entityName(ship);
+    }
+
+    Void applyDisplayName(value: String) {
+        displayNameEvent = value;
+    }
+
+    Void applySurfaceMode(value: String) {
+        surfaceModeEvent = value;
+    }
+
+    Void applyPreview(value: String) {
+        previewEvent = value;
+    }
+
+    Void applyTint(value: String) {
+        tintEvent = value;
+    }
+
+    Void applyGlow(value: Bool) {
+        glowEvent = value;
+    }
+
+    Void applyRoughness(value: Float) {
+        roughnessEvent = value;
+    }
+}
+
+Void main() {
+    Scene3DProbe scene = Scene3DProbe();
+    scene.load();
+
+    println(scene.name);
+    println(scene.clearColor);
+    println(scene.entityName(scene.findEntityByTag("hero3d")));
+    println(scene.mesh3D(scene.ship).meshPath);
+    println(scene.mesh3D(scene.ship).shaderPath);
+    println(scene.meshMaterialPath(scene.ship));
+    println(scene.materialTextProperty(scene.shipMaterial, "displayName"));
+    println(scene.materialRadioProperty(scene.shipMaterial, "surfaceMode"));
+    println(scene.materialImageProperty(scene.shipMaterial, "preview"));
+    println(scene.materialButtonProperty(scene.shipMaterial, "inspect"));
+    println(scene.materialColorProperty(scene.shipMaterial, "tint"));
+    println(scene.character3D(scene.ship).meshPath);
+    println(scene.audioSource3D(scene.engineAudio).clipPath);
+
+    MeshHandleView ship_mesh_handle = scene.mesh3D(scene.ship).mesh;
+    ShaderHandleView ship_shader_handle = scene.mesh3D(scene.ship).shader;
+    MaterialHandleView ship_material_handle = scene.mesh3D(scene.ship).material;
+    AudioHandleView engine_clip_handle = scene.audioSource3D(scene.engineAudio).clip;
+
+    String mesh_handle_id = "mesh_handle_id=";
+    mesh_handle_id = mesh_handle_id + ship_mesh_handle.id;
+    println(mesh_handle_id);
+
+    String mesh_handle_loaded = "mesh_handle_loaded=";
+    mesh_handle_loaded = mesh_handle_loaded + ship_mesh_handle.loaded;
+    println(mesh_handle_loaded);
+
+    String shader_handle_id = "shader_handle_id=";
+    shader_handle_id = shader_handle_id + ship_shader_handle.id;
+    println(shader_handle_id);
+
+    String material_handle_props = "material_handle_props=";
+    material_handle_props = material_handle_props + ship_material_handle.propertyCount;
+    println(material_handle_props);
+
+    String material_handle_shader = "material_handle_shader=";
+    material_handle_shader = material_handle_shader + ship_material_handle.shaderPath;
+    println(material_handle_shader);
+
+    String audio_handle_spatial = "audio_handle_spatial=";
+    audio_handle_spatial = audio_handle_spatial + engine_clip_handle.spatial;
+    println(audio_handle_spatial);
+
+    String listener_primary = "listener_primary=";
+    listener_primary = listener_primary + scene.audioListener3D(scene.listener).primary;
+    println(listener_primary);
+
+    String point_color = "point_color=";
+    point_color = point_color + scene.pointLight3D(scene.beaconLight).color;
+    println(point_color);
+
+    String children = "children=";
+    children = children + scene.childCount(scene.ship);
+    println(children);
+
+    String start_z = "start_z=";
+    start_z = start_z + scene.entityPositionZ(scene.ship);
+    println(start_z);
+
+    String primary = "camera_primary=";
+    primary = primary + scene.camera3D(scene.camera).primary;
+    println(primary);
+
+    scene.updateFrame(0.05);
+    scene.followPrimaryCamera3D(scene.ship, 1.0, 0.5, 8.0, 1.0);
+
+    String moved_x = "moved_x=";
+    moved_x = moved_x + scene.transform3D(scene.ship).x;
+    println(moved_x);
+
+    String moved_z = "moved_z=";
+    moved_z = moved_z + scene.transform3D(scene.ship).z;
+    println(moved_z);
+
+    String velocity_z = "vz=";
+    velocity_z = velocity_z + scene.body3D(scene.ship).vz;
+    println(velocity_z);
+
+    String gravity = "use_gravity=";
+    gravity = gravity + scene.character3D(scene.ship).useGravity;
+    println(gravity);
+
+    String fov = "fov=";
+    fov = fov + scene.camera3D(scene.camera).fov;
+    println(fov);
+
+    String near_clip = "near=";
+    near_clip = near_clip + scene.camera3D(scene.camera).nearClip;
+    println(near_clip);
+
+    String viewport = "viewport_h=";
+    viewport = viewport + scene.camera3D(scene.camera).viewportHeight;
+    println(viewport);
+
+    String camera_follow_x = "camera_follow_x=";
+    camera_follow_x = camera_follow_x + scene.camera3D(scene.camera).x;
+    println(camera_follow_x);
+
+    String camera_follow_y = "camera_follow_y=";
+    camera_follow_y = camera_follow_y + scene.camera3D(scene.camera).y;
+    println(camera_follow_y);
+
+    String camera_follow_z = "camera_follow_z=";
+    camera_follow_z = camera_follow_z + scene.camera3D(scene.camera).z;
+    println(camera_follow_z);
+
+    String material_count = "material_props=";
+    material_count = material_count + scene.materialPropertyCount(scene.shipMaterial);
+    println(material_count);
+
+    String has_preview = "has_preview=";
+    has_preview = has_preview + scene.materialHasProperty(scene.shipMaterial, "preview");
+    println(has_preview);
+
+    MaterialPropertyView surface_property = scene.materialProperty(scene.shipMaterial, "surfaceMode");
+    MaterialPropertyView first_property_view = scene.materialPropertyAt(scene.shipMaterial, 0);
+    MaterialPropertyView display_property = scene.materialProperty(scene.shipMaterial, "displayName");
+    MaterialPropertyView preview_property = scene.materialProperty(scene.shipMaterial, "preview");
+    MaterialPropertyView inspect_property = scene.materialProperty(scene.shipMaterial, "inspect");
+    MaterialPropertyView roughness_property = scene.materialProperty(scene.shipMaterial, "roughness");
+    MaterialPropertyView glow_property = scene.materialProperty(scene.shipMaterial, "glow");
+    MaterialPropertyView tint_property = scene.materialProperty(scene.shipMaterial, "tint");
+    MaterialPropertyOptionView first_surface_option = scene.materialPropertyOption(scene.shipMaterial, "surfaceMode", 0);
+    first_surface_option.label = "Opaque Mode";
+
+    String first_property = "property_0=";
+    first_property = first_property + first_property_view.name;
+    println(first_property);
+
+    String surface_kind = "surface_kind=";
+    surface_kind = surface_kind + surface_property.kind;
+    println(surface_kind);
+
+    String surface_label = "surface_label=";
+    surface_label = surface_label + surface_property.label;
+    println(surface_label);
+
+    String surface_options = "surface_options=";
+    surface_options = surface_options + surface_property.options;
+    println(surface_options);
+
+    String surface_exists = "surface_exists=";
+    surface_exists = surface_exists + surface_property.exists;
+    println(surface_exists);
+
+    String surface_value = "surface_value=";
+    surface_value = surface_value + surface_property.stringValue;
+    println(surface_value);
+
+    String surface_callback = "surface_callback=";
+    surface_callback = surface_callback + surface_property.callback;
+    println(surface_callback);
+
+    String surface_option_count = "surface_option_count=";
+    surface_option_count = surface_option_count + scene.materialPropertyOptionCount(scene.shipMaterial, "surfaceMode");
+    println(surface_option_count);
+
+    String surface_option_exists = "surface_option_exists=";
+    surface_option_exists = surface_option_exists + first_surface_option.exists;
+    println(surface_option_exists);
+
+    String surface_option_label = "surface_option_label=";
+    surface_option_label = surface_option_label + first_surface_option.label;
+    println(surface_option_label);
+
+    String surface_option_value = "surface_option_value=";
+    surface_option_value = surface_option_value + first_surface_option.value;
+    println(surface_option_value);
+
+    String display_notified = "display_notified=";
+    display_notified = display_notified + scene.notifyMaterialProperty(scene.shipMaterial, "displayName");
+    println(display_notified);
+
+    String display_event = "display_event=";
+    display_event = display_event + scene.displayNameEvent;
+    println(display_event);
+
+    String preview_notified = "preview_notified=";
+    preview_notified = preview_notified + scene.notifyMaterialProperty(scene.shipMaterial, "preview");
+    println(preview_notified);
+
+    String preview_event = "preview_event=";
+    preview_event = preview_event + scene.previewEvent;
+    println(preview_event);
+
+    String surface_notified = "surface_notified=";
+    surface_notified = surface_notified + scene.notifyMaterialProperty(scene.shipMaterial, "surfaceMode");
+    println(surface_notified);
+
+    String surface_event = "surface_event=";
+    surface_event = surface_event + scene.surfaceModeEvent;
+    println(surface_event);
+
+    String surface_notify_count = "surface_notify_count=";
+    surface_notify_count = surface_notify_count + surface_property.triggerCount;
+    println(surface_notify_count);
+
+    String tint_notified = "tint_notified=";
+    tint_notified = tint_notified + scene.notifyMaterialProperty(scene.shipMaterial, "tint");
+    println(tint_notified);
+
+    String tint_event = "tint_event=";
+    tint_event = tint_event + scene.tintEvent;
+    println(tint_event);
+
+    String glow_notified = "glow_notified=";
+    glow_notified = glow_notified + scene.notifyMaterialProperty(scene.shipMaterial, "glow");
+    println(glow_notified);
+
+    String glow_event = "glow_event=";
+    glow_event = glow_event + scene.glowEvent;
+    println(glow_event);
+
+    String roughness_notified = "roughness_notified=";
+    roughness_notified = roughness_notified + scene.notifyMaterialProperty(scene.shipMaterial, "roughness");
+    println(roughness_notified);
+
+    String roughness_event = "roughness_event=";
+    roughness_event = roughness_event + scene.roughnessEvent;
+    println(roughness_event);
+
+    String button_triggered = "button_triggered=";
+    button_triggered = button_triggered + scene.triggerMaterialButton(scene.shipMaterial, "inspect");
+    println(button_triggered);
+
+    String button_triggers = "button_triggers=";
+    button_triggers = button_triggers + scene.materialButtonTriggerCount(scene.shipMaterial, "inspect");
+    println(button_triggers);
+
+    String inspect_view_triggers = "inspect_view_triggers=";
+    inspect_view_triggers = inspect_view_triggers + inspect_property.triggerCount;
+    println(inspect_view_triggers);
+
+    String inspect_count = "inspect_count=";
+    inspect_count = inspect_count + scene.inspectCount;
+    println(inspect_count);
+
+    String inspect_target = "inspect_target=";
+    inspect_target = inspect_target + scene.inspectTarget;
+    println(inspect_target);
+
+    String variant_material = scene.cloneMaterial(scene.shipMaterial, "assets/ship_variant.mat");
+    MaterialPropertyView variant_tint = scene.materialProperty(variant_material, "tint");
+    variant_tint.stringValue = "#ffaa33";
+    scene.addMaterialPropertyOption(variant_material, "surfaceMode", "Ghost", "ghost");
+    MaterialPropertyOptionView variant_surface_option = scene.materialPropertyOption(variant_material, "surfaceMode", 3);
+
+    String variant_exists = "variant_exists=";
+    variant_exists = variant_exists + scene.materialExists(variant_material);
+    println(variant_exists);
+
+    String variant_shader = "variant_shader=";
+    variant_shader = variant_shader + scene.materialShaderPath(variant_material);
+    println(variant_shader);
+
+    String variant_color = "variant_color=";
+    variant_color = variant_color + variant_tint.stringValue;
+    println(variant_color);
+
+    String variant_option_count = "variant_option_count=";
+    variant_option_count = variant_option_count + scene.materialPropertyOptionCount(variant_material, "surfaceMode");
+    println(variant_option_count);
+
+    String variant_option_label = "variant_option_label=";
+    variant_option_label = variant_option_label + variant_surface_option.label;
+    println(variant_option_label);
+
+    String removed_variant_option = "removed_variant_option=";
+    removed_variant_option = removed_variant_option + scene.removeMaterialPropertyOption(variant_material, "surfaceMode", 3);
+    println(removed_variant_option);
+
+    String variant_option_count_after_remove = "variant_option_count_after_remove=";
+    variant_option_count_after_remove = variant_option_count_after_remove + scene.materialPropertyOptionCount(variant_material, "surfaceMode");
+    println(variant_option_count_after_remove);
+
+    String cleared_variant_options = "cleared_variant_options=";
+    cleared_variant_options = cleared_variant_options + scene.clearMaterialPropertyOptions(variant_material, "surfaceMode");
+    println(cleared_variant_options);
+
+    String variant_option_count_after_clear = "variant_option_count_after_clear=";
+    variant_option_count_after_clear = variant_option_count_after_clear + scene.materialPropertyOptionCount(variant_material, "surfaceMode");
+    println(variant_option_count_after_clear);
+
+    String scratch_material = scene.createMaterial("assets/ship_scratch.mat", "");
+
+    String copied_props = "copied_props=";
+    copied_props = copied_props + scene.copyMaterialProperties(scene.shipMaterial, scratch_material);
+    println(copied_props);
+
+    String scratch_has_inspect = "scratch_has_inspect=";
+    scratch_has_inspect = scratch_has_inspect + scene.materialHasProperty(scratch_material, "inspect");
+    println(scratch_has_inspect);
+
+    String removed_inspect = "removed_inspect=";
+    removed_inspect = removed_inspect + scene.removeMaterialProperty(scratch_material, "inspect");
+    println(removed_inspect);
+
+    String scratch_has_inspect_after = "scratch_has_inspect_after=";
+    scratch_has_inspect_after = scratch_has_inspect_after + scene.materialHasProperty(scratch_material, "inspect");
+    println(scratch_has_inspect_after);
+
+    String cleared_props = "cleared_props=";
+    cleared_props = cleared_props + scene.clearMaterialProperties(scratch_material);
+    println(cleared_props);
+
+    String scratch_props_after_clear = "scratch_props_after_clear=";
+    scratch_props_after_clear = scratch_props_after_clear + scene.materialPropertyCount(scratch_material);
+    println(scratch_props_after_clear);
+
+    String roughness = "roughness=";
+    roughness = roughness + roughness_property.numberValue;
+    println(roughness);
+
+    String audio_min = "audio_min=";
+    audio_min = audio_min + scene.audioSource3D(scene.engineAudio).minDistance;
+    println(audio_min);
+
+    String audio_max = "audio_max=";
+    audio_max = audio_max + scene.audioSource3D(scene.engineAudio).maxDistance;
+    println(audio_max);
+
+    String listener_gain = "listener_gain=";
+    listener_gain = listener_gain + scene.audioListener3D(scene.listener).gain;
+    println(listener_gain);
+
+    String point_range = "point_range=";
+    point_range = point_range + scene.pointLight3D(scene.beaconLight).range;
+    println(point_range);
+
+    String ship_radius = "ship_radius=";
+    ship_radius = ship_radius + scene.sphereCollider3D(scene.ship).radius;
+    println(ship_radius);
+
+    String marker_depth = "marker_depth=";
+    marker_depth = marker_depth + scene.boxCollider3D(scene.marker).depth;
+    println(marker_depth);
+
+    String sun_dir_y = "sun_dir_y=";
+    sun_dir_y = sun_dir_y + scene.directionalLight3D(scene.sunLight).directionY;
+    println(sun_dir_y);
+
+    String overlap = "overlap3d=";
+    overlap = overlap + scene.overlaps3D(scene.ship, scene.marker);
+    println(overlap);
+
+    String glow = "glow=";
+    glow = glow + glow_property.boolValue;
+    println(glow);
+
+    String audio_playing = "audio_playing=";
+    audio_playing = audio_playing + scene.audioSource3D(scene.engineAudio).isPlaying;
+    println(audio_playing);
+
+    String move_speed = "move_speed=";
+    move_speed = move_speed + scene.character3D(scene.ship).moveSpeed;
+    println(move_speed);
+
+    String turn_speed = "turn_speed=";
+    turn_speed = turn_speed + scene.character3D(scene.ship).turnSpeed;
+    println(turn_speed);
+
+    String grounded = "grounded=";
+    grounded = grounded + scene.character3D(scene.ship).isGrounded;
+    println(grounded);
+
+    String shadows = "cast_shadows=";
+    shadows = shadows + scene.mesh3D(scene.ship).castShadows;
+    println(shadows);
+
+    scene.stopAudio(scene.engineAudio);
+
+    String audio_stopped = "audio_stopped=";
+    audio_stopped = audio_stopped + scene.audioSource3D(scene.engineAudio).isPlaying;
+    println(audio_stopped);
+
+    String listener_enabled = "listener_enabled=";
+    listener_enabled = listener_enabled + scene.audioListener3D(scene.listener).enabled;
+    println(listener_enabled);
+
+    String contains = "contains_center_3d=";
+    contains = contains + scene.containsPoint3D(scene.ship, scene.transform3D(scene.ship).x, scene.transform3D(scene.ship).y, scene.transform3D(scene.ship).z);
+    println(contains);
+
+    RaycastHit3DResult pick = scene.raycast3D(3.3, 1.5, 2.0, 0.0, 0.0, -1.0, 20.0);
+
+    String ray_hit = "ray_hit=";
+    ray_hit = ray_hit + pick.hit;
+    println(ray_hit);
+
+    String ray_name = "ray_name=";
+    ray_name = ray_name + scene.entityName(pick.entity);
+    println(ray_name);
+
+    String ray_distance = "ray_distance=";
+    ray_distance = ray_distance + pick.distance;
+    println(ray_distance);
+
+    String ray_point_z = "ray_point_z=";
+    ray_point_z = ray_point_z + pick.pointZ;
+    println(ray_point_z);
+
+    String ray_normal_z = "ray_normal_z=";
+    ray_normal_z = ray_normal_z + pick.normalZ;
+    println(ray_normal_z);
+
+    String sun_shadows = "sun_shadows=";
+    sun_shadows = sun_shadows + scene.directionalLight3D(scene.sunLight).castShadows;
+    println(sun_shadows);
+}

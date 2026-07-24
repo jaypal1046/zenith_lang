@@ -1,0 +1,277 @@
+import std.io;
+
+class PlayableSliceTestScene() implements Scene {
+    EntityId arena;
+    EntityId player;
+    EntityId camera;
+    EntityId exitGate;
+    EntityId battery;
+    EntityId wallNorth;
+    EntityId wallSouth;
+    EntityId wallWest;
+    EntityId wallEast;
+    EntityId blockA;
+    EntityId blockB;
+    EntityId humAudio;
+    EntityId pickupAudio;
+    EntityId listener;
+
+    Float startX = 8.0;
+    Float startY = 8.0;
+    Float playerSpeed = 18.0;
+    Float moveX = 0.0;
+    Float moveY = 0.0;
+    Float lookX = 1.0;
+    Float lookY = 0.0;
+    Bool batteryCollected = false;
+    Bool exitUnlocked = false;
+    Bool victory = false;
+
+    EntityId spawnWallEntity(name: String, x: Float, y: Float, w: Float, h: Float, color: String) {
+        EntityId wall = spawnSprite(name, x, y, w, h, color);
+        attachBoxCollider2D(wall, w, h, false);
+        setEntityLayerMask(wall, 1, 2);
+        sprite2D(wall).sortOrder = 2;
+        return wall;
+    }
+
+    Void configureArenaTiles() {
+        fillTilemap(arena, 1);
+        setTilemapPaletteColor(arena, 1, "#122033");
+        setTilemapPaletteColor(arena, 2, "#17344f");
+        setTilemapPaletteColor(arena, 3, "#214d24");
+        setTilemapCell(arena, 13, 1, 3);
+        setTilemapCell(arena, 14, 1, 3);
+    }
+
+    Void resetRound() {
+        Body2DView playerBody = body2D(player);
+        playerBody.x = startX;
+        playerBody.y = startY;
+        playerBody.vx = 0.0;
+        playerBody.vy = 0.0;
+        batteryCollected = false;
+        exitUnlocked = false;
+        victory = false;
+        moveX = 0.0;
+        moveY = 0.0;
+        lookX = 1.0;
+        lookY = 0.0;
+        sprite2D(exitGate).color = "#ffb347";
+        sprite2D(battery).visible = true;
+        circleCollider2D(battery).enabled = true;
+        stopAudio(humAudio);
+        stopAudio(pickupAudio);
+    }
+
+    Bool playerTouchesSolid() {
+        if (overlaps2D(player, wallNorth)) {
+            return true;
+        }
+        if (overlaps2D(player, wallSouth)) {
+            return true;
+        }
+        if (overlaps2D(player, wallWest)) {
+            return true;
+        }
+        if (overlaps2D(player, wallEast)) {
+            return true;
+        }
+        if (overlaps2D(player, blockA)) {
+            return true;
+        }
+        if (overlaps2D(player, blockB)) {
+            return true;
+        }
+        return false;
+    }
+
+    Void movePlayerBy(deltaX: Float, deltaY: Float) {
+        Body2DView playerBody = body2D(player);
+        Float originalX = playerBody.x;
+        Float originalY = playerBody.y;
+
+        if (deltaX != 0.0) {
+            playerBody.x = originalX + deltaX;
+            if (playerTouchesSolid()) {
+                playerBody.x = originalX;
+            }
+        }
+
+        if (deltaY != 0.0) {
+            playerBody.y = originalY + deltaY;
+            if (playerTouchesSolid()) {
+                playerBody.y = originalY;
+            }
+        }
+    }
+
+    Void updateObjectiveState() {
+        if (batteryCollected == false) {
+            if (overlaps2D(player, battery)) {
+                batteryCollected = true;
+                exitUnlocked = true;
+                sprite2D(battery).visible = false;
+                circleCollider2D(battery).enabled = false;
+                sprite2D(exitGate).color = "#7cff6b";
+                playAudio(pickupAudio);
+            }
+        }
+
+        if (overlaps2D(player, exitGate)) {
+            if (exitUnlocked) {
+                victory = true;
+                stopAudio(humAudio);
+            }
+        }
+    }
+
+    Void normalizeMoveInput() {
+        if (moveX != 0.0) {
+            if (moveY != 0.0) {
+                moveX = moveX * 0.7071;
+                moveY = moveY * 0.7071;
+            }
+        }
+    }
+
+    Void onLoad() {
+        clearColor = "#08121d";
+        fixedDeltaTime = 0.0166667;
+        autoRenderWorld2D = true;
+        autoSimulatePhysics = false;
+        debugDrawGrid2D = true;
+        debugDrawColliders2D = true;
+        debugDrawTransforms2D = true;
+        debugDrawCameraBounds2D = true;
+        debugDrawRuntimeStats = true;
+        debugOverlayEnabled = true;
+
+        TextureHandleView playerTexture = loadTexture("assets/game_sdk/player_runner.png");
+        TextureHandleView exitTexture = loadTexture("assets/game_sdk/exit_gate.png");
+        TextureHandleView batteryTexture = loadTexture("assets/game_sdk/battery_cell.png");
+        AudioHandleView humClip = loadAudio("assets/game_sdk/runner_loop.wav", false);
+        AudioHandleView pickupClip = loadAudio("assets/game_sdk/battery_pickup.wav", false);
+
+        createAssetBundle("playable_slice");
+        addAssetToBundle("playable_slice", playerTexture.path);
+        addAssetToBundle("playable_slice", exitTexture.path);
+        addAssetToBundle("playable_slice", batteryTexture.path);
+        addAssetToBundle("playable_slice", humClip.path);
+        addAssetToBundle("playable_slice", pickupClip.path);
+        setAssetMemoryBudget("texture", 524288);
+        setAssetMemoryBudget("audio", 262144);
+        setAssetHotReload(true);
+
+        arena = spawnTilemap2D("Arena", 0.0, 0.0, 16, 12, 4.0, 4.0, "#122033");
+        configureArenaTiles();
+
+        wallNorth = spawnWallEntity("WallNorth", 32.0, 2.0, 64.0, 4.0, "#314b63");
+        wallSouth = spawnWallEntity("WallSouth", 32.0, 46.0, 64.0, 4.0, "#314b63");
+        wallWest = spawnWallEntity("WallWest", 2.0, 24.0, 4.0, 48.0, "#314b63");
+        wallEast = spawnWallEntity("WallEast", 62.0, 24.0, 4.0, 48.0, "#314b63");
+        blockA = spawnWallEntity("BlockA", 28.0, 24.0, 8.0, 12.0, "#35506a");
+        blockB = spawnWallEntity("BlockB", 46.0, 32.0, 12.0, 8.0, "#35506a");
+
+        player = spawnCharacter2D("Runner", "", startX, startY, 4.0, 4.0, "#8ef9f3");
+        character2D(player).texture = playerTexture;
+        attachCapsuleCollider2D(player, 5.0, 1.5, false);
+        setEntityLayerMask(player, 2, 5);
+        body2D(player).gravityScale = 0.0;
+        body2D(player).friction = 0.0;
+
+        exitGate = spawnSprite("ExitGate", 56.0, 8.0, 6.0, 6.0, "#ffb347");
+        sprite2D(exitGate).texture = exitTexture;
+        attachBoxCollider2D(exitGate, 6.0, 6.0, true);
+        setEntityLayerMask(exitGate, 4, 2);
+
+        battery = spawnSprite("BatteryCell", 30.0, 8.0, 4.0, 4.0, "#ffe066");
+        sprite2D(battery).texture = batteryTexture;
+        attachCircleCollider2D(battery, 2.5, true);
+        setEntityLayerMask(battery, 4, 2);
+
+        camera = spawnCamera2D("ArenaCamera", startX, startY, 1.0, true);
+        listener = spawnAudioListener2D("ArenaListener", startX, startY, true);
+        humAudio = spawnAudioSource2D("RunnerHum", "", startX, startY, false);
+        pickupAudio = spawnAudioSource2D("PickupChime", "", startX, startY, false);
+        audioSource2D(humAudio).clip = humClip;
+        audioSource2D(pickupAudio).clip = pickupClip;
+
+        resetRound();
+    }
+
+    Void onFixedUpdate(dt: Float) {
+        normalizeMoveInput();
+
+        Body2DView playerBody = body2D(player);
+        Float desiredVx = 0.0;
+        Float desiredVy = 0.0;
+
+        if (victory == false) {
+            desiredVx = moveX * playerSpeed;
+            desiredVy = moveY * playerSpeed;
+        }
+
+        playerBody.vx = desiredVx;
+        playerBody.vy = desiredVy;
+
+        if (desiredVx != 0.0) {
+            playAudio(humAudio);
+            lookX = moveX;
+            lookY = moveY;
+        } else {
+            if (desiredVy != 0.0) {
+                playAudio(humAudio);
+                lookX = moveX;
+                lookY = moveY;
+            }
+        }
+
+        movePlayerBy(desiredVx * dt, 0.0);
+        movePlayerBy(0.0, desiredVy * dt);
+        updateObjectiveState();
+        followPrimaryCamera2D(player, 0.0, 0.0, 0.18);
+    }
+}
+
+Void main() {
+    PlayableSliceTestScene scene = PlayableSliceTestScene();
+    scene.load();
+
+    Int i = 0;
+    scene.moveX = -1.0;
+    while (i < 40) {
+        scene.simulateFixedStep(scene.fixedDeltaTime);
+        i = i + 1;
+    }
+
+    Body2DView playerBody = scene.body2D(scene.player);
+    println("wall_block=" + (playerBody.x >= 5.0));
+
+    scene.moveX = 1.0;
+    scene.moveY = 0.0;
+    i = 0;
+    while (i < 90) {
+        scene.simulateFixedStep(scene.fixedDeltaTime);
+        i = i + 1;
+    }
+
+    println("battery=" + scene.batteryCollected);
+    println("unlocked=" + scene.exitUnlocked);
+
+    i = 0;
+    while (i < 90) {
+        scene.simulateFixedStep(scene.fixedDeltaTime);
+        i = i + 1;
+    }
+
+    println("victory=" + scene.victory);
+    println("camera_follow=" + (scene.camera2D(scene.camera).x > 20.0));
+    println("bundle_count=" + scene.assetBundleAssetCount("playable_slice"));
+    println("hot_reload=" + scene.assetHotReloadEnabled());
+    println("debug_overlay=" + scene.debugOverlayEnabled);
+
+    playerBody = scene.body2D(scene.player);
+    RaycastHit2DResult hit = scene.raycast2DMask(playerBody.x, playerBody.y, 1.0, 0.0, 10.0, 1);
+    println("ray_hit=" + hit.hit);
+}

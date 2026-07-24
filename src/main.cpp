@@ -32,6 +32,7 @@
 #include "../include/backend/codegen.h"
 #include "../include/backend/js_codegen.h"
 #include "../include/backend/wasm_codegen.h"
+#include "../include/zenith/game/zenith_resource.h"
 
 // ── Platform / networking headers (AFTER Zenith headers) ─────────────────────
 #ifdef _WIN32
@@ -651,20 +652,24 @@ int runCreateProject(const std::string& project_name, const std::string& templat
     
     std::cout << "Creating new Zenith project (" << template_type << ") in: " << project_path.string() << "\n";
     
-    if (!commandExists("cargo")) {
-        if (!installRust()) {
-            std::cerr << "Warning: Could not automatically setup Rust (cargo). Some features may not work.\n";
+    if (template_type == "app") {
+        if (!commandExists("cargo")) {
+            if (!installRust()) {
+                std::cerr << "Warning: Could not automatically setup Rust (cargo). Some features may not work.\n";
+            }
+        } else {
+            std::cout << "   [OK] Rust (cargo) is already installed.\n";
+        }
+        
+        if (!commandExists("dart")) {
+            if (!installDart()) {
+                std::cerr << "Warning: Could not automatically setup Dart SDK. Some features may not work.\n";
+            }
+        } else {
+            std::cout << "   [OK] Dart SDK is already installed.\n";
         }
     } else {
-        std::cout << "   [OK] Rust (cargo) is already installed.\n";
-    }
-    
-    if (!commandExists("dart")) {
-        if (!installDart()) {
-            std::cerr << "Warning: Could not automatically setup Dart SDK. Some features may not work.\n";
-        }
-    } else {
-        std::cout << "   [OK] Dart SDK is already installed.\n";
+        std::cout << "   [OK] Skipping app SDK bootstrap for code-first " << template_type << " template.\n";
     }
     
     try {
@@ -682,6 +687,15 @@ int runCreateProject(const std::string& project_name, const std::string& templat
             fs::create_directories(project_path / "linux");
             fs::create_directories(project_path / "windows");
             fs::create_directories(project_path / "mac");
+        } else if (template_type == "game") {
+            fs::create_directories(project_path / "assets");
+            fs::create_directories(project_path / "assets" / "textures");
+            fs::create_directories(project_path / "assets" / "materials");
+            fs::create_directories(project_path / "assets" / "audio");
+            fs::create_directories(project_path / "assets" / "meshes");
+            fs::create_directories(project_path / "assets" / "shaders");
+            fs::create_directories(project_path / "desktop");
+            fs::create_directories(project_path / "tests");
         }
     } catch (const std::exception& e) {
         std::cerr << "Error: Could not create directories: " << e.what() << "\n";
@@ -2024,6 +2038,395 @@ echo ""
     system(chmod_cmd.c_str());
 #endif
     }
+    else if (template_type == "game") {
+        std::ofstream main_file(project_path / "lib" / "main.zen");
+        if (main_file.is_open()) {
+            main_file << R"raw(// Zenith Code-First Game Starter
+import std.io;
+
+class StarterScene() implements Scene {
+    EntityId camera;
+    EntityId player;
+    String playerMaterial = "";
+
+    Void onLoad() {
+        name = "StarterScene";
+        clearColor = "black";
+        fixedDeltaTime = 0.016;
+        maxFrameDelta = 0.05;
+        maxFixedStepsPerFrame = 6;
+        autoRenderWorld2D = true;
+        drawEntityNames = false;
+
+        debugOverlayEnabled = true;
+        minimalInspectorEnabled = true;
+        debugDrawColliders2D = true;
+        debugDrawTransforms2D = true;
+        debugDrawCameraBounds2D = true;
+        debugDrawRuntimeStats = true;
+        debugOverlayColor = "cyan";
+
+        camera = spawnCamera2D("Camera", 16.0, 9.0, 1.0, true);
+        player = spawnCharacter2D("Player", "assets/textures/player.png", 16.0, 9.0, 2.0, 2.0, "green");
+        setEntityTag(player, "hero");
+        attachCapsuleCollider2D(player, 1.8, 0.7, false);
+
+        Character2DView hero = character2D(player);
+        hero.moveSpeed = 7.0;
+        hero.jumpForce = 10.0;
+        hero.isGrounded = true;
+
+        playerMaterial = createMaterial("assets/materials/player.mat", "");
+        defineMaterialText(playerMaterial, "displayName", "Display Name", "Player");
+        defineMaterialRadio(playerMaterial, "mode", "Mode", "idle,run,jump", "idle");
+        defineMaterialImage(playerMaterial, "portrait", "Portrait", "assets/textures/player.png");
+        defineMaterialButton(playerMaterial, "focus", "Focus", "focusPlayer");
+        defineMaterialColor(playerMaterial, "tint", "Tint", "#33dd88");
+        defineMaterialToggle(playerMaterial, "ghost", "Ghost", false);
+        defineMaterialNumber(playerMaterial, "speed", "Speed", 7.0);
+
+        setMaterialPropertyCallback(playerMaterial, "displayName", "applyDisplayName");
+        setMaterialPropertyCallback(playerMaterial, "mode", "applyMode");
+        setMaterialPropertyCallback(playerMaterial, "speed", "applySpeed");
+
+        setMaterialTextProperty(playerMaterial, "displayName", "Hero");
+        setMaterialRadioProperty(playerMaterial, "mode", "idle");
+        setMaterialColorProperty(playerMaterial, "tint", "#33dd88");
+        setMaterialToggleProperty(playerMaterial, "ghost", false);
+        setMaterialNumberProperty(playerMaterial, "speed", 7.0);
+
+        inspectEntity(player);
+        inspectMaterial(playerMaterial);
+    }
+
+    Void applyDisplayName(value: String) {
+        setEntityName(player, value);
+    }
+
+    Void applyMode(value: String) {
+        if (value == "run") {
+            character2D(player).moveSpeed = 9.0;
+        }
+        if (value == "jump") {
+            character2D(player).jumpForce = 12.0;
+        }
+        if (value == "idle") {
+            character2D(player).moveSpeed = 7.0;
+        }
+    }
+
+    Void applySpeed(value: Float) {
+        character2D(player).moveSpeed = value;
+    }
+
+    Void focusPlayer() {
+        inspectEntity(player);
+        inspectMaterial(playerMaterial);
+    }
+
+    Void onFixedUpdate(dt: Float) {
+        followPrimaryCamera2D(player, 0.0, 0.0, 1.0);
+    }
+}
+
+Void main() {
+    StarterScene scene = StarterScene();
+    scene.run();
+}
+)raw";
+            main_file.close();
+            std::cout << "   [OK] Created 'lib/main.zen'\n";
+        } else {
+            std::cerr << "Error: Could not write lib/main.zen\n";
+            return 1;
+        }
+
+        std::string leaf_name = project_path.filename().string();
+        if (leaf_name == "." || leaf_name.empty()) {
+            leaf_name = "zenith_game";
+        }
+        std::ofstream yaml_file(project_path / "zenith.yaml");
+        if (yaml_file.is_open()) {
+            yaml_file << "name: " << leaf_name << "\n"
+                      << "version: 1.0.0\n"
+                      << "description: A new Zenith game project\n\n"
+                      << "dependencies:\n";
+            yaml_file.close();
+            std::cout << "   [OK] Created 'zenith.yaml'\n";
+        }
+
+        std::ofstream assets_readme(project_path / "assets" / "README.md");
+        if (assets_readme.is_open()) {
+            assets_readme << "# Assets\n\n"
+                          << "Keep runtime paths code-first and stable.\n\n"
+                          << "- textures/ for sprites and UI atlases\n"
+                          << "- materials/ for material metadata and property presets\n"
+                          << "- audio/ for clips and music\n"
+                          << "- meshes/ for 3D geometry\n"
+                          << "- shaders/ for render programs\n";
+            assets_readme.close();
+            std::cout << "   [OK] Created 'assets/README.md'\n";
+        }
+
+        std::ofstream desktop_bat(project_path / "desktop" / "build.bat");
+        if (desktop_bat.is_open()) {
+            desktop_bat << R"raw(@echo off
+setlocal
+
+echo.
+echo   +==================================================+
+echo   ^|          Zenith  *  Game Runner (Windows)        ^|
+echo   +==================================================+
+echo.
+
+set COMPILER=
+if exist "..\zenith.exe"    set COMPILER=..\zenith.exe
+if exist "..\..\zenith.exe" set COMPILER=..\..\zenith.exe
+if not defined COMPILER     set COMPILER=zenith
+echo   Using Zenith compiler: %COMPILER%
+echo.
+
+for /f "tokens=*" %%c in ('where g++ 2^>nul') do set GCC_PATH=%%c
+if defined GCC_PATH (
+    echo   [OK]    Toolchain: g++ - MinGW
+) else (
+    echo   [ERROR] g++ not found. Install MinGW and add it to PATH.
+    exit /b 1
+)
+
+echo.
+echo   [1/3]   Transpiling lib/main.zen -^> main_game.cpp ...
+%COMPILER% ../lib/main.zen -target cpp -o main_game.cpp
+if %errorlevel% neq 0 (
+    echo   [ERROR] Transpile failed.
+    exit /b %errorlevel%
+)
+echo   [OK]    C++ source ready
+
+echo   [2/3]   Compiling C++17 -^> desktop/main_game.exe ...
+g++ -O3 -std=c++17 main_game.cpp -I ../include -o main_game.exe -lwinhttp -lws2_32 -lopengl32 -lgdi32 -luser32
+if %errorlevel% neq 0 (
+    echo   [ERROR] Native compilation failed.
+    exit /b %errorlevel%
+)
+echo   [OK]    Build complete: desktop/main_game.exe
+
+echo   [3/3]   Launching Zenith Game ...
+echo.
+.\main_game.exe
+
+echo.
+echo   [OK] Game exited successfully
+echo.
+endlocal
+)raw";
+            desktop_bat.close();
+            std::cout << "   [OK] Created 'desktop/build.bat'\n";
+        }
+
+        std::ofstream desktop_sh(project_path / "desktop" / "build.sh");
+        if (desktop_sh.is_open()) {
+            desktop_sh << R"raw(#!/bin/bash
+GREEN='\033[0;92m'; RED='\033[0;91m'; BOLD='\033[1m'; DIM='\033[2m'; RESET='\033[0m'
+
+echo ""
+echo "  +================================================+"
+echo "  |          Zenith  *  Game Runner                |"
+echo "  +================================================+"
+echo ""
+
+if   [ -f "../zenith" ];    then COMPILER="../zenith"
+elif [ -f "../../zenith" ]; then COMPILER="../../zenith"
+else COMPILER="zenith"; fi
+echo -e "  ${DIM}Using Zenith compiler: $COMPILER${RESET}"
+echo ""
+
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    PLATFORM_FLAGS="-lpthread -framework CoreFoundation"
+    echo -e "  ${GREEN}[OK]${RESET}    Platform: macOS"
+else
+    PLATFORM_FLAGS="-lpthread"
+    echo -e "  ${GREEN}[OK]${RESET}    Platform: Linux"
+fi
+
+if ! command -v g++ &>/dev/null && [[ "$OSTYPE" != "darwin"* ]]; then
+    echo -e "  ${RED}[ERROR]${RESET} g++ not found."
+    exit 1
+fi
+if [[ "$OSTYPE" == "darwin"* ]] && ! command -v clang++ &>/dev/null; then
+    echo -e "  ${RED}[ERROR]${RESET} clang++ not found."
+    exit 1
+fi
+
+echo -e "  ${BOLD}[1/3]${RESET}   Transpiling lib/main.zen -> main_game.cpp ..."
+$COMPILER ../lib/main.zen -target cpp -o main_game.cpp
+if [ $? -ne 0 ]; then echo -e "  ${RED}[ERROR]${RESET} Transpile failed." && exit 1; fi
+echo -e "  ${GREEN}[OK]${RESET}    C++ source ready"
+
+echo -e "  ${BOLD}[2/3]${RESET}   Compiling C++17 -> desktop/main_game ..."
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    clang++ -O3 -std=c++17 main_game.cpp -I ../include -o main_game $PLATFORM_FLAGS
+else
+    g++ -O3 -std=c++17 main_game.cpp -I ../include -o main_game $PLATFORM_FLAGS
+fi
+if [ $? -ne 0 ]; then echo -e "  ${RED}[ERROR]${RESET} Compilation failed." && exit 1; fi
+echo -e "  ${GREEN}[OK]${RESET}    Build complete: desktop/main_game"
+
+echo -e "  ${BOLD}[3/3]${RESET}   Launching Zenith Game ..."
+./main_game
+)raw";
+            desktop_sh.close();
+            std::cout << "   [OK] Created 'desktop/build.sh'\n";
+        }
+
+        std::ofstream harness_cpp(project_path / "tests" / "gameplay_harness.cpp");
+        if (harness_cpp.is_open()) {
+            harness_cpp << R"raw(#include <iostream>
+#include "zenith/game/zenith_game.h"
+
+class ProductivityHarnessScene : public zenith::game::Scene {
+public:
+    zenith::game::EntityId camera;
+    zenith::game::EntityId player;
+    std::string materialPath;
+    int fixedSteps = 0;
+
+    void onLoad() override {
+        name = "ProductivityHarnessScene";
+        clearColor = "black";
+        autoRenderWorld2D = true;
+        drawEntityNames = false;
+        debugDrawRuntimeStats = true;
+        debugDrawTransforms2D = true;
+        debugOverlayColor = "cyan";
+
+        camera = spawnCamera2D("Camera", 12.0f, 8.0f, 1.0f, true);
+        player = spawnCharacter2D("Player", "assets/textures/player.png", 12.0f, 8.0f, 2.0f, 2.0f, "green");
+        attachCapsuleCollider2D(player, 1.8f, 0.7f, false);
+
+        materialPath = createMaterial("assets/materials/player.mat", "");
+        defineMaterialText(materialPath, "title", "Title", "Hero");
+        defineMaterialRadio(materialPath, "mode", "Mode", "idle,run,jump", "idle");
+        defineMaterialButton(materialPath, "focus", "Focus", "focusPlayer");
+
+        inspectEntity(player);
+        inspectMaterial(materialPath);
+    }
+
+    void onFixedUpdate(float) override {
+        fixedSteps += 1;
+        zenith::followPrimaryCamera2D(world, player, zenith::physics::Vec2(0.0f, 0.0f), 1.0f);
+    }
+};
+
+int main() {
+    ProductivityHarnessScene scene;
+    zenith::GameplayHarnessConfig config;
+    config.canvasWidth = 72;
+    config.canvasHeight = 24;
+    config.debugOverlayEnabled = true;
+    config.inspectorEnabled = true;
+
+    zenith::GameplayTestHarness harness(scene, config);
+    harness.load();
+    harness.renderFrame();
+
+    if (!harness.snapshotContains("Inspector")) {
+        std::cerr << "missing_inspector" << std::endl;
+        return 1;
+    }
+    if (!harness.snapshotContains("Player")) {
+        std::cerr << "missing_player" << std::endl;
+        return 1;
+    }
+    if (!harness.snapshotContains("title=Hero")) {
+        std::cerr << "missing_material_property" << std::endl;
+        return 1;
+    }
+    if (!harness.snapshotContains("frame:")) {
+        std::cerr << "missing_overlay" << std::endl;
+        return 1;
+    }
+
+    harness.stepFrame(0.05f);
+    if (scene.fixedSteps <= 0 || scene.totalFrames() <= 0) {
+        std::cerr << "missing_frame_progress" << std::endl;
+        return 1;
+    }
+
+    harness.setDebugOverlayEnabled(false);
+    harness.renderFrame();
+    if (harness.snapshotContains("frame:")) {
+        std::cerr << "overlay_toggle_failed" << std::endl;
+        return 1;
+    }
+
+    harness.setInspectorEnabled(false);
+    harness.renderFrame();
+    if (harness.snapshotContains("Inspector")) {
+        std::cerr << "inspector_toggle_failed" << std::endl;
+        return 1;
+    }
+
+    std::cout << "frames=" << scene.totalFrames() << std::endl;
+    std::cout << "fixed_steps=" << scene.fixedSteps << std::endl;
+    std::cout << "snapshot_ok=1" << std::endl;
+    return 0;
+}
+)raw";
+            harness_cpp.close();
+            std::cout << "   [OK] Created 'tests/gameplay_harness.cpp'\n";
+        }
+
+        std::ofstream harness_bat(project_path / "tests" / "run_gameplay_harness.bat");
+        if (harness_bat.is_open()) {
+            harness_bat << R"raw(@echo off
+setlocal
+
+echo.
+echo   +==================================================+
+echo   ^|      Zenith  *  Gameplay Harness Runner          ^|
+echo   +==================================================+
+echo.
+
+g++ -O3 -std=c++17 gameplay_harness.cpp -I ../include -o gameplay_harness.exe -lwinhttp -lws2_32 -lopengl32 -lgdi32 -luser32
+if %errorlevel% neq 0 (
+    echo   [ERROR] Harness build failed.
+    exit /b %errorlevel%
+)
+
+.\gameplay_harness.exe
+endlocal
+)raw";
+            harness_bat.close();
+            std::cout << "   [OK] Created 'tests/run_gameplay_harness.bat'\n";
+        }
+
+        std::ofstream harness_sh(project_path / "tests" / "run_gameplay_harness.sh");
+        if (harness_sh.is_open()) {
+            harness_sh << R"raw(#!/bin/bash
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    clang++ -O3 -std=c++17 gameplay_harness.cpp -I ../include -o gameplay_harness -lpthread -framework CoreFoundation
+else
+    g++ -O3 -std=c++17 gameplay_harness.cpp -I ../include -o gameplay_harness -lpthread
+fi
+if [ $? -ne 0 ]; then
+    echo "[ERROR] Harness build failed."
+    exit 1
+fi
+
+./gameplay_harness
+)raw";
+            harness_sh.close();
+            std::cout << "   [OK] Created 'tests/run_gameplay_harness.sh'\n";
+        }
+
+#ifndef _WIN32
+        std::string chmod_cmd = "chmod +x \"" + (project_path / "desktop" / "build.sh").string() + "\" \"" +
+                                 (project_path / "tests" / "run_gameplay_harness.sh").string() + "\" 2>/dev/null";
+        system(chmod_cmd.c_str());
+#endif
+    }
     else if (template_type == "package") {
         // Write package main.zen
         std::ofstream main_file(project_path / "lib" / "main.zen");
@@ -2096,6 +2499,22 @@ if %errorlevel% equ 0 (
         std::cout << "To compile and run your application:\n";
         std::cout << "  zenith run <desktop|windows|linux|mac|web|wasm|android|ios>\n";
         std::cout << "===================================================\n";
+    } else if (template_type == "game") {
+        std::cout << "   Zenith Game Bootstrapped Successfully!\n";
+        std::cout << "===================================================\n";
+        std::cout << "Project layout organized for code-first gameplay work:\n";
+        std::cout << "  assets/    - Stable runtime asset paths and material metadata\n";
+        std::cout << "  desktop/   - Fast desktop build-and-run scripts\n";
+        std::cout << "  include/   - Standard Zenith C++ helper headers\n";
+        std::cout << "  lib/       - Zenith source code directory\n";
+        std::cout << "    main.zen - Scene/game entrypoint with overlay + inspector\n";
+        std::cout << "  tests/     - Gameplay harness sample and runner scripts\n";
+        std::cout << "===================================================\n";
+        std::cout << "To iterate on the game quickly:\n";
+        std::cout << "  desktop/build.bat   (or desktop/build.sh)\n";
+        std::cout << "To run the gameplay harness:\n";
+        std::cout << "  tests/run_gameplay_harness.bat   (or .sh)\n";
+        std::cout << "===================================================\n";
     } else {
         std::cout << "   Zenith Package Bootstrapped Successfully!\n";
         std::cout << "===================================================\n";
@@ -2112,7 +2531,41 @@ if %errorlevel% equ 0 (
     return 0;
 }
 
-bool compileProject(const std::string& filename, const std::string& target, const std::string& out_filename_override = "") {
+static std::string normalizeBuildProfile(std::string profile) {
+    for (char& c : profile) {
+        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    }
+    if (profile == "debug" || profile == "release") {
+        return profile;
+    }
+    return "dev";
+}
+
+static std::string nativeCompilerFlagsForProfile(const std::string& profile) {
+    const std::string normalized = normalizeBuildProfile(profile);
+    if (normalized == "debug") {
+        return "-O0 -g -DZENITH_DEBUG=1";
+    }
+    if (normalized == "release") {
+        return "-O3 -DNDEBUG";
+    }
+    return "-O1 -g";
+}
+
+static std::string normalizeDevFlow(std::string flow, const std::string& target) {
+    for (char& c : flow) {
+        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    }
+    if (target != "cpp") {
+        return "transpile";
+    }
+    if (flow == "native" || flow == "transpile") {
+        return flow;
+    }
+    return "native";
+}
+
+bool compileProject(const std::string& filename, const std::string& target, const std::string& out_filename_override = "", const std::string& profile = "dev") {
     if (filename.length() < 5 || filename.substr(filename.length() - 4) != ".zen") {
         std::cerr << "Error: Input file must have .zen extension\n";
         return false;
@@ -2148,11 +2601,13 @@ bool compileProject(const std::string& filename, const std::string& target, cons
 
     std::cout << "3. Running Semantic Analysis...\n";
     SemanticAnalyzer analyzer;
+    analyzer.setSourcePath(filename);
     if (!analyzer.analyze(ast.get())) {
         return false;
     }
 
-    std::cout << "4. Running Code Generator (Target: " << target << ")...\n";
+    std::cout << "4. Running Code Generator (Target: " << target
+              << ", Profile: " << normalizeBuildProfile(profile) << ")...\n";
     std::string transpiled_code;
     std::string out_filename;
 
@@ -2327,10 +2782,297 @@ int runPlatformProject(const std::string& platform, const std::string& argv0) {
     return 0;
 }
 
+static std::string readCliOption(int argc, char* argv[], const std::string& longName, const std::string& shortName = "") {
+    for (int i = 1; i < argc; ++i) {
+        std::string arg = argv[i];
+        if ((arg == longName || (!shortName.empty() && arg == shortName)) && i + 1 < argc) {
+            return argv[i + 1];
+        }
+        const std::string prefix = longName + "=";
+        if (arg.rfind(prefix, 0) == 0) {
+            return arg.substr(prefix.size());
+        }
+    }
+    return "";
+}
+
+static bool hasCliFlag(int argc, char* argv[], const std::string& flag) {
+    for (int i = 1; i < argc; ++i) {
+        if (std::string(argv[i]) == flag) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static void printAssetCommandUsage() {
+    std::cerr << "Usage: zenith assets <command> [options]\n";
+    std::cerr << "  zenith assets import <source> [--out path] [--group name] [--bundle name] [--db path]\n";
+    std::cerr << "  zenith assets bake [--out path] [--db path]\n";
+    std::cerr << "  zenith assets list [--db path]\n";
+    std::cerr << "  zenith assets bundle create <name> [--db path]\n";
+    std::cerr << "  zenith assets bundle add <bundle> <asset> [--db path]\n";
+    std::cerr << "  zenith assets bundle list [name] [--db path]\n";
+    std::cerr << "  zenith assets budget set <type> <bytes> [--db path]\n";
+    std::cerr << "  zenith assets budget status [--db path]\n";
+    std::cerr << "  zenith assets reload <asset> [--db path]\n";
+    std::cerr << "  zenith assets reload --dirty [--db path]\n";
+    std::cerr << "  zenith assets poll [--db path]\n";
+}
+
+static int runAssetCommand(int argc, char* argv[]) {
+    namespace fs = std::filesystem;
+    using zenith::resource::AssetBundle;
+    using zenith::resource::AssetType;
+    using zenith::resource::ImportedAssetMetadata;
+    using zenith::resource::ResourceManager;
+    using zenith::resource::assetTypeName;
+
+    if (argc < 3) {
+        printAssetCommandUsage();
+        return 1;
+    }
+
+    const std::string dbPath = readCliOption(argc, argv, "--db");
+    const std::string assetDbPath = dbPath.empty() ? "zenith_assets.db" : dbPath;
+    ResourceManager& resources = ResourceManager::getInstance();
+    resources.clearAll();
+    if (fs::exists(assetDbPath) && !resources.loadAssetDatabase(assetDbPath)) {
+        std::cerr << "Error: Could not load asset database " << assetDbPath << "\n";
+        return 1;
+    }
+
+    auto persistDatabase = [&]() -> bool {
+        if (!resources.saveAssetDatabase(assetDbPath)) {
+            std::cerr << "Error: Could not save asset database " << assetDbPath << "\n";
+            return false;
+        }
+        return true;
+    };
+
+    const std::string command = argv[2];
+
+    if (command == "import") {
+        if (argc < 4) {
+            printAssetCommandUsage();
+            return 1;
+        }
+        const std::string sourcePath = argv[3];
+        const std::string outPath = readCliOption(argc, argv, "--out");
+        const std::string groupName = readCliOption(argc, argv, "--group");
+        const std::string bundleName = readCliOption(argc, argv, "--bundle");
+        const std::string imported = resources.importAsset(sourcePath, outPath, groupName, bundleName);
+        if (imported.empty()) {
+            std::cerr << "Error: Asset import failed for " << sourcePath << "\n";
+            return 1;
+        }
+        if (!persistDatabase()) {
+            return 1;
+        }
+        std::cout << "Imported asset: " << imported << "\n";
+        return 0;
+    }
+
+    if (command == "bake") {
+        std::string outputPath = readCliOption(argc, argv, "--out");
+        if (outputPath.empty()) {
+            outputPath = "zenith_assets.json";
+        }
+        if (!resources.bakeMetadata(outputPath)) {
+            std::cerr << "Error: Could not bake asset metadata to " << outputPath << "\n";
+            return 1;
+        }
+        if (!persistDatabase()) {
+            return 1;
+        }
+        std::cout << "Baked asset metadata: " << outputPath << "\n";
+        return 0;
+    }
+
+    if (command == "list") {
+        const std::vector<ImportedAssetMetadata> assets = resources.importedAssets();
+        if (assets.empty()) {
+            std::cout << "No imported assets.\n";
+        } else {
+            for (const ImportedAssetMetadata& asset : assets) {
+                std::cout
+                    << asset.importedPath
+                    << " [" << assetTypeName(asset.type) << "]"
+                    << " group=" << (asset.group.empty() ? "-" : asset.group)
+                    << " bytes=" << asset.estimatedMemoryBytes
+                    << " version=" << asset.version
+                    << " dirty=" << (asset.dirty ? "true" : "false")
+                    << "\n";
+            }
+        }
+
+        const std::vector<AssetBundle> bundles = resources.assetBundles();
+        if (!bundles.empty()) {
+            std::cout << "\nBundles:\n";
+            for (const AssetBundle& bundle : bundles) {
+                std::cout << "  " << bundle.name << " (" << bundle.assetPaths.size() << " assets)\n";
+            }
+        }
+        return 0;
+    }
+
+    if (command == "bundle") {
+        if (argc < 4) {
+            printAssetCommandUsage();
+            return 1;
+        }
+        const std::string bundleCommand = argv[3];
+        if (bundleCommand == "create") {
+            if (argc < 5 || std::string(argv[4]).rfind("-", 0) == 0) {
+                printAssetCommandUsage();
+                return 1;
+            }
+            if (!resources.createBundle(argv[4])) {
+                std::cerr << "Error: Could not create bundle " << argv[4] << "\n";
+                return 1;
+            }
+            if (!persistDatabase()) {
+                return 1;
+            }
+            std::cout << "Created bundle: " << argv[4] << "\n";
+            return 0;
+        }
+        if (bundleCommand == "add") {
+            if (argc < 6) {
+                printAssetCommandUsage();
+                return 1;
+            }
+            if (!resources.addAssetToBundle(argv[4], argv[5])) {
+                std::cerr << "Error: Could not add asset to bundle.\n";
+                return 1;
+            }
+            if (!persistDatabase()) {
+                return 1;
+            }
+            std::cout << "Added asset to bundle: " << argv[4] << " <- " << argv[5] << "\n";
+            return 0;
+        }
+        if (bundleCommand == "list") {
+            const std::string bundleName = (argc >= 5 && std::string(argv[4]).rfind("-", 0) != 0) ? std::string(argv[4]) : "";
+            if (!bundleName.empty()) {
+                const int count = resources.bundleAssetCount(bundleName);
+                std::cout << bundleName << " (" << count << " assets)\n";
+                for (int i = 0; i < count; ++i) {
+                    std::cout << "  " << resources.bundleAsset(bundleName, i) << "\n";
+                }
+                return 0;
+            }
+
+            const std::vector<AssetBundle> bundles = resources.assetBundles();
+            if (bundles.empty()) {
+                std::cout << "No bundles.\n";
+                return 0;
+            }
+            for (const AssetBundle& bundle : bundles) {
+                std::cout << bundle.name << " (" << bundle.assetPaths.size() << " assets)\n";
+                for (const std::string& assetPath : bundle.assetPaths) {
+                    std::cout << "  " << assetPath << "\n";
+                }
+            }
+            return 0;
+        }
+        printAssetCommandUsage();
+        return 1;
+    }
+
+    if (command == "budget") {
+        if (argc < 4) {
+            printAssetCommandUsage();
+            return 1;
+        }
+        const std::string budgetCommand = argv[3];
+        if (budgetCommand == "set") {
+            if (argc < 6) {
+                printAssetCommandUsage();
+                return 1;
+            }
+            long long parsedBytes = 0;
+            try {
+                parsedBytes = std::stoll(argv[5]);
+            } catch (...) {
+                std::cerr << "Error: Invalid budget value " << argv[5] << "\n";
+                return 1;
+            }
+            if (!resources.setMemoryBudgetByName(argv[4], parsedBytes <= 0 ? 0 : static_cast<size_t>(parsedBytes))) {
+                std::cerr << "Error: Unknown asset type " << argv[4] << "\n";
+                return 1;
+            }
+            if (!persistDatabase()) {
+                return 1;
+            }
+            std::cout << "Budget updated: " << argv[4] << " = " << (parsedBytes <= 0 ? 0 : parsedBytes) << "\n";
+            return 0;
+        }
+        if (budgetCommand == "status") {
+            const std::vector<AssetType> types = {
+                AssetType::Texture,
+                AssetType::Audio,
+                AssetType::Mesh,
+                AssetType::Shader,
+                AssetType::Material,
+                AssetType::Font,
+                AssetType::Particles
+            };
+            for (AssetType type : types) {
+                const std::string typeName = assetTypeName(type);
+                std::cout
+                    << typeName
+                    << " budget=" << resources.memoryBudgetByName(typeName)
+                    << " usage=" << resources.memoryUsageByName(typeName)
+                    << "\n";
+            }
+            return 0;
+        }
+        printAssetCommandUsage();
+        return 1;
+    }
+
+    if (command == "reload") {
+        if (hasCliFlag(argc, argv, "--dirty")) {
+            const int reloaded = resources.reloadDirtyAssets();
+            if (!persistDatabase()) {
+                return 1;
+            }
+            std::cout << "Reloaded dirty assets: " << reloaded << "\n";
+            return 0;
+        }
+        if (argc < 4) {
+            printAssetCommandUsage();
+            return 1;
+        }
+        if (!resources.reloadAsset(argv[3])) {
+            std::cerr << "Error: Could not reload asset " << argv[3] << "\n";
+            return 1;
+        }
+        if (!persistDatabase()) {
+            return 1;
+        }
+        std::cout << "Reloaded asset: " << argv[3] << "\n";
+        return 0;
+    }
+
+    if (command == "poll") {
+        const int dirty = resources.pollForDirtyAssets();
+        if (dirty > 0 && !persistDatabase()) {
+            return 1;
+        }
+        std::cout << "Dirty assets detected: " << dirty << "\n";
+        return 0;
+    }
+
+    printAssetCommandUsage();
+    return 1;
+}
+
 int main(int argc, char* argv[]) {
     if (argc >= 2 && std::string(argv[1]) == "create") {
         if (argc < 3) {
-            std::cerr << "Usage: zenith create <project_name|.> [--template=app|package]\n";
+            std::cerr << "Usage: zenith create <project_name|.> [--template=app|game|package]\n";
             return 1;
         }
         std::string project_name = argv[2];
@@ -2339,6 +3081,8 @@ int main(int argc, char* argv[]) {
             std::string arg = argv[i];
             if (arg == "--template=package" || arg == "package") {
                 template_type = "package";
+            } else if (arg == "--template=game" || arg == "game") {
+                template_type = "game";
             } else if (arg == "--template=app" || arg == "app") {
                 template_type = "app";
             }
@@ -2353,6 +3097,10 @@ int main(int argc, char* argv[]) {
         }
         std::string platform = argv[2];
         return runPlatformProject(platform, argv[0]);
+    }
+
+    if (argc >= 2 && std::string(argv[1]) == "assets") {
+        return runAssetCommand(argc, argv);
     }
 
     // LSP subcommand
@@ -3066,6 +3814,7 @@ int main(int argc, char* argv[]) {
                 if (!ast) { std::cout << "[Daemon] Parse error in " << changed_file << "\n"; continue; }
 
                 SemanticAnalyzer analyzer;
+                analyzer.setSourcePath(changed_file);
                 analyzer.analyze(ast.get());
                 std::cout << "[Daemon] ✓ Re-analyzed " << changed_file << "\n";
             }
@@ -3513,6 +4262,7 @@ a{color:#818cf8;text-decoration:none;} a:hover{text-decoration:underline;}
             resolveImports(ast.get(), loaded_files, getDirectory(zen_path));
 
             SemanticAnalyzer analyzer;
+            analyzer.setSourcePath(zen_path);
             analyzer.analyze(ast.get());
 
             if (tgt == "wasm") {
@@ -3920,37 +4670,65 @@ a{color:#818cf8;text-decoration:none;} a:hover{text-decoration:underline;}
         return 0;
     }
 
-    // Watch subcommand
-    if (argc >= 2 && std::string(argv[1]) == "watch") {
+    // Watch / Dev subcommands
+    if (argc >= 2 && (std::string(argv[1]) == "watch" || std::string(argv[1]) == "dev")) {
+        const std::string loop_command = argv[1];
+        const std::string loop_label = loop_command == "dev" ? "Dev Loop" : "Watcher";
         if (argc < 3) {
-            std::cerr << "Usage: zenith watch <file.zen> [-target <cpp|web|wasm>]\n";
+            std::cerr << "Usage: zenith " << loop_command
+                      << " <file.zen> [-target <cpp|web|wasm>] [--profile debug|dev|release]"
+                      << " [--flow native|transpile] [--db path] [--asset-poll]\n";
             return 1;
         }
+
         std::string watch_file = argv[2];
-        std::string watch_target = "cpp";
-        for (int i = 3; i < argc; ++i) {
-            if (std::string(argv[i]) == "-target" && i + 1 < argc) {
-                watch_target = argv[i + 1];
-                i++;
-            }
-        }
+        std::string watch_target = readCliOption(argc, argv, "--target", "-target");
+        if (watch_target.empty()) watch_target = "cpp";
+        const std::string watch_profile = normalizeBuildProfile(readCliOption(argc, argv, "--profile"));
+        const std::string watch_flow = normalizeDevFlow(readCliOption(argc, argv, "--flow"), watch_target);
+        const std::string asset_db_path = [&]() {
+            std::string requested = readCliOption(argc, argv, "--db");
+            return requested.empty() ? "zenith_assets.db" : requested;
+        }();
+        const bool asset_poll_enabled = hasCliFlag(argc, argv, "--asset-poll") || !readCliOption(argc, argv, "--db").empty();
 
         namespace fs = std::filesystem;
         std::string watch_dir = fs::path(watch_file).parent_path().string();
         if (watch_dir.empty()) watch_dir = ".";
 
+        zenith::resource::ResourceManager* watched_resources = nullptr;
+        if (asset_poll_enabled) {
+            watched_resources = &zenith::resource::ResourceManager::getInstance();
+            watched_resources->clearAll();
+            if (fs::exists(asset_db_path) && !watched_resources->loadAssetDatabase(asset_db_path)) {
+                std::cerr << "[" << loop_label << "] Error: Could not load asset database " << asset_db_path << "\n";
+                return 1;
+            }
+        }
+
+        auto persist_asset_database = [&]() -> bool {
+            if (!asset_poll_enabled || watched_resources == nullptr) {
+                return true;
+            }
+            if (!watched_resources->saveAssetDatabase(asset_db_path)) {
+                std::cerr << "[" << loop_label << "] Error: Could not save asset database " << asset_db_path << "\n";
+                return false;
+            }
+            return true;
+        };
+
         std::unordered_map<std::string, fs::file_time_type> file_times;
-        
+
         auto scan_files = [&](const std::string& dir, std::unordered_map<std::string, fs::file_time_type>& times) -> bool {
             bool changed = false;
             std::vector<std::string> current_files;
-            
+
             try {
                 for (const auto& entry : fs::recursive_directory_iterator(dir)) {
                     if (entry.is_regular_file() && entry.path().extension() == ".zen") {
                         std::string path_str = entry.path().string();
                         current_files.push_back(path_str);
-                        
+
                         auto mtime = fs::last_write_time(entry);
                         if (times.find(path_str) == times.end()) {
                             times[path_str] = mtime;
@@ -3962,7 +4740,7 @@ a{color:#818cf8;text-decoration:none;} a:hover{text-decoration:underline;}
                     }
                 }
             } catch (...) {}
-            
+
             for (auto it = times.begin(); it != times.end(); ) {
                 if (std::find(current_files.begin(), current_files.end(), it->first) == current_files.end()) {
                     it = times.erase(it);
@@ -3974,73 +4752,84 @@ a{color:#818cf8;text-decoration:none;} a:hover{text-decoration:underline;}
             return changed;
         };
 
-        std::cout << "[Watcher] Monitoring files in " << watch_dir << " for modifications. Target: " << watch_target << "\n";
-        
-        // Initial scan
+        auto build_or_restart_native_cpp = [&](bool restart_existing) {
+            std::string out_cpp = watch_file.substr(0, watch_file.length() - 4) + ".cpp";
+            std::string out_exe = watch_file.substr(0, watch_file.length() - 4) + ".exe";
+#ifdef _WIN32
+            const std::string compile_cmd =
+                "g++ " + nativeCompilerFlagsForProfile(watch_profile) + " -std=c++17 " + out_cpp +
+                " -I include -o " + out_exe + " -lwinhttp";
+            const std::string kill_cmd =
+                "taskkill /F /IM " + fs::path(out_exe).filename().string() + " >nul 2>&1";
+            const std::string run_cmd = "start /B " + out_exe;
+#else
+            const std::string compile_cmd =
+                "g++ " + nativeCompilerFlagsForProfile(watch_profile) + " -std=c++17 " + out_cpp +
+                " -I include -o " + out_exe + " -lpthread";
+            const std::string kill_cmd =
+                "killall " + fs::path(out_exe).filename().string() + " >/dev/null 2>&1";
+            const std::string run_cmd = "./" + out_exe + " &";
+#endif
+
+            std::cout << "[" << loop_label << "] Building executable (" << watch_profile << "): " << compile_cmd << "\n";
+            const int build_res = system(compile_cmd.c_str());
+            if (build_res != 0) {
+                return;
+            }
+            if (restart_existing) {
+                std::cout << "[" << loop_label << "] Terminating running instance...\n";
+                system(kill_cmd.c_str());
+            }
+            std::cout << "[" << loop_label << "] Launching application...\n";
+            system(run_cmd.c_str());
+        };
+
+        std::cout << "[" << loop_label << "] Monitoring " << watch_dir
+                  << " | target=" << watch_target
+                  << " | profile=" << watch_profile
+                  << " | flow=" << watch_flow;
+        if (asset_poll_enabled) {
+            std::cout << " | asset-db=" << asset_db_path;
+        }
+        std::cout << "\n";
+
         scan_files(watch_dir, file_times);
 
-        // Run compile once first
-        std::cout << "[Watcher] Initial compilation...\n";
-        if (compileProject(watch_file, watch_target)) {
-            if (watch_target == "cpp") {
-                std::string out_cpp = watch_file.substr(0, watch_file.length() - 4) + ".cpp";
-                std::string out_exe = watch_file.substr(0, watch_file.length() - 4) + (fs::path(watch_file).extension() == "" ? "" : ".exe");
-                
-#ifdef _WIN32
-                std::string compile_cmd = "g++ -O3 -std=c++17 " + out_cpp + " -I include -o " + out_exe + " -lwinhttp";
-#else
-                std::string compile_cmd = "g++ -O3 -std=c++17 " + out_cpp + " -I include -o " + out_exe + " -lpthread";
-#endif
-                std::cout << "[Watcher] Building executable: " << compile_cmd << "\n";
-                int build_res = system(compile_cmd.c_str());
-                if (build_res == 0) {
-                    std::cout << "[Watcher] Starting application...\n";
-#ifdef _WIN32
-                    std::string run_cmd = "start /B " + out_exe;
-#else
-                    std::string run_cmd = "./" + out_exe + " &";
-#endif
-                    system(run_cmd.c_str());
-                }
+        std::cout << "[" << loop_label << "] Initial compilation...\n";
+        if (compileProject(watch_file, watch_target, "", watch_profile)) {
+            if (watch_target == "cpp" && watch_flow == "native") {
+                build_or_restart_native_cpp(false);
+            } else {
+                std::cout << "[" << loop_label << "] Transpile-only flow ready.\n";
             }
         }
 
         while (true) {
             std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+
+            if (asset_poll_enabled && watched_resources != nullptr) {
+                const int dirty_count = watched_resources->pollForDirtyAssets();
+                if (dirty_count > 0) {
+                    const int reloaded = watched_resources->reloadDirtyAssets();
+                    if (!persist_asset_database()) {
+                        return 1;
+                    }
+                    std::cout << "[" << loop_label << "] Reloaded dirty assets: " << reloaded << "\n";
+                }
+            }
+
             if (scan_files(watch_dir, file_times)) {
 #ifdef _WIN32
                 system("cls");
 #else
                 system("clear");
 #endif
-                std::cout << "[Watcher] Changes detected! Recompiling...\n";
-                if (compileProject(watch_file, watch_target)) {
-                    if (watch_target == "cpp") {
-                        std::string out_cpp = watch_file.substr(0, watch_file.length() - 4) + ".cpp";
-                        std::string out_exe = watch_file.substr(0, watch_file.length() - 4) + (fs::path(watch_file).extension() == "" ? "" : ".exe");
-                        
-#ifdef _WIN32
-                        std::string compile_cmd = "g++ -O3 -std=c++17 " + out_cpp + " -I include -o " + out_exe + " -lwinhttp";
-                        std::string kill_cmd = "taskkill /F /IM " + fs::path(out_exe).filename().string() + " >nul 2>&1";
-#else
-                        std::string compile_cmd = "g++ -O3 -std=c++17 " + out_cpp + " -I include -o " + out_exe + " -lpthread";
-                        std::string kill_cmd = "killall " + fs::path(out_exe).filename().string() + " >/dev/null 2>&1";
-#endif
-                        std::cout << "[Watcher] Rebuilding executable: " << compile_cmd << "\n";
-                        int build_res = system(compile_cmd.c_str());
-                        if (build_res == 0) {
-                            std::cout << "[Watcher] Terminating running instance...\n";
-                            system(kill_cmd.c_str());
-                            std::cout << "[Watcher] Restarting application...\n";
-#ifdef _WIN32
-                            std::string run_cmd = "start /B " + out_exe;
-#else
-                            std::string run_cmd = "./" + out_exe + " &";
-#endif
-                            system(run_cmd.c_str());
-                        }
+                std::cout << "[" << loop_label << "] Changes detected! Recompiling...\n";
+                if (compileProject(watch_file, watch_target, "", watch_profile)) {
+                    if (watch_target == "cpp" && watch_flow == "native") {
+                        build_or_restart_native_cpp(true);
                     } else {
-                        std::cout << "[Watcher] Target assets updated.\n";
+                        std::cout << "[" << loop_label << "] Target output refreshed.\n";
                     }
                 }
             }
@@ -4051,6 +4840,7 @@ a{color:#818cf8;text-decoration:none;} a:hover{text-decoration:underline;}
     std::string target = "cpp";
     std::string filename = "";
     std::string out_filename_override = "";
+    std::string profile = "dev";
     
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
@@ -4068,6 +4858,15 @@ a{color:#818cf8;text-decoration:none;} a:hover{text-decoration:underline;}
                 std::cerr << "Error: -o option requires a file path\n";
                 return 1;
             }
+        } else if (arg == "--profile") {
+            if (i + 1 < argc) {
+                profile = normalizeBuildProfile(argv[++i]);
+            } else {
+                std::cerr << "Error: --profile option requires a value (debug, dev, or release)\n";
+                return 1;
+            }
+        } else if (arg.rfind("--profile=", 0) == 0) {
+            profile = normalizeBuildProfile(arg.substr(std::string("--profile=").size()));
         } else {
             filename = arg;
         }
@@ -4076,9 +4875,9 @@ a{color:#818cf8;text-decoration:none;} a:hover{text-decoration:underline;}
     if (filename.empty()) {
         std::cerr << "\n\033[1m\033[96mZenith Compiler v0.2.0\033[0m\n\n";
         std::cerr << "\033[1mUSAGE:\033[0m\n";
-        std::cerr << "  zenith <file.zen> [-target cpp|web|wasm] [-o <output>]  Transpile a Zenith file\n\n";
+        std::cerr << "  zenith <file.zen> [-target cpp|web|wasm] [--profile debug|dev|release] [-o <output>]  Transpile a Zenith file\n\n";
         std::cerr << "\033[1mPROJECT:\033[0m\n";
-        std::cerr << "  zenith create <name|.>                Create a new Zenith project\n";
+        std::cerr << "  zenith create <name|.> [--template=app|game|package]  Create a new Zenith project\n";
         std::cerr << "  zenith run <desktop|web|wasm|android|ios>  Run the project\n";
         std::cerr << "  zenith format [-w] <file.zen>         Format a Zenith source file\n\n";
         std::cerr << "\033[1mSSR WEB SERVER:\033[0m\n";
@@ -4094,17 +4893,23 @@ a{color:#818cf8;text-decoration:none;} a:hover{text-decoration:underline;}
         std::cerr << "  zenith remove <package>               Uninstall a package\n";
         std::cerr << "  zenith publish                        Publish package instructions\n";
         std::cerr << "  zenith bridge <dart|rust> <pkg> \"<specs>\" Scaffold binary FFI packages\n\n";
+        std::cerr << "\033[1mASSET PIPELINE:\033[0m\n";
+        std::cerr << "  zenith assets import <source>        Import/bake asset metadata into a db\n";
+        std::cerr << "  zenith assets list                   Inspect imported assets and bundles\n";
+        std::cerr << "  zenith assets budget status          Show per-type memory budgets and usage\n";
+        std::cerr << "  zenith assets reload --dirty         Reload dirty assets from the asset db\n\n";
         std::cerr << "\033[1mDEVELOPER TOOLS:\033[0m\n";
         std::cerr << "  zenith lsp                            Start LSP server (stdio)\n";
         std::cerr << "  zenith daemon start [-d dir]          Start compiler daemon\n";
         std::cerr << "  zenith daemon stop                    Stop compiler daemon\n";
         std::cerr << "  zenith daemon status                  Show daemon status + log\n";
-        std::cerr << "  zenith watch <file.zen> [-target ..]  Hot-reload watch mode\n\n";
+        std::cerr << "  zenith watch <file.zen> [-target ..] [--profile ..] [--flow native|transpile] [--db path] [--asset-poll]\n";
+        std::cerr << "  zenith dev <file.zen> [-target ..] [--profile ..] [--flow native|transpile] [--db path] [--asset-poll]\n\n";
 
         return 1;
     }
 
-    if (!compileProject(filename, target, out_filename_override)) {
+    if (!compileProject(filename, target, out_filename_override, profile)) {
         return 1;
     }
 

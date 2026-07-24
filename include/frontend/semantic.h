@@ -50,6 +50,8 @@ private:
     std::unordered_map<std::string, InterfaceDeclNode*> interfaces;
     std::unordered_map<std::string, FunctionNode*> functions;
     std::unordered_map<std::string, AgentOrchestrationNode*> orchestrations;
+    std::vector<std::unique_ptr<InterfaceDeclNode>> builtin_interfaces;
+    std::string source_path;
 
     void error(const std::string& msg, ASTNode* node = nullptr) {
         std::cerr << "[Semantic Error]";
@@ -81,6 +83,7 @@ public:
     SemanticAnalyzer() : current_scope(new SymbolTable()) {}
     ~SemanticAnalyzer() { delete current_scope; }
 
+    void setSourcePath(std::string path) { source_path = std::move(path); }
     bool analyze(ProgramNode* program);
 };
 

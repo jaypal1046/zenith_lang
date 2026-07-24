@@ -1,0 +1,3195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zenith Web Application</title>
+    <meta name="description" content="Statically rendered Zenith web application.">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        body {
+            background: radial-gradient(circle at top right, #1a1a2e, #0a0a0f);
+            color: #e2e8f0;
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            box-sizing: border-box;
+        }
+        #zenith-ui-root {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 250px;
+            width: 100%;
+        }
+        .zenith-column {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        .zenith-row {
+            display: flex;
+            flex-direction: row;
+            gap: 16px;
+            align-items: center;
+            width: 100%;
+            flex-wrap: wrap;
+            box-sizing: border-box;
+        }
+        .zenith-text {
+            font-size: 1rem;
+            line-height: 1.5;
+        }
+        .zenith-input {
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid rgba(0, 242, 254, 0.3);
+            border-radius: 8px;
+            padding: 8px 12px;
+            color: #f8fafc;
+            font-family: inherit;
+            font-size: 0.95rem;
+            min-width: 0;
+            outline: none;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        .zenith-input:focus {
+            border-color: #00f2fe;
+            box-shadow: 0 0 10px rgba(0, 242, 254, 0.4);
+            background: rgba(15, 23, 42, 0.8);
+        }
+        .interactive-btn {
+            background: linear-gradient(135deg, #059669, #10b981);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .interactive-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+        }
+    </style>
+    <script>
+        // Helper to compute element path for focus preservation
+        function getElementPath(root, el) {
+            const path = [];
+            let current = el;
+            while (current && current !== root) {
+                let parent = current.parentNode;
+                if (!parent) break;
+                let index = Array.prototype.indexOf.call(parent.childNodes, current);
+                path.unshift(index);
+                current = parent;
+            }
+            return current === root ? path : null;
+        }
+
+        // Helper to find element by path for focus preservation
+        function getElementByPath(root, path) {
+            if (!path) return null;
+            let current = root;
+            for (let index of path) {
+                if (!current || !current.childNodes || index >= current.childNodes.length) {
+                    return null;
+                }
+                current = current.childNodes[index];
+            }
+            return current;
+        }
+
+        // Helper to copy JS string to WASM memory
+        function writeWasmString(instance, str) {
+            const encoder = new TextEncoder();
+            const bytes = encoder.encode(str + "\0");
+            const allocFn = instance.exports.alloc || instance.exports.malloc;
+            if (!allocFn) {
+                console.error("WASM module does not export alloc/malloc!");
+                return 0;
+            }
+            const ptr = allocFn(bytes.length);
+            const mem = new Uint8Array(instance.exports.memory.buffer);
+            mem.set(bytes, ptr);
+            return ptr;
+        }
+
+        // Helper to read JS string from WASM memory
+        function readWasmString(instance, ptr) {
+            if (ptr === 0) return "";
+            const mem = new Uint8Array(instance.exports.memory.buffer);
+            let end = ptr;
+            while (mem[end] !== 0) end++;
+            const bytes = mem.slice(ptr, end);
+            const decoder = new TextDecoder();
+            const str = decoder.decode(bytes);
+            const freeFn = instance.exports.dealloc || instance.exports.free;
+            if (freeFn) freeFn(ptr, bytes.length + 1);
+            return str;
+        }
+
+        // Generic wrapper for WASM functions taking/returning strings
+        function callWasmStringToString(instance, fnName, ...args) {
+            const fn = instance.exports[fnName];
+            if (!fn) {
+                console.error('WASM function not found: ' + fnName);
+                return "";
+            }
+            const ptrs = args.map(arg => typeof arg === 'string' ? writeWasmString(instance, arg) : arg);
+            const retPtr = fn(...ptrs);
+            const result = readWasmString(instance, retPtr);
+            const freeFn = instance.exports.dealloc || instance.exports.free;
+            if (freeFn) {
+                ptrs.forEach((ptr, i) => {
+                    if (typeof args[i] === 'string') {
+                        freeFn(ptr, new TextEncoder().encode(args[i]).length + 1);
+                    }
+                });
+            }
+            return result;
+        }
+
+        const wasmPromises = [];
+
+        async function loadRawWasm(url, exportsToGlobal) {
+            try {
+                const response = await fetch(url);
+                const bytes = await response.arrayBuffer();
+                const results = await WebAssembly.instantiate(bytes, { env: {
+                    abort: () => { console.error('abort called'); }
+                }});
+                const instance = results.instance;
+                for (const fnName of exportsToGlobal) {
+                    window[fnName] = function(...args) {
+                        return callWasmStringToString(instance, fnName, ...args);
+                    };
+                }
+                console.log('[WASM] Raw WASM module loaded from ' + url);
+            } catch (err) {
+                console.error('[WASM Error] Failed to load ' + url + ': ' + err);
+            }
+        }
+
+        async function loadDartWasm(wasmUrl, mjsUrl, exportsToGlobal) {
+            try {
+                const module = await import(mjsUrl);
+                const dartInstance = await module.instantiate(fetch(wasmUrl));
+                for (const fnName of exportsToGlobal) {
+                    if (dartInstance[fnName]) {
+                        window[fnName] = dartInstance[fnName];
+                    } else if (dartInstance.exports && dartInstance.exports[fnName]) {
+                        window[fnName] = dartInstance.exports[fnName];
+                    } else {
+                        window[fnName] = dartInstance[fnName];
+                    }
+                }
+                console.log('[WASM] Dart WASM module loaded from ' + wasmUrl);
+            } catch (err) {
+                console.warn('[WASM Warning] Failed to load Dart WASM via JS module, trying raw loader: ' + err);
+                await loadRawWasm(wasmUrl, exportsToGlobal);
+            }
+        }
+
+    </script>
+</head>
+<body>
+    <div id="zenith-ui-root"></div>
+
+    <script>
+        // Platform Detection Constants
+        const isAndroid = false;
+        const isIos = false;
+        const isMac = false;
+        const isLinux = false;
+        const isWeb = true;
+        const isWindows = false;
+
+        // Form Validation Helpers
+        function isEmail(val) {
+            const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            return re.test(val) ? "" : "Invalid email address";
+        }
+        function isRequired(val) {
+            return val && val.trim().length > 0 ? "" : "This field is required";
+        }
+
+        // Navigation Helper
+        function navigate(path) {
+            if (typeof window !== 'undefined' && window.zenithRouter) {
+                window.zenithRouter.navigate(path);
+            }
+        }
+
+        // SPA Client-Side Router
+        class ZenithRouter {
+            constructor() {
+                this.routes = {};
+                window.addEventListener('popstate', () => this.handleRoute());
+                document.addEventListener('click', (e) => {
+                    const link = e.target.closest('a');
+                    if (link && link.getAttribute('href') && link.getAttribute('href').startsWith('/')) {
+                        e.preventDefault();
+                        this.navigate(link.getAttribute('href'));
+                    }
+                });
+            }
+            register(path, componentClass) {
+                this.routes[path] = componentClass;
+            }
+            navigate(path) {
+                window.history.pushState({}, '', path);
+                this.handleRoute();
+            }
+            handleRoute() {
+                const path = window.location.pathname || '/';
+                const componentClass = this.routes[path] || this.routes['/'] || Object.values(this.routes)[0];
+                if (componentClass) {
+                    const inst = new componentClass();
+                    inst.render();
+                } else {
+                    console.warn('[Router] No routed class registered.');
+                }
+            }
+        }
+        window.zenithRouter = new ZenithRouter();
+
+        const zenith = {
+            runGameLoop: function(game) {
+                if (game.init) game.init();
+                const root = document.getElementById('zenith-ui-root');
+                root.innerHTML = '';
+                const canvasEl = document.createElement('canvas');
+                canvasEl.width = 640;
+                canvasEl.height = 480;
+                canvasEl.style.display = 'block';
+                canvasEl.style.margin = '20px auto';
+                canvasEl.style.background = '#000000';
+                canvasEl.style.borderRadius = '12px';
+                canvasEl.style.boxShadow = '0 10px 30px rgba(0, 0, 0, 0.5)';
+                root.appendChild(canvasEl);
+                const ctx = canvasEl.getContext('2d');
+                const canvas = {
+                    clear: function(color = 'black') {
+                        ctx.fillStyle = color;
+                        ctx.fillRect(0, 0, canvasEl.width, canvasEl.height);
+                    },
+                    drawRect: function(x, y, w, h, color = 'white') {
+                        ctx.fillStyle = color;
+                        ctx.fillRect(x * 8, y * 20, w * 8, h * 20);
+                    },
+                    drawCircle: function(cx, cy, r, color = 'white') {
+                        ctx.fillStyle = color;
+                        ctx.beginPath();
+                        ctx.arc(cx * 8, cy * 20, r * 14, 0, Math.PI * 2);
+                        ctx.fill();
+                    },
+                    drawText: function(text, x, y, color = 'white') {
+                        ctx.fillStyle = color;
+                        ctx.font = '16px monospace';
+                        ctx.fillText(text, x * 8, y * 20 + 12);
+                    },
+                    present: function() {}
+                };
+                window._zenith_keys = {};
+                window._zenith_justPressed = {};
+                window._zenith_justReleased = {};
+                window.addEventListener('keydown', (e) => {
+                    if (!window._zenith_keys[e.key]) window._zenith_justPressed[e.key] = true;
+                    window._zenith_keys[e.key] = true;
+                });
+                window.addEventListener('keyup', (e) => {
+                    if (window._zenith_keys[e.key]) window._zenith_justReleased[e.key] = true;
+                    window._zenith_keys[e.key] = false;
+                });
+                window._zenith_mouseX = 0;
+                window._zenith_mouseY = 0;
+                canvasEl.addEventListener('mousemove', (e) => {
+                    const rect = canvasEl.getBoundingClientRect();
+                    window._zenith_mouseX = (e.clientX - rect.left) / 8.0;
+                    window._zenith_mouseY = (e.clientY - rect.top) / 20.0;
+                });
+                let lastTime = performance.now();
+                const loop = (time) => {
+                    const dt = (time - lastTime) / 1000;
+                    lastTime = time;
+                    if (game.update) game.update(dt);
+                    canvas.clear('black');
+                    if (game.draw) game.draw(canvas);
+                    window._zenith_justPressed = {};
+                    window._zenith_justReleased = {};
+                    requestAnimationFrame(loop);
+                };
+                requestAnimationFrame(loop);
+            },
+            consoleElement: null,
+            print: function(msg) {
+                if (!this.consoleElement) this.consoleElement = document.getElementById('zenith-console');
+                if (this.consoleElement) {
+                    this.consoleElement.textContent += msg;
+                    this.consoleElement.scrollTop = this.consoleElement.scrollHeight;
+                }
+                console.log(msg);
+            },
+            println: function(msg) {
+                this.print(msg + '\n');
+            },
+            encodeImageToBase64: async function(pathOrUrl) {
+                if (!pathOrUrl) return "";
+                if (pathOrUrl.startsWith("data:")) return pathOrUrl.split(",")[1];
+                try {
+                    const response = await fetch(pathOrUrl);
+                    const blob = await response.blob();
+                    return new Promise((resolve) => {
+                        const reader = new FileReader();
+                        reader.onloadend = () => {
+                            const base64String = reader.result.split(',')[1];
+                            resolve(base64String);
+                        };
+                        reader.readAsDataURL(blob);
+                    });
+                } catch (e) {
+                    return "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+                }
+            },
+            llmPrompt: async function(url, promptStr, isStreaming, imagePath) {
+                let imageBase64 = "";
+                if (imagePath) {
+                    this.println('[Runtime] Loading and encoding image: ' + imagePath);
+                    imageBase64 = await this.encodeImageToBase64(imagePath);
+                }
+                this.println('\n[Runtime] LLMClient sending prompt to local backend (' + url + '): "' + promptStr + '"');
+                if (imageBase64) {
+                    this.println('[Runtime] Image attached (Base64 length: ' + imageBase64.length + ' chars)');
+                }
+                try {
+                    const response = await fetch(url + '/api/generate', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            model: 'llama3',
+                            prompt: promptStr,
+                            stream: !!isStreaming,
+                            images: imageBase64 ? [imageBase64] : undefined
+                        })
+                    });
+                    if (response.ok) {
+                        if (isStreaming) {
+                            const reader = response.body.getReader();
+                            const decoder = new TextDecoder("utf-8");
+                            let buffer = "";
+                            let fullResponse = "";
+                            while (true) {
+                                const { value, done } = await reader.read();
+                                if (done) break;
+                                buffer += decoder.decode(value, { stream: true });
+                                const lines = buffer.split("\n");
+                                buffer = lines.pop();
+                                for (const line of lines) {
+                                    if (line.trim() === "") continue;
+                                    try {
+                                        const json = JSON.parse(line);
+                                        if (json.response) {
+                                            fullResponse += json.response;
+                                            this.print(json.response);
+                                        }
+                                    } catch (err) {}
+                                }
+                            }
+                            if (buffer.trim() !== "") {
+                                try {
+                                    const json = JSON.parse(buffer);
+                                    if (json.response) {
+                                        fullResponse += json.response;
+                                        this.print(json.response);
+                                    }
+                                } catch (err) {}
+                            }
+                            this.println("");
+                            return fullResponse;
+                        } else {
+                            const json = await response.json();
+                            return json.response;
+                        }
+                    }
+                } catch(e) {}
+                this.println('[Runtime Warning] Ollama backend not reachable. Falling back to simulated completion.');
+                let simulated = "Simulated response for prompt: '" + promptStr + "'";
+                if (imageBase64) {
+                    simulated += " with image '" + imagePath + "'";
+                }
+                if (isStreaming) {
+                    const tokens = simulated.split(" ");
+                    let fullText = "";
+                    for (const tok of tokens) {
+                        this.print(tok + " ");
+                        await new Promise(r => setTimeout(r, 50));
+                        fullText += tok + " ";
+                    }
+                    this.println("");
+                    return fullText;
+                } else {
+                    return simulated;
+                }
+            }
+        };
+
+        async function httpGet(url) {
+            zenith.println('[Network] httpGet: Fetching ' + url + '...');
+            try {
+                const response = await fetch(url);
+                if (response.ok) {
+                    return await response.text();
+                }
+            } catch(e) {}
+            zenith.println('[Network Error/CORS] Using mock response for ' + url);
+            if (url.includes('users')) {
+                return JSON.stringify({users: ["Sam", "Jay", "Alex"], status: "active"});
+            }
+            return JSON.stringify({message: "Hello from Zenith JS mock endpoint!", status: "success"});
+        }
+
+        async function httpPost(url, body) {
+            zenith.println('[Network] httpPost: Posting to ' + url + '...');
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: body
+                });
+                if (response.ok) {
+                    return await response.text();
+                }
+            } catch(e) {}
+            zenith.println('[Network Error/CORS] Using mock response for POST ' + url);
+            return JSON.stringify({status: "posted", received: JSON.parse(body)});
+        }
+
+        const UI = {
+            print: function(msg) { zenith.print(Array.isArray(msg) ? msg.join('') : msg); },
+            println: function(msg) { zenith.println(Array.isArray(msg) ? msg.join('') : msg); },
+            applyStyles: function(el, attrs = {}) {
+                if (!attrs) return;
+                if (attrs.color) el.style.color = attrs.color;
+                if (attrs.backgroundColor) el.style.backgroundColor = attrs.backgroundColor;
+                if (attrs.padding) el.style.padding = typeof attrs.padding === 'number' ? attrs.padding + 'px' : attrs.padding;
+                if (attrs.margin) el.style.margin = typeof attrs.margin === 'number' ? attrs.margin + 'px' : attrs.margin;
+                if (attrs.width) el.style.width = typeof attrs.width === 'number' ? attrs.width + 'px' : attrs.width;
+                if (attrs.height) el.style.height = typeof attrs.height === 'number' ? attrs.height + 'px' : attrs.height;
+                if (attrs.fontWeight) el.style.fontWeight = attrs.fontWeight;
+                if (attrs.flexDirection) el.style.flexDirection = attrs.flexDirection;
+                if (attrs.justifyContent) el.style.justifyContent = attrs.justifyContent;
+                if (attrs.alignItems) el.style.alignItems = attrs.alignItems;
+                if (attrs.flexGrow !== undefined) el.style.flexGrow = attrs.flexGrow;
+                if (attrs.gap) el.style.gap = typeof attrs.gap === 'number' ? attrs.gap + 'px' : attrs.gap;
+                if (attrs.fontSize) el.style.fontSize = typeof attrs.fontSize === 'number' ? attrs.fontSize + 'px' : attrs.fontSize;
+                if (attrs.borderRadius) el.style.borderRadius = typeof attrs.borderRadius === 'number' ? attrs.borderRadius + 'px' : attrs.borderRadius;
+                if (attrs.border) el.style.border = attrs.border;
+                if (attrs.opacity !== undefined) el.style.opacity = attrs.opacity;
+                if (attrs.cursor) el.style.cursor = attrs.cursor;
+                if (attrs.display) el.style.display = attrs.display;
+                if (attrs.boxShadow) el.style.boxShadow = attrs.boxShadow;
+                if (attrs.alignSelf) el.style.alignSelf = attrs.alignSelf;
+                if (attrs.fontFamily) el.style.fontFamily = attrs.fontFamily;
+                if (attrs.transition) el.style.transition = attrs.transition;
+                if (attrs.onClick && typeof attrs.onClick === 'function') {
+                    el.onclick = attrs.onClick;
+                }
+                if (attrs.onChange && typeof attrs.onChange === 'function') {
+                    el.oninput = function() { attrs.onChange(el.value); };
+                }
+            },
+            Column: function(children, attrs = {}) {
+                const el = document.createElement('div');
+                el.className = 'zenith-column';
+                const flatChildren = Array.isArray(children) ? children.flat() : [];
+                for (const child of flatChildren) {
+                    if (child) el.appendChild(child);
+                }
+                UI.applyStyles(el, attrs);
+                el.render = function() {
+                    UI.render(el);
+                    return el;
+                };
+                return el;
+            },
+            Row: function(children, attrs = {}) {
+                const el = document.createElement('div');
+                el.className = 'zenith-row';
+                const flatChildren = Array.isArray(children) ? children.flat() : [];
+                for (const child of flatChildren) {
+                    if (child) el.appendChild(child);
+                }
+                UI.applyStyles(el, attrs);
+                el.render = function() {
+                    UI.render(el);
+                    return el;
+                };
+                return el;
+            },
+            Text: function(text, attrs = {}) {
+                const el = document.createElement('span');
+                el.className = 'zenith-text';
+                el.textContent = Array.isArray(text) ? text.join('') : text;
+                UI.applyStyles(el, attrs);
+                el.render = function() {
+                    UI.render(el);
+                    return el;
+                };
+                return el;
+            },
+            Button: function(label, attrs = {}) {
+                const el = document.createElement('button');
+                el.className = 'interactive-btn';
+                el.textContent = Array.isArray(label) ? label.join('') : label;
+                UI.applyStyles(el, attrs);
+                el.render = function() {
+                    UI.render(el);
+                    return el;
+                };
+                return el;
+            },
+            TextField: function(placeholder, attrs = {}) {
+                const container = document.createElement('div');
+                container.style.display = 'flex';
+                container.style.flexDirection = 'column';
+                container.style.gap = '4px';
+                container.style.width = '100%';
+                const el = document.createElement('input');
+                el.type = 'text';
+                el.placeholder = Array.isArray(placeholder) ? placeholder.join('') : placeholder;
+                el.className = 'zenith-input';
+                el.style.width = '100%';
+                if (attrs.value) el.value = attrs.value;
+                const errorSpan = document.createElement('span');
+                errorSpan.style.color = '#ef4444';
+                errorSpan.style.fontSize = '0.8rem';
+                errorSpan.style.display = 'none';
+                container.appendChild(el);
+                container.appendChild(errorSpan);
+                UI.applyStyles(el, attrs);
+                if (attrs.validator && typeof attrs.validator === 'function') {
+                    const validate = () => {
+                        const err = attrs.validator(el.value);
+                        if (err && typeof err === 'string' && err.length > 0) {
+                            el.style.borderColor = '#ef4444';
+                            el.style.boxShadow = '0 0 0 1px #ef4444';
+                            errorSpan.textContent = err;
+                            errorSpan.style.display = 'block';
+                        } else if (err === false) {
+                            el.style.borderColor = '#ef4444';
+                            el.style.boxShadow = '0 0 0 1px #ef4444';
+                            errorSpan.textContent = 'Invalid input';
+                            errorSpan.style.display = 'block';
+                        } else {
+                            el.style.borderColor = '';
+                            el.style.boxShadow = '';
+                            errorSpan.style.display = 'none';
+                            errorSpan.textContent = '';
+                        }
+                    };
+                    el.oninput = function() {
+                        validate();
+                        if (attrs.onChange && typeof attrs.onChange === 'function') {
+                            attrs.onChange(el.value);
+                        }
+                    };
+                    if (el.value) {
+                        validate();
+                    }
+                } else {
+                    if (attrs.onChange && typeof attrs.onChange === 'function') {
+                        el.oninput = function() { attrs.onChange(el.value); };
+                    }
+                }
+                container.render = function() {
+                    UI.render(container);
+                    return container;
+                };
+                return container;
+            },
+            Checkbox: function(label, attrs = {}) {
+                const wrapper = document.createElement('label');
+                wrapper.style.display = 'flex';
+                wrapper.style.alignItems = 'center';
+                wrapper.style.gap = '8px';
+                wrapper.style.cursor = 'pointer';
+                wrapper.style.margin = '5px';
+                wrapper.style.color = '#e2e8f0';
+                const el = document.createElement('input');
+                el.type = 'checkbox';
+                el.style.width = '18px';
+                el.style.height = '18px';
+                el.style.accentColor = '#00f2fe';
+                el.style.cursor = 'pointer';
+                if (attrs.checked) el.checked = !!attrs.checked;
+                wrapper.appendChild(el);
+                const textSpan = document.createElement('span');
+                textSpan.textContent = Array.isArray(label) ? label.join('') : label;
+                wrapper.appendChild(textSpan);
+                UI.applyStyles(wrapper, attrs);
+                if (attrs.onChange && typeof attrs.onChange === 'function') {
+                    el.onchange = function() { attrs.onChange(el.checked); };
+                }
+                wrapper.render = function() {
+                    UI.render(wrapper);
+                    return wrapper;
+                };
+                return wrapper;
+            },
+            Slider: function(attrs = {}) {
+                const el = document.createElement('input');
+                el.type = 'range';
+                el.className = 'zenith-input';
+                el.style.accentColor = '#00f2fe';
+                el.style.cursor = 'pointer';
+                if (attrs.min !== undefined) el.min = attrs.min;
+                if (attrs.max !== undefined) el.max = attrs.max;
+                if (attrs.value !== undefined) el.value = attrs.value;
+                UI.applyStyles(el, attrs);
+                if (attrs.onChange && typeof attrs.onChange === 'function') {
+                    el.oninput = function() { attrs.onChange(parseInt(el.value, 10)); };
+                }
+                el.render = function() {
+                    UI.render(el);
+                    return el;
+                };
+                return el;
+            },
+            Toggle: function(label, attrs = {}) {
+                const wrapper = document.createElement('label');
+                wrapper.style.display = 'flex';
+                wrapper.style.alignItems = 'center';
+                wrapper.style.gap = '10px';
+                wrapper.style.cursor = 'pointer';
+                wrapper.style.margin = '5px';
+                const switchDiv = document.createElement('div');
+                switchDiv.style.position = 'relative';
+                switchDiv.style.width = '44px';
+                switchDiv.style.height = '24px';
+                switchDiv.style.backgroundColor = '#475569';
+                switchDiv.style.borderRadius = '12px';
+                switchDiv.style.transition = 'background-color 0.2s';
+                const knob = document.createElement('div');
+                knob.style.position = 'absolute';
+                knob.style.top = '2px';
+                knob.style.left = '2px';
+                knob.style.width = '20px';
+                knob.style.height = '20px';
+                knob.style.borderRadius = '50%';
+                knob.style.backgroundColor = '#ffffff';
+                knob.style.transition = 'transform 0.2s';
+                switchDiv.appendChild(knob);
+                let isOn = !!attrs.isOn;
+                const updateToggleUI = (state) => {
+                    isOn = state;
+                    if (isOn) {
+                        switchDiv.style.backgroundColor = '#10b981';
+                        knob.style.transform = 'translateX(20px)';
+                    } else {
+                        switchDiv.style.backgroundColor = '#475569';
+                        knob.style.transform = 'translateX(0)';
+                    }
+                };
+                updateToggleUI(isOn);
+                wrapper.onclick = (e) => {
+                    e.preventDefault();
+                    updateToggleUI(!isOn);
+                    if (attrs.onChange && typeof attrs.onChange === 'function') {
+                        attrs.onChange(isOn);
+                    }
+                };
+                wrapper.appendChild(switchDiv);
+                if (label) {
+                    const textSpan = document.createElement('span');
+                    textSpan.textContent = Array.isArray(label) ? label.join('') : label;
+                    textSpan.style.color = '#e2e8f0';
+                    wrapper.appendChild(textSpan);
+                }
+                UI.applyStyles(wrapper, attrs);
+                wrapper.render = function() {
+                    UI.render(wrapper);
+                    return wrapper;
+                };
+                return wrapper;
+            },
+            Dropdown: function(options, attrs = {}) {
+                const el = document.createElement('select');
+                el.className = 'zenith-input';
+                el.style.background = 'rgba(15, 23, 42, 0.8)';
+                el.style.color = '#f8fafc';
+                el.style.cursor = 'pointer';
+                const populateOptions = (str) => {
+                    el.innerHTML = '';
+                    const opts = str.split(',');
+                    for (const opt of opts) {
+                        const trimmed = opt.trim();
+                        if (!trimmed) continue;
+                        const optionEl = document.createElement('option');
+                        optionEl.value = trimmed;
+                        optionEl.textContent = trimmed;
+                        el.appendChild(optionEl);
+                    }
+                };
+                const optsStr = Array.isArray(options) ? options.join(',') : (options || attrs.options || "");
+                populateOptions(optsStr);
+                if (attrs.value) el.value = attrs.value;
+                UI.applyStyles(el, attrs);
+                if (attrs.onChange && typeof attrs.onChange === 'function') {
+                    el.onchange = function() { attrs.onChange(el.value); };
+                }
+                el.render = function() {
+                    UI.render(el);
+                    return el;
+                };
+                return el;
+            },
+            Image: function(url, attrs = {}) {
+                const el = document.createElement('img');
+                el.src = Array.isArray(url) ? url.join('') : url;
+                el.style.maxWidth = '100%';
+                el.style.borderRadius = '12px';
+                el.style.boxShadow = '0 8px 30px rgba(0, 0, 0, 0.5)';
+                el.style.border = '1px solid rgba(255, 255, 255, 0.1)';
+                UI.applyStyles(el, attrs);
+                el.render = function() {
+                    UI.render(el);
+                    return el;
+                };
+                return el;
+            },
+            Video: function(url, attrs = {}) {
+                const el = document.createElement('video');
+                el.src = Array.isArray(url) ? url.join('') : url;
+                el.controls = true;
+                el.style.maxWidth = '100%';
+                el.style.borderRadius = '12px';
+                el.style.boxShadow = '0 8px 30px rgba(0, 0, 0, 0.5)';
+                el.style.border = '1px solid rgba(255, 255, 255, 0.1)';
+                UI.applyStyles(el, attrs);
+                el.render = function() {
+                    UI.render(el);
+                    return el;
+                };
+                return el;
+            },
+            Scrolling: function(children, attrs = {}) {
+                const el = document.createElement('div');
+                el.style.display = 'flex';
+                el.style.flexDirection = 'column';
+                el.style.overflowY = 'auto';
+                el.style.maxHeight = '300px';
+                el.style.border = '1px solid rgba(255, 255, 255, 0.1)';
+                el.style.padding = '12px';
+                el.style.borderRadius = '12px';
+                el.style.background = 'rgba(0, 0, 0, 0.3)';
+                const flatChildren = Array.isArray(children) ? children.flat() : [];
+                for (const child of flatChildren) {
+                    if (child) el.appendChild(child);
+                }
+                UI.applyStyles(el, attrs);
+                el.render = function() {
+                    UI.render(el);
+                    return el;
+                };
+                return el;
+            },
+            Card: function(children, attrs = {}) {
+                const el = document.createElement('div');
+                el.style.display = 'flex';
+                el.style.flexDirection = 'column';
+                el.style.background = 'rgba(30, 41, 59, 0.6)';
+                el.style.backdropFilter = 'blur(12px)';
+                el.style.border = '1px solid rgba(255, 255, 255, 0.1)';
+                el.style.borderRadius = '16px';
+                el.style.padding = '20px';
+                el.style.margin = '10px 0';
+                el.style.boxShadow = '0 20px 40px rgba(0, 0, 0, 0.4)';
+                const flatChildren = Array.isArray(children) ? children.flat() : [];
+                for (const child of flatChildren) {
+                    if (child) el.appendChild(child);
+                }
+                UI.applyStyles(el, attrs);
+                el.render = function() {
+                    UI.render(el);
+                    return el;
+                };
+                return el;
+            },
+            Container: function(children, attrs = {}) {
+                const el = document.createElement('div');
+                el.style.display = 'flex';
+                el.style.flexDirection = 'column';
+                el.style.border = '1px solid rgba(255, 255, 255, 0.05)';
+                el.style.borderRadius = '12px';
+                el.style.padding = '16px';
+                el.style.background = 'rgba(255, 255, 255, 0.02)';
+                const flatChildren = Array.isArray(children) ? children.flat() : [];
+                for (const child of flatChildren) {
+                    if (child) el.appendChild(child);
+                }
+                UI.applyStyles(el, attrs);
+                el.render = function() {
+                    UI.render(el);
+                    return el;
+                };
+                return el;
+            },
+            render: function(element) {
+                const root = document.getElementById('zenith-ui-root');
+                root.innerHTML = '';
+                root.appendChild(element);
+            }
+        };
+    </script>
+    <script>
+function isKeyPressed(key) {
+    return !!window._zenith_keys[key];
+}
+
+function getAxis(negativeKey, positiveKey) {
+    return (window._zenith_keys[positiveKey] ? 1 : 0) - (window._zenith_keys[negativeKey] ? 1 : 0);
+}
+
+class CodeFirstScene {
+    constructor() {
+        this.name = "CodeFirstScene";
+        this.clearColor = "black";
+        this.fixedDeltaTime = 1.0 / 60.0;
+        this.maxFrameDelta = 0.25;
+        this.maxFixedStepsPerFrame = 8;
+        this.autoSimulatePhysics = true;
+        this.autoRenderWorld2D = false;
+        this.drawEntityNames = true;
+        this.paused = false;
+        this._zenithLoaded = false;
+        this._zenithAccumulator = 0.0;
+        this._zenithLastFrameDelta = 0.0;
+        this._zenithFrameCount = 0;
+        this._zenithFixedStepCount = 0;
+        this._zenithDroppedStepFrames = 0;
+        this._zenithLastFixedSteps = 0;
+        this._zenithNextEntityId = 1;
+        this._zenithEntities = [];
+        this._zenithMaterials = new Map();
+        this._zenithPrimaryCamera = null;
+        this._zenithPrimaryAudioListener = null;
+        this._zenithPrimaryCamera3D = null;
+        this._zenithPrimaryAudioListener3D = null;
+        this.player = null;
+        this.camera = null;
+        this.reticle = null;
+        this.playerHum = null;
+        this.listener = null;
+        this.elapsed = 0.0;
+    }
+    onLoad() {
+        this.name = "CodeFirstScene";
+        this.clearColor = "black";
+        this.fixedDeltaTime = 0.0166667;
+        this.autoRenderWorld2D = true;
+        this.drawEntityNames = false;
+        this.player = this.spawnCharacter2D("Player", "assets/player.png", 10.0, 9.0, 6.0, 3.0, "green");
+        this.setEntityTag(this.player, "hero");
+        this.camera = this.spawnCamera2D("MainCamera", 10.0, 9.0, 1.0, true);
+        this.reticle = this.spawnSprite("Reticle", 13.0, 5.0, 2.0, 1.0, "white");
+        this.playerHum = this.spawnAudioSource2D("PlayerHum", "assets/player_hum.wav", 10.0, 9.0, true);
+        this.listener = this.spawnAudioListener2D("MainListener", 10.0, 9.0, true);
+        this.setParent(this.reticle, this.player);
+        this.setParent(this.playerHum, this.player);
+        this.setParent(this.listener, this.camera);
+        this.attachBody2D(this.player, 1.0, 0.0, 0.2, 0.0);
+        this.attachCapsuleCollider2D(this.player, 4.2, 1.4, false);
+        this.attachCircleCollider2D(this.playerHum, 1.5, true);
+        let player_character = this.character2D(this.player);
+        let hum_audio = this.audioSource2D(this.playerHum);
+        let main_listener = this.audioListener2D(this.listener);
+        let player_hitbox = this.capsuleCollider2D(this.player);
+        let hum_trigger = this.circleCollider2D(this.playerHum);
+        player_character.moveSpeed = 20.0;
+        player_character.jumpForce = 14.0;
+        player_character.isGrounded = true;
+        player_hitbox.offsetY = 0.1;
+        player_hitbox.height = 4.4;
+        player_hitbox.radius = 1.5;
+        hum_trigger.offsetX = 0.75;
+        hum_trigger.radius = 1.25;
+        hum_audio.volume = 0.55;
+        hum_audio.pitch = 0.95;
+        hum_audio.loop = true;
+        main_listener.gain = 0.9;
+        this.sprite2D(this.player).anchorX = 0.5;
+        this.sprite2D(this.player).anchorY = 0.5;
+        this.sprite2D(this.player).sortOrder = 1;
+        this.camera2D(this.camera).viewportWidth = 1.0;
+        this.camera2D(this.camera).viewportHeight = 1.0;
+        println("Scene loaded from pure Zenith code");
+    }
+    onFrame(dt) {
+        this.elapsed = this.elapsed + dt;
+        let axis_x = getAxis("a", "d");
+        let axis_y = getAxis("w", "s");
+        if (isKeyPressed("ArrowLeft")) {
+            axis_x = axis_x - 1.0;
+        }
+        if (isKeyPressed("ArrowRight")) {
+            axis_x = axis_x + 1.0;
+        }
+        if (isKeyPressed("ArrowUp")) {
+            axis_y = axis_y - 1.0;
+        }
+        if (isKeyPressed("ArrowDown")) {
+            axis_y = axis_y + 1.0;
+        }
+        let player_body = this.body2D(this.player);
+        let player_character = this.character2D(this.player);
+        let player_transform = this.transform2D(this.player);
+        let reticle_transform = this.transform2D(this.reticle);
+        let main_camera = this.camera2D(this.camera);
+        let hum_audio = this.audioSource2D(this.playerHum);
+        let main_listener = this.audioListener2D(this.listener);
+        player_body.vx = axis_x * player_character.moveSpeed;
+        player_body.vy = axis_y * player_character.moveSpeed;
+        player_transform.rotation += axis_x * 0.05;
+        reticle_transform.x = player_transform.x + 4.0;
+        reticle_transform.y = player_transform.y - 3.0;
+        hum_audio.x = player_transform.x;
+        hum_audio.y = player_transform.y;
+        main_camera.zoom = 1.0 + player_body.vx / 160.0;
+        main_listener.x = main_camera.x;
+        main_listener.y = main_camera.y;
+        if (axis_x < 0.0) {
+            player_character.facingRight = false;
+        }
+        if (axis_x > 0.0) {
+            player_character.facingRight = true;
+        }
+        if (axis_x < 0.0) {
+            this.playAudio(this.playerHum);
+            hum_audio.pitch = 1.05;
+        } else {
+            if (axis_x > 0.0) {
+                this.playAudio(this.playerHum);
+                hum_audio.pitch = 1.05;
+            } else {
+                if (axis_y < 0.0) {
+                    this.playAudio(this.playerHum);
+                    hum_audio.pitch = 1.05;
+                } else {
+                    if (axis_y > 0.0) {
+                        this.playAudio(this.playerHum);
+                        hum_audio.pitch = 1.05;
+                    } else {
+                        this.stopAudio(this.playerHum);
+                        hum_audio.pitch = 0.9;
+                    }
+                }
+            }
+        }
+        if (isKeyPressed("Space")) {
+            player_character.color = "yellow";
+        } else {
+            player_character.color = "green";
+        }
+    }
+    onFixedUpdate(dt) {
+        this.followPrimaryCamera2D(this.player, 0.0, 0.0, 0.2);
+    }
+    onDraw(canvas, alpha) {
+        let title = "Zenith Scene Runtime";
+        let alpha_text = "Interpolation alpha: ";
+        alpha_text = alpha_text + alpha;
+        let time_text = "Elapsed: ";
+        time_text = time_text + this.elapsed;
+        let player_transform = this.transform2D(this.player);
+        let player_body = this.body2D(this.player);
+        let player_character = this.character2D(this.player);
+        let main_camera = this.camera2D(this.camera);
+        let hum_audio = this.audioSource2D(this.playerHum);
+        let main_listener = this.audioListener2D(this.listener);
+        let player_hitbox = this.capsuleCollider2D(this.player);
+        let hum_trigger = this.circleCollider2D(this.playerHum);
+        let pick = this.raycast2D(main_camera.x - 12.0, main_camera.y, 1.0, 0.0, 24.0);
+        let position_text = "Player X: ";
+        position_text = position_text + player_transform.x;
+        position_text = position_text + ", Y: ";
+        position_text = position_text + player_transform.y;
+        let velocity_text = "Velocity X: ";
+        velocity_text = velocity_text + player_body.vx;
+        velocity_text = velocity_text + ", Y: ";
+        velocity_text = velocity_text + player_body.vy;
+        let tag_text = "Tag: ";
+        tag_text = tag_text + this.entityTag(this.player);
+        let texture_text = "Texture: ";
+        texture_text = texture_text + player_character.texturePath;
+        let child_text = "Children: ";
+        child_text = child_text + this.childCount(this.player);
+        let move_text = "Move Speed / Facing: ";
+        move_text = move_text + player_character.moveSpeed;
+        move_text = move_text + " / ";
+        move_text = move_text + player_character.facingRight;
+        let audio_text = "Audio Clip / Playing: ";
+        audio_text = audio_text + hum_audio.clipPath;
+        audio_text = audio_text + " / ";
+        audio_text = audio_text + hum_audio.isPlaying;
+        let listener_text = "Listener Gain / Primary: ";
+        listener_text = listener_text + main_listener.gain;
+        listener_text = listener_text + " / ";
+        listener_text = listener_text + main_listener.primary;
+        let zoom_text = "Camera Zoom: ";
+        zoom_text = zoom_text + main_camera.zoom;
+        let collider_text = "Capsule / Trigger: ";
+        collider_text = collider_text + player_hitbox.height;
+        collider_text = collider_text + " x ";
+        collider_text = collider_text + player_hitbox.radius;
+        collider_text = collider_text + " / ";
+        collider_text = collider_text + hum_trigger.radius;
+        let overlap_text = "Overlap / Contains: ";
+        overlap_text = overlap_text + this.overlaps2D(this.player, this.playerHum);
+        overlap_text = overlap_text + " / ";
+        overlap_text = overlap_text + this.containsPoint2D(this.player, player_transform.x, player_transform.y);
+        let ray_text = "Ray Hit / Distance: ";
+        ray_text = ray_text + pick.hit;
+        ray_text = ray_text + " / ";
+        ray_text = ray_text + pick.distance;
+        canvas.drawText(title, 2.0, 1.0, "yellow");
+        canvas.drawText(alpha_text, 2.0, 3.0, "cyan");
+        canvas.drawText(time_text, 2.0, 5.0, "white");
+        canvas.drawText(position_text, 2.0, 7.0, "green");
+        canvas.drawText(velocity_text, 2.0, 9.0, "magenta");
+        canvas.drawText(tag_text, 2.0, 11.0, "white");
+        canvas.drawText(texture_text, 2.0, 13.0, "cyan");
+        canvas.drawText(child_text, 2.0, 15.0, "yellow");
+        canvas.drawText(move_text, 2.0, 17.0, "green");
+        canvas.drawText(audio_text, 2.0, 19.0, "cyan");
+        canvas.drawText(listener_text, 2.0, 21.0, "yellow");
+        canvas.drawText(zoom_text, 2.0, 23.0, "green");
+        canvas.drawText(collider_text, 2.0, 25.0, "magenta");
+        canvas.drawText(overlap_text, 2.0, 27.0, "white");
+        canvas.drawText(ray_text, 2.0, 29.0, "cyan");
+        canvas.drawText("Move with WASD or arrows. Space flashes yellow.", 2.0, 32.0, "white");
+    }
+    createEntity(name) {
+        const entity = {
+            id: this._zenithNextEntityId++,
+            name,
+            tag: '',
+            kind: 'entity',
+            x: 0,
+            y: 0,
+            z: 0,
+            rotation: 0,
+            rotationX: 0,
+            rotationY: 0,
+            rotationZ: 0,
+            scaleX: 1,
+            scaleY: 1,
+            scaleZ: 1,
+            visible: true,
+            parent: null,
+            children: []
+        };
+        this._zenithEntities.push(entity);
+        return entity;
+    }
+    _zenithEnsureTransform2D(entity) {
+        if (!entity) return null;
+        if (entity.x === undefined) entity.x = 0;
+        if (entity.y === undefined) entity.y = 0;
+        if (entity.rotation === undefined) entity.rotation = 0;
+        if (entity.scaleX === undefined) entity.scaleX = 1;
+        if (entity.scaleY === undefined) entity.scaleY = 1;
+        return entity;
+    }
+    _zenithEnsureTransform3D(entity) {
+        const target = this._zenithEnsureTransform2D(entity);
+        if (!target) return null;
+        if (target.z === undefined) target.z = 0;
+        if (target.rotationX === undefined) target.rotationX = 0;
+        if (target.rotationY === undefined) target.rotationY = 0;
+        if (target.rotationZ === undefined) target.rotationZ = 0;
+        if (target.scaleZ === undefined) target.scaleZ = 1;
+        return target;
+    }
+    _zenithEnsureBody2D(entity) {
+        const target = this._zenithEnsureTransform2D(entity);
+        if (!target) return null;
+        target.hasBody = true;
+        if (target.vx === undefined) target.vx = 0;
+        if (target.vy === undefined) target.vy = 0;
+        if (target.mass === undefined || target.mass <= 0) target.mass = 1;
+        if (target.gravityScale === undefined) target.gravityScale = 1;
+        if (target.friction === undefined) target.friction = 0.2;
+        if (target.restitution === undefined) target.restitution = 0;
+        return target;
+    }
+    _zenithEnsureBoxCollider2D(entity) {
+        const target = this._zenithEnsureTransform2D(entity);
+        if (!target) return null;
+        target.hasBoxCollider2D = true;
+        if (target.boxColliderOffsetX === undefined) target.boxColliderOffsetX = 0;
+        if (target.boxColliderOffsetY === undefined) target.boxColliderOffsetY = 0;
+        if (target.boxColliderWidth === undefined || target.boxColliderWidth <= 0) target.boxColliderWidth = 1;
+        if (target.boxColliderHeight === undefined || target.boxColliderHeight <= 0) target.boxColliderHeight = 1;
+        if (target.boxColliderIsTrigger === undefined) target.boxColliderIsTrigger = false;
+        if (target.boxColliderEnabled === undefined) target.boxColliderEnabled = true;
+        return target;
+    }
+    _zenithEnsureCircleCollider2D(entity) {
+        const target = this._zenithEnsureTransform2D(entity);
+        if (!target) return null;
+        target.hasCircleCollider2D = true;
+        if (target.circleColliderOffsetX === undefined) target.circleColliderOffsetX = 0;
+        if (target.circleColliderOffsetY === undefined) target.circleColliderOffsetY = 0;
+        if (target.circleColliderRadius === undefined || target.circleColliderRadius <= 0) target.circleColliderRadius = 0.5;
+        if (target.circleColliderIsTrigger === undefined) target.circleColliderIsTrigger = false;
+        if (target.circleColliderEnabled === undefined) target.circleColliderEnabled = true;
+        return target;
+    }
+    _zenithEnsureCapsuleCollider2D(entity) {
+        const target = this._zenithEnsureTransform2D(entity);
+        if (!target) return null;
+        target.hasCapsuleCollider2D = true;
+        if (target.capsuleColliderOffsetX === undefined) target.capsuleColliderOffsetX = 0;
+        if (target.capsuleColliderOffsetY === undefined) target.capsuleColliderOffsetY = 0;
+        if (target.capsuleColliderRadius === undefined || target.capsuleColliderRadius <= 0) target.capsuleColliderRadius = 0.5;
+        if (target.capsuleColliderHeight === undefined || target.capsuleColliderHeight < target.capsuleColliderRadius * 2) target.capsuleColliderHeight = Math.max(2, target.capsuleColliderRadius * 2);
+        if (target.capsuleColliderIsTrigger === undefined) target.capsuleColliderIsTrigger = false;
+        if (target.capsuleColliderEnabled === undefined) target.capsuleColliderEnabled = true;
+        return target;
+    }
+    _zenithBoxColliderBounds2D(entity) {
+        if (!entity || entity.hasBoxCollider2D !== true || entity.boxColliderEnabled === false) return null;
+        const width = entity.boxColliderWidth !== undefined && entity.boxColliderWidth > 0 ? entity.boxColliderWidth : 1;
+        const height = entity.boxColliderHeight !== undefined && entity.boxColliderHeight > 0 ? entity.boxColliderHeight : 1;
+        const centerX = (entity.x !== undefined ? entity.x : 0) + (entity.boxColliderOffsetX !== undefined ? entity.boxColliderOffsetX : 0);
+        const centerY = (entity.y !== undefined ? entity.y : 0) + (entity.boxColliderOffsetY !== undefined ? entity.boxColliderOffsetY : 0);
+        return {
+            minX: centerX - (width * 0.5),
+            maxX: centerX + (width * 0.5),
+            minY: centerY - (height * 0.5),
+            maxY: centerY + (height * 0.5)
+        };
+    }
+    _zenithCircleColliderState2D(entity) {
+        if (!entity || entity.hasCircleCollider2D !== true || entity.circleColliderEnabled === false) return null;
+        const radius = entity.circleColliderRadius !== undefined && entity.circleColliderRadius > 0 ? entity.circleColliderRadius : 0.5;
+        return {
+            x: (entity.x !== undefined ? entity.x : 0) + (entity.circleColliderOffsetX !== undefined ? entity.circleColliderOffsetX : 0),
+            y: (entity.y !== undefined ? entity.y : 0) + (entity.circleColliderOffsetY !== undefined ? entity.circleColliderOffsetY : 0),
+            radius
+        };
+    }
+    _zenithCapsuleColliderState2D(entity) {
+        if (!entity || entity.hasCapsuleCollider2D !== true || entity.capsuleColliderEnabled === false) return null;
+        const radius = entity.capsuleColliderRadius !== undefined && entity.capsuleColliderRadius > 0 ? entity.capsuleColliderRadius : 0.5;
+        const height = entity.capsuleColliderHeight !== undefined && entity.capsuleColliderHeight >= radius * 2 ? entity.capsuleColliderHeight : (radius * 2);
+        const halfSegment = Math.max(0, (height * 0.5) - radius);
+        return {
+            x: (entity.x !== undefined ? entity.x : 0) + (entity.capsuleColliderOffsetX !== undefined ? entity.capsuleColliderOffsetX : 0),
+            y: (entity.y !== undefined ? entity.y : 0) + (entity.capsuleColliderOffsetY !== undefined ? entity.capsuleColliderOffsetY : 0),
+            radius,
+            height,
+            halfSegment
+        };
+    }
+    _zenithBoxIntersectsCircle2D(bounds, circle) {
+        if (!bounds || !circle) return false;
+        const closestX = Math.max(bounds.minX, Math.min(circle.x, bounds.maxX));
+        const closestY = Math.max(bounds.minY, Math.min(circle.y, bounds.maxY));
+        const dx = circle.x - closestX;
+        const dy = circle.y - closestY;
+        return (dx * dx) + (dy * dy) <= (circle.radius * circle.radius);
+    }
+    _zenithCapsuleMiddleBoxBounds2D(capsule) {
+        if (!capsule || capsule.halfSegment <= 0.000001) return null;
+        return {
+            minX: capsule.x - capsule.radius,
+            maxX: capsule.x + capsule.radius,
+            minY: capsule.y - capsule.halfSegment,
+            maxY: capsule.y + capsule.halfSegment
+        };
+    }
+    _zenithCapsuleTopCircle2D(capsule) {
+        if (!capsule) return null;
+        return { x: capsule.x, y: capsule.y - capsule.halfSegment, radius: capsule.radius };
+    }
+    _zenithCapsuleBottomCircle2D(capsule) {
+        if (!capsule) return null;
+        return { x: capsule.x, y: capsule.y + capsule.halfSegment, radius: capsule.radius };
+    }
+    _zenithCirclesOverlap2D(first, second) {
+        if (!first || !second) return false;
+        const dx = first.x - second.x;
+        const dy = first.y - second.y;
+        const radius = first.radius + second.radius;
+        return (dx * dx) + (dy * dy) <= (radius * radius);
+    }
+    _zenithCapsuleIntersectsBox2D(capsule, box) {
+        if (!capsule || !box) return false;
+        const middle = this._zenithCapsuleMiddleBoxBounds2D(capsule);
+        if (middle && middle.minX <= box.maxX && middle.maxX >= box.minX && middle.minY <= box.maxY && middle.maxY >= box.minY) return true;
+        if (this._zenithBoxIntersectsCircle2D(box, this._zenithCapsuleTopCircle2D(capsule))) return true;
+        if (this._zenithBoxIntersectsCircle2D(box, this._zenithCapsuleBottomCircle2D(capsule))) return true;
+        return false;
+    }
+    _zenithCapsuleIntersectsCircle2D(capsule, circle) {
+        if (!capsule || !circle) return false;
+        const middle = this._zenithCapsuleMiddleBoxBounds2D(capsule);
+        if (middle && this._zenithBoxIntersectsCircle2D(middle, circle)) return true;
+        if (this._zenithCirclesOverlap2D(this._zenithCapsuleTopCircle2D(capsule), circle)) return true;
+        if (this._zenithCirclesOverlap2D(this._zenithCapsuleBottomCircle2D(capsule), circle)) return true;
+        return false;
+    }
+    _zenithCapsuleIntersectsCapsule2D(first, second) {
+        if (!first || !second) return false;
+        const firstMiddle = this._zenithCapsuleMiddleBoxBounds2D(first);
+        const secondMiddle = this._zenithCapsuleMiddleBoxBounds2D(second);
+        const firstTop = this._zenithCapsuleTopCircle2D(first);
+        const firstBottom = this._zenithCapsuleBottomCircle2D(first);
+        const secondTop = this._zenithCapsuleTopCircle2D(second);
+        const secondBottom = this._zenithCapsuleBottomCircle2D(second);
+        if (firstMiddle && secondMiddle && firstMiddle.minX <= secondMiddle.maxX && firstMiddle.maxX >= secondMiddle.minX && firstMiddle.minY <= secondMiddle.maxY && firstMiddle.maxY >= secondMiddle.minY) return true;
+        if (firstMiddle && (this._zenithBoxIntersectsCircle2D(firstMiddle, secondTop) || this._zenithBoxIntersectsCircle2D(firstMiddle, secondBottom))) return true;
+        if (secondMiddle && (this._zenithBoxIntersectsCircle2D(secondMiddle, firstTop) || this._zenithBoxIntersectsCircle2D(secondMiddle, firstBottom))) return true;
+        return this._zenithCirclesOverlap2D(firstTop, secondTop) || this._zenithCirclesOverlap2D(firstTop, secondBottom) || this._zenithCirclesOverlap2D(firstBottom, secondTop) || this._zenithCirclesOverlap2D(firstBottom, secondBottom);
+    }
+    _zenithCapsuleContainsPoint2D(capsule, x, y) {
+        if (!capsule) return false;
+        const middle = this._zenithCapsuleMiddleBoxBounds2D(capsule);
+        if (middle && x >= middle.minX && x <= middle.maxX && y >= middle.minY && y <= middle.maxY) return true;
+        const top = this._zenithCapsuleTopCircle2D(capsule);
+        const topDx = x - top.x;
+        const topDy = y - top.y;
+        if ((topDx * topDx) + (topDy * topDy) <= (top.radius * top.radius)) return true;
+        const bottom = this._zenithCapsuleBottomCircle2D(capsule);
+        const bottomDx = x - bottom.x;
+        const bottomDy = y - bottom.y;
+        return (bottomDx * bottomDx) + (bottomDy * bottomDy) <= (bottom.radius * bottom.radius);
+    }
+    _zenithRaycastCapsule2D(originX, originY, dirX, dirY, capsule, maxDistance) {
+        if (!capsule || maxDistance < 0) return null;
+        let bestHit = null;
+        let bestDistance = maxDistance;
+        const consider = (hit) => {
+            if (!hit || hit.distance > bestDistance) return;
+            bestDistance = hit.distance;
+            bestHit = hit;
+        };
+        const middle = this._zenithCapsuleMiddleBoxBounds2D(capsule);
+        if (middle) consider(this._zenithRaycastBox2D(originX, originY, dirX, dirY, middle, bestDistance));
+        consider(this._zenithRaycastCircle2D(originX, originY, dirX, dirY, this._zenithCapsuleTopCircle2D(capsule), bestDistance));
+        consider(this._zenithRaycastCircle2D(originX, originY, dirX, dirY, this._zenithCapsuleBottomCircle2D(capsule), bestDistance));
+        return bestHit;
+    }
+    _zenithEnsureBody3D(entity) {
+        const target = this._zenithEnsureTransform3D(entity);
+        if (!target) return null;
+        target.hasBody3D = true;
+        if (target.vx === undefined) target.vx = 0;
+        if (target.vy === undefined) target.vy = 0;
+        if (target.vz === undefined) target.vz = 0;
+        if (target.mass === undefined || target.mass <= 0) target.mass = 1;
+        if (target.gravityScale === undefined) target.gravityScale = 1;
+        if (target.friction === undefined) target.friction = 0.2;
+        if (target.restitution === undefined) target.restitution = 0;
+        if (target.useGravity === undefined) target.useGravity = true;
+        return target;
+    }
+    _zenithEnsureBoxCollider3D(entity) {
+        const target = this._zenithEnsureTransform3D(entity);
+        if (!target) return null;
+        target.hasBoxCollider3D = true;
+        if (target.boxCollider3DOffsetX === undefined) target.boxCollider3DOffsetX = 0;
+        if (target.boxCollider3DOffsetY === undefined) target.boxCollider3DOffsetY = 0;
+        if (target.boxCollider3DOffsetZ === undefined) target.boxCollider3DOffsetZ = 0;
+        if (target.boxCollider3DWidth === undefined || target.boxCollider3DWidth <= 0) target.boxCollider3DWidth = 1;
+        if (target.boxCollider3DHeight === undefined || target.boxCollider3DHeight <= 0) target.boxCollider3DHeight = 1;
+        if (target.boxCollider3DDepth === undefined || target.boxCollider3DDepth <= 0) target.boxCollider3DDepth = 1;
+        if (target.boxCollider3DIsTrigger === undefined) target.boxCollider3DIsTrigger = false;
+        if (target.boxCollider3DEnabled === undefined) target.boxCollider3DEnabled = true;
+        return target;
+    }
+    _zenithEnsureSphereCollider3D(entity) {
+        const target = this._zenithEnsureTransform3D(entity);
+        if (!target) return null;
+        target.hasSphereCollider3D = true;
+        if (target.sphereCollider3DOffsetX === undefined) target.sphereCollider3DOffsetX = 0;
+        if (target.sphereCollider3DOffsetY === undefined) target.sphereCollider3DOffsetY = 0;
+        if (target.sphereCollider3DOffsetZ === undefined) target.sphereCollider3DOffsetZ = 0;
+        if (target.sphereCollider3DRadius === undefined || target.sphereCollider3DRadius <= 0) target.sphereCollider3DRadius = 0.5;
+        if (target.sphereCollider3DIsTrigger === undefined) target.sphereCollider3DIsTrigger = false;
+        if (target.sphereCollider3DEnabled === undefined) target.sphereCollider3DEnabled = true;
+        return target;
+    }
+    _zenithBoxColliderBounds3D(entity) {
+        if (!entity || entity.hasBoxCollider3D !== true || entity.boxCollider3DEnabled === false) return null;
+        const width = entity.boxCollider3DWidth !== undefined && entity.boxCollider3DWidth > 0 ? entity.boxCollider3DWidth : 1;
+        const height = entity.boxCollider3DHeight !== undefined && entity.boxCollider3DHeight > 0 ? entity.boxCollider3DHeight : 1;
+        const depth = entity.boxCollider3DDepth !== undefined && entity.boxCollider3DDepth > 0 ? entity.boxCollider3DDepth : 1;
+        const centerX = (entity.x !== undefined ? entity.x : 0) + (entity.boxCollider3DOffsetX !== undefined ? entity.boxCollider3DOffsetX : 0);
+        const centerY = (entity.y !== undefined ? entity.y : 0) + (entity.boxCollider3DOffsetY !== undefined ? entity.boxCollider3DOffsetY : 0);
+        const centerZ = (entity.z !== undefined ? entity.z : 0) + (entity.boxCollider3DOffsetZ !== undefined ? entity.boxCollider3DOffsetZ : 0);
+        return {
+            minX: centerX - (width * 0.5),
+            maxX: centerX + (width * 0.5),
+            minY: centerY - (height * 0.5),
+            maxY: centerY + (height * 0.5),
+            minZ: centerZ - (depth * 0.5),
+            maxZ: centerZ + (depth * 0.5)
+        };
+    }
+    _zenithSphereColliderState3D(entity) {
+        if (!entity || entity.hasSphereCollider3D !== true || entity.sphereCollider3DEnabled === false) return null;
+        const radius = entity.sphereCollider3DRadius !== undefined && entity.sphereCollider3DRadius > 0 ? entity.sphereCollider3DRadius : 0.5;
+        return {
+            x: (entity.x !== undefined ? entity.x : 0) + (entity.sphereCollider3DOffsetX !== undefined ? entity.sphereCollider3DOffsetX : 0),
+            y: (entity.y !== undefined ? entity.y : 0) + (entity.sphereCollider3DOffsetY !== undefined ? entity.sphereCollider3DOffsetY : 0),
+            z: (entity.z !== undefined ? entity.z : 0) + (entity.sphereCollider3DOffsetZ !== undefined ? entity.sphereCollider3DOffsetZ : 0),
+            radius
+        };
+    }
+    _zenithBoxIntersectsSphere3D(bounds, sphere) {
+        if (!bounds || !sphere) return false;
+        const closestX = Math.max(bounds.minX, Math.min(sphere.x, bounds.maxX));
+        const closestY = Math.max(bounds.minY, Math.min(sphere.y, bounds.maxY));
+        const closestZ = Math.max(bounds.minZ, Math.min(sphere.z, bounds.maxZ));
+        const dx = sphere.x - closestX;
+        const dy = sphere.y - closestY;
+        const dz = sphere.z - closestZ;
+        return (dx * dx) + (dy * dy) + (dz * dz) <= (sphere.radius * sphere.radius);
+    }
+    _zenithRaycastSphere3D(originX, originY, originZ, dirX, dirY, dirZ, sphere, maxDistance) {
+        if (!sphere || maxDistance < 0) return null;
+        const a = (dirX * dirX) + (dirY * dirY) + (dirZ * dirZ);
+        if (a <= 0.0000001) return null;
+        const ocX = originX - sphere.x;
+        const ocY = originY - sphere.y;
+        const ocZ = originZ - sphere.z;
+        const b = 2 * ((ocX * dirX) + (ocY * dirY) + (ocZ * dirZ));
+        const c = (ocX * ocX) + (ocY * ocY) + (ocZ * ocZ) - (sphere.radius * sphere.radius);
+        const discriminant = (b * b) - (4 * a * c);
+        if (discriminant < 0) return null;
+        const sqrtDisc = Math.sqrt(discriminant);
+        let distance = (-b - sqrtDisc) / (2 * a);
+        if (distance < 0) distance = (-b + sqrtDisc) / (2 * a);
+        if (distance < 0 || distance > maxDistance) return null;
+        const pointX = originX + (dirX * distance);
+        const pointY = originY + (dirY * distance);
+        const pointZ = originZ + (dirZ * distance);
+        let normalX = pointX - sphere.x;
+        let normalY = pointY - sphere.y;
+        let normalZ = pointZ - sphere.z;
+        const normalLength = Math.sqrt((normalX * normalX) + (normalY * normalY) + (normalZ * normalZ));
+        if (normalLength > 0.0000001) {
+            normalX /= normalLength;
+            normalY /= normalLength;
+            normalZ /= normalLength;
+        } else {
+            normalX = -dirX;
+            normalY = -dirY;
+            normalZ = -dirZ;
+        }
+        return { distance, pointX, pointY, pointZ, normalX, normalY, normalZ };
+    }
+    _zenithRaycastBox3D(originX, originY, originZ, dirX, dirY, dirZ, bounds, maxDistance) {
+        if (!bounds || maxDistance < 0) return null;
+        const dirEpsilon = 0.0000001;
+        let tMin = 0;
+        let tMax = maxDistance;
+        let normalX = 0;
+        let normalY = 0;
+        let normalZ = 0;
+        const axisTest = (origin, dir, min, max, nx, ny, nz) => {
+            if (Math.abs(dir) <= dirEpsilon) {
+                return origin >= min && origin <= max;
+            }
+            let near = (min - origin) / dir;
+            let far = (max - origin) / dir;
+            let hitNx = nx;
+            let hitNy = ny;
+            let hitNz = nz;
+            if (near > far) {
+                const swap = near;
+                near = far;
+                far = swap;
+                hitNx = -nx;
+                hitNy = -ny;
+                hitNz = -nz;
+            }
+            if (near > tMin) {
+                tMin = near;
+                normalX = hitNx;
+                normalY = hitNy;
+                normalZ = hitNz;
+            }
+            if (far < tMax) tMax = far;
+            return tMin <= tMax;
+        };
+        if (!axisTest(originX, dirX, bounds.minX, bounds.maxX, -1, 0, 0)) return null;
+        if (!axisTest(originY, dirY, bounds.minY, bounds.maxY, 0, -1, 0)) return null;
+        if (!axisTest(originZ, dirZ, bounds.minZ, bounds.maxZ, 0, 0, -1)) return null;
+        if (tMax < 0) return null;
+        const distance = tMin >= 0 ? tMin : 0;
+        if (distance > maxDistance) return null;
+        const pointX = originX + (dirX * distance);
+        const pointY = originY + (dirY * distance);
+        const pointZ = originZ + (dirZ * distance);
+        if (distance === 0 && normalX === 0 && normalY === 0 && normalZ === 0) {
+            normalX = -dirX;
+            normalY = -dirY;
+            normalZ = -dirZ;
+        }
+        return { distance, pointX, pointY, pointZ, normalX, normalY, normalZ };
+    }
+    _zenithEnsureCamera2D(entity) {
+        const target = this._zenithEnsureTransform2D(entity);
+        if (!target) return null;
+        if (target.zoom === undefined) target.zoom = 1;
+        if (target.primary === undefined) target.primary = false;
+        if (target.viewportX === undefined) target.viewportX = 0;
+        if (target.viewportY === undefined) target.viewportY = 0;
+        if (target.viewportWidth === undefined) target.viewportWidth = 1;
+        if (target.viewportHeight === undefined) target.viewportHeight = 1;
+        return target;
+    }
+    _zenithEnsureAudioListener2D(entity) {
+        const target = this._zenithEnsureTransform2D(entity);
+        if (!target) return null;
+        target.hasAudioListener2D = true;
+        if (target.gain === undefined) target.gain = 1;
+        if (target.primary === undefined) target.primary = false;
+        if (target.enabled === undefined) target.enabled = true;
+        return target;
+    }
+    _zenithEnsureCamera3D(entity) {
+        const target = this._zenithEnsureTransform3D(entity);
+        if (!target) return null;
+        if (target.fov === undefined) target.fov = 60;
+        if (target.nearClip === undefined) target.nearClip = 0.1;
+        if (target.farClip === undefined) target.farClip = 1000;
+        if (target.primary === undefined) target.primary = false;
+        if (target.viewportX === undefined) target.viewportX = 0;
+        if (target.viewportY === undefined) target.viewportY = 0;
+        if (target.viewportWidth === undefined) target.viewportWidth = 1;
+        if (target.viewportHeight === undefined) target.viewportHeight = 1;
+        return target;
+    }
+    _zenithEnsureAudioListener3D(entity) {
+        const target = this._zenithEnsureTransform3D(entity);
+        if (!target) return null;
+        target.hasAudioListener3D = true;
+        if (target.gain === undefined) target.gain = 1;
+        if (target.primary === undefined) target.primary = false;
+        if (target.enabled === undefined) target.enabled = true;
+        return target;
+    }
+    _zenithEnsureSprite2D(entity) {
+        const target = this._zenithEnsureTransform2D(entity);
+        if (!target) return null;
+        if (target.w === undefined) target.w = 1;
+        if (target.h === undefined) target.h = 1;
+        if (target.anchorX === undefined) target.anchorX = 0.5;
+        if (target.anchorY === undefined) target.anchorY = 0.5;
+        if (target.color === undefined) target.color = 'white';
+        if (target.texturePath === undefined) target.texturePath = '';
+        if (target.sortOrder === undefined) target.sortOrder = 0;
+        if (target.visible === undefined) target.visible = true;
+        return target;
+    }
+    _zenithEnsureCharacter2D(entity) {
+        const target = this._zenithEnsureSprite2D(entity);
+        if (!target) return null;
+        this._zenithEnsureBody2D(target);
+        if (target.moveSpeed === undefined) target.moveSpeed = 10;
+        if (target.jumpForce === undefined) target.jumpForce = 12;
+        if (target.isGrounded === undefined) target.isGrounded = false;
+        if (target.facingRight === undefined) target.facingRight = true;
+        return target;
+    }
+    _zenithEnsureAudioSource2D(entity) {
+        const target = this._zenithEnsureTransform2D(entity);
+        if (!target) return null;
+        target.hasAudio2D = true;
+        if (target.clipPath === undefined) target.clipPath = '';
+        if (target.volume === undefined) target.volume = 1;
+        if (target.pitch === undefined) target.pitch = 1;
+        if (target.loop === undefined) target.loop = false;
+        if (target.playOnAwake === undefined) target.playOnAwake = false;
+        if (target.isPlaying === undefined) target.isPlaying = false;
+        return target;
+    }
+    _zenithEnsureMesh3D(entity) {
+        const target = this._zenithEnsureTransform3D(entity);
+        if (!target) return null;
+        if (target.meshPath === undefined) target.meshPath = '';
+        if (target.shaderPath === undefined) target.shaderPath = '';
+        if (target.materialPath === undefined) target.materialPath = '';
+        if (target.visible === undefined) target.visible = true;
+        if (target.castShadows === undefined) target.castShadows = true;
+        return target;
+    }
+    _zenithEnsureCharacter3D(entity) {
+        const target = this._zenithEnsureMesh3D(entity);
+        if (!target) return null;
+        this._zenithEnsureBody3D(target);
+        if (target.moveSpeed === undefined) target.moveSpeed = 6;
+        if (target.turnSpeed === undefined) target.turnSpeed = 4;
+        if (target.isGrounded === undefined) target.isGrounded = false;
+        if (target.useGravity === undefined) target.useGravity = true;
+        return target;
+    }
+    _zenithEnsureAudioSource3D(entity) {
+        const target = this._zenithEnsureTransform3D(entity);
+        if (!target) return null;
+        target.hasAudio3D = true;
+        if (target.clipPath === undefined) target.clipPath = '';
+        if (target.volume === undefined) target.volume = 1;
+        if (target.pitch === undefined) target.pitch = 1;
+        if (target.loop === undefined) target.loop = false;
+        if (target.playOnAwake === undefined) target.playOnAwake = false;
+        if (target.isPlaying === undefined) target.isPlaying = false;
+        if (target.minDistance === undefined) target.minDistance = 1;
+        if (target.maxDistance === undefined) target.maxDistance = 20;
+        return target;
+    }
+    _zenithEnsurePointLight3D(entity) {
+        const target = this._zenithEnsureTransform3D(entity);
+        if (!target) return null;
+        target.hasPointLight3D = true;
+        if (target.intensity === undefined) target.intensity = 1;
+        if (target.range === undefined) target.range = 10;
+        if (target.color === undefined) target.color = 'white';
+        if (target.enabled === undefined) target.enabled = true;
+        return target;
+    }
+    _zenithEnsureDirectionalLight3D(entity) {
+        const target = this._zenithEnsureTransform3D(entity);
+        if (!target) return null;
+        target.hasDirectionalLight3D = true;
+        if (target.directionX === undefined) target.directionX = 0;
+        if (target.directionY === undefined) target.directionY = -1;
+        if (target.directionZ === undefined) target.directionZ = 0;
+        if (target.intensity === undefined) target.intensity = 1;
+        if (target.color === undefined) target.color = 'white';
+        if (target.castShadows === undefined) target.castShadows = true;
+        if (target.enabled === undefined) target.enabled = true;
+        return target;
+    }
+    _zenithEnsureMaterial(materialPath, shaderPath = '') {
+        if (!materialPath) return null;
+        let material = this._zenithMaterials.get(materialPath);
+        if (!material) {
+            material = {
+                path: materialPath,
+                shaderPath: shaderPath || '',
+                properties: new Map()
+            };
+            this._zenithMaterials.set(materialPath, material);
+        } else if (shaderPath) {
+            material.shaderPath = shaderPath;
+        }
+        return material;
+    }
+    _zenithParseMaterialOptions(optionsCsv) {
+        if (!optionsCsv) return [];
+        return String(optionsCsv)
+            .split(',')
+            .map((item) => item.trim())
+            .filter((item) => item.length > 0)
+            .map((item) => ({ label: item, value: item }));
+        }
+        _zenithEnsureMaterialProperty(materialPath, propertyName, kind, label) {
+            const material = this._zenithEnsureMaterial(materialPath);
+            if (!material || !propertyName) return null;
+            let property = material.properties.get(propertyName);
+            if (!property) {
+                property = {
+                    name: propertyName,
+                    label: label || '',
+                    kind,
+                    stringValue: '',
+                    numberValue: 0,
+                    boolValue: false,
+                    options: []
+                };
+                material.properties.set(propertyName, property);
+            } else {
+                property.kind = kind;
+                property.label = label || '';
+                property.options = [];
+            }
+            return property;
+        }
+        _zenithMaterialProperty(materialPath, propertyName) {
+            if (!materialPath || !propertyName) return null;
+            const material = this._zenithMaterials.get(materialPath);
+            if (!material) return null;
+            return material.properties.get(propertyName) || null;
+        }
+        setEntityName(entity, name) {
+            if (entity) entity.name = name;
+        }
+        entityName(entity) {
+            return entity && entity.name ? entity.name : '';
+        }
+        setEntityTag(entity, tag) {
+            if (entity) entity.tag = tag;
+        }
+        entityTag(entity) {
+            return entity && entity.tag ? entity.tag : '';
+        }
+        findEntityByName(name) {
+            for (const entity of this._zenithEntities) {
+                if (entity.name === name) return entity;
+            }
+            return null;
+        }
+        findEntityByTag(tag) {
+            for (const entity of this._zenithEntities) {
+                if (entity.tag === tag) return entity;
+            }
+            return null;
+        }
+        setParent(child, parent) {
+            if (!child || !parent || child === parent) return false;
+            if (child.parent && child.parent.children) {
+                const oldIndex = child.parent.children.indexOf(child);
+                if (oldIndex >= 0) child.parent.children.splice(oldIndex, 1);
+            }
+            child.parent = parent;
+            parent.children = parent.children || [];
+            if (parent.children.indexOf(child) < 0) parent.children.push(child);
+            return true;
+        }
+        clearParent(child) {
+            if (!child || !child.parent) return false;
+            if (child.parent.children) {
+                const index = child.parent.children.indexOf(child);
+                if (index >= 0) child.parent.children.splice(index, 1);
+            }
+            child.parent = null;
+            return true;
+        }
+        parentOf(child) {
+            return child && child.parent ? child.parent : null;
+        }
+        childCount(parent) {
+            return parent && parent.children ? parent.children.length : 0;
+        }
+        childAt(parent, index) {
+            if (!parent || !parent.children || index < 0 || index >= parent.children.length) return null;
+            return parent.children[index];
+        }
+        spawnSprite(name, x, y, w, h, color) {
+            const entity = {
+                id: this._zenithNextEntityId++,
+                name,
+                tag: '',
+                kind: 'sprite2d',
+                x,
+                y,
+                z: 0,
+                rotation: 0,
+                rotationX: 0,
+                rotationY: 0,
+                rotationZ: 0,
+                scaleX: 1,
+                scaleY: 1,
+                scaleZ: 1,
+                w,
+                h,
+                color,
+                texturePath: '',
+                anchorX: 0.5,
+                anchorY: 0.5,
+                sortOrder: 0,
+                visible: true,
+                parent: null,
+                children: [],
+                hasBody: false,
+                vx: 0,
+                vy: 0,
+                mass: 1,
+                gravityScale: 1,
+                friction: 0.2,
+                restitution: 0
+            };
+            this._zenithEntities.push(entity);
+            return entity;
+        }
+        spawnTexturedSprite(name, texturePath, x, y, w, h, color) {
+            const entity = this.spawnSprite(name, x, y, w, h, color);
+            entity.texturePath = texturePath;
+            return entity;
+        }
+        spawnCharacter2D(name, texturePath, x, y, w, h, color) {
+            const entity = this.spawnTexturedSprite(name, texturePath, x, y, w, h, color);
+            entity.kind = 'character2d';
+            this._zenithEnsureCharacter2D(entity);
+            return entity;
+        }
+        spawnAudioSource2D(name, clipPath, x, y, playOnAwake) {
+            const entity = {
+                id: this._zenithNextEntityId++,
+                name,
+                tag: '',
+                kind: 'audio2d',
+                x,
+                y,
+                z: 0,
+                rotation: 0,
+                rotationX: 0,
+                rotationY: 0,
+                rotationZ: 0,
+                scaleX: 1,
+                scaleY: 1,
+                scaleZ: 1,
+                parent: null,
+                children: []
+            };
+            this._zenithEntities.push(entity);
+            const target = this._zenithEnsureAudioSource2D(entity);
+            if (target) {
+                target.clipPath = clipPath || '';
+                target.playOnAwake = playOnAwake === true;
+                target.isPlaying = playOnAwake === true;
+            }
+            return entity;
+        }
+        spawnAudioListener2D(name, x, y, primary) {
+            const entity = {
+                id: this._zenithNextEntityId++,
+                name,
+                tag: '',
+                kind: 'listener2d',
+                x,
+                y,
+                z: 0,
+                rotation: 0,
+                rotationX: 0,
+                rotationY: 0,
+                rotationZ: 0,
+                scaleX: 1,
+                scaleY: 1,
+                scaleZ: 1,
+                parent: null,
+                children: []
+            };
+            this._zenithEntities.push(entity);
+            const target = this._zenithEnsureAudioListener2D(entity);
+            if (target) {
+                if (primary) {
+                    for (const existing of this._zenithEntities) {
+                        if (existing !== target && existing.kind === 'listener2d') existing.primary = false;
+                    }
+                    this._zenithPrimaryAudioListener = target;
+                } else if (this._zenithPrimaryAudioListener === target) {
+                    this._zenithPrimaryAudioListener = null;
+                }
+                target.primary = primary === true;
+            }
+            return entity;
+        }
+        spawnCamera2D(name, x, y, zoom, primary) {
+            const entity = {
+                id: this._zenithNextEntityId++,
+                name,
+                tag: '',
+                kind: 'camera2d',
+                x,
+                y,
+                z: 0,
+                rotation: 0,
+                rotationX: 0,
+                rotationY: 0,
+                rotationZ: 0,
+                scaleX: 1,
+                scaleY: 1,
+                scaleZ: 1,
+                zoom,
+                primary,
+                viewportX: 0,
+                viewportY: 0,
+                viewportWidth: 1,
+                viewportHeight: 1,
+                parent: null,
+                children: []
+            };
+            if (primary) {
+                for (const existing of this._zenithEntities) {
+                    if (existing.kind === 'camera2d') existing.primary = false;
+                }
+                this._zenithPrimaryCamera = entity;
+            }
+            this._zenithEntities.push(entity);
+            return entity;
+        }
+        destroyEntity(entity) {
+            const index = this._zenithEntities.indexOf(entity);
+            if (index < 0) return false;
+            if (entity.parent && entity.parent.children) {
+                const parentIndex = entity.parent.children.indexOf(entity);
+                if (parentIndex >= 0) entity.parent.children.splice(parentIndex, 1);
+            }
+            if (entity.children) {
+                for (const child of entity.children) {
+                    child.parent = null;
+                }
+                entity.children = [];
+            }
+            if (this._zenithPrimaryCamera === entity) this._zenithPrimaryCamera = null;
+            if (this._zenithPrimaryAudioListener === entity) this._zenithPrimaryAudioListener = null;
+            if (this._zenithPrimaryCamera3D === entity) this._zenithPrimaryCamera3D = null;
+            if (this._zenithPrimaryAudioListener3D === entity) this._zenithPrimaryAudioListener3D = null;
+            this._zenithEntities.splice(index, 1);
+            return true;
+        }
+        isEntityAlive(entity) {
+            return this._zenithEntities.indexOf(entity) >= 0;
+        }
+        entityCount() {
+            return this._zenithEntities.length;
+        }
+        setEntityPosition2D(entity, x, y) {
+            if (!entity) return;
+            entity.x = x;
+            entity.y = y;
+        }
+        moveEntity2D(entity, dx, dy) {
+            if (!entity) return;
+            entity.x = (entity.x || 0) + dx;
+            entity.y = (entity.y || 0) + dy;
+        }
+        entityPositionX(entity) {
+            return entity ? (entity.x || 0) : 0;
+        }
+        entityPositionY(entity) {
+            return entity ? (entity.y || 0) : 0;
+        }
+        spawnMesh(name, meshPath, shaderPath, x, y, z) {
+            const entity = {
+                id: this._zenithNextEntityId++,
+                name,
+                tag: '',
+                kind: 'mesh3d',
+                x,
+                y,
+                z,
+                rotation: 0,
+                rotationX: 0,
+                rotationY: 0,
+                rotationZ: 0,
+                scaleX: 1,
+                scaleY: 1,
+                scaleZ: 1,
+                meshPath,
+                shaderPath,
+                materialPath: '',
+                visible: true,
+                castShadows: true,
+                parent: null,
+                children: []
+            };
+            this._zenithEntities.push(entity);
+            return entity;
+        }
+        spawnCharacter3D(name, meshPath, shaderPath, materialPath, x, y, z) {
+            const entity = this.spawnMesh(name, meshPath, shaderPath, x, y, z);
+            entity.kind = 'character3d';
+            entity.materialPath = materialPath || '';
+            if (entity.materialPath) this._zenithEnsureMaterial(entity.materialPath);
+            this._zenithEnsureCharacter3D(entity);
+            return entity;
+        }
+        spawnAudioSource3D(name, clipPath, x, y, z, playOnAwake) {
+            const entity = {
+                id: this._zenithNextEntityId++,
+                name,
+                tag: '',
+                kind: 'audio3d',
+                x,
+                y,
+                z,
+                rotation: 0,
+                rotationX: 0,
+                rotationY: 0,
+                rotationZ: 0,
+                scaleX: 1,
+                scaleY: 1,
+                scaleZ: 1,
+                parent: null,
+                children: []
+            };
+            this._zenithEntities.push(entity);
+            const target = this._zenithEnsureAudioSource3D(entity);
+            if (target) {
+                target.clipPath = clipPath || '';
+                target.playOnAwake = playOnAwake === true;
+                target.isPlaying = playOnAwake === true;
+            }
+            return entity;
+        }
+        spawnPointLight3D(name, x, y, z, color, intensity, range) {
+            const entity = {
+                id: this._zenithNextEntityId++,
+                name,
+                tag: '',
+                kind: 'pointlight3d',
+                x,
+                y,
+                z,
+                rotation: 0,
+                rotationX: 0,
+                rotationY: 0,
+                rotationZ: 0,
+                scaleX: 1,
+                scaleY: 1,
+                scaleZ: 1,
+                parent: null,
+                children: []
+            };
+            this._zenithEntities.push(entity);
+            const target = this._zenithEnsurePointLight3D(entity);
+            if (target) {
+                target.color = color || 'white';
+                target.intensity = intensity;
+                target.range = range;
+            }
+            return entity;
+        }
+        spawnDirectionalLight3D(name, x, y, z, dirX, dirY, dirZ, color, intensity, castShadows) {
+            const entity = {
+                id: this._zenithNextEntityId++,
+                name,
+                tag: '',
+                kind: 'directionallight3d',
+                x,
+                y,
+                z,
+                rotation: 0,
+                rotationX: 0,
+                rotationY: 0,
+                rotationZ: 0,
+                scaleX: 1,
+                scaleY: 1,
+                scaleZ: 1,
+                parent: null,
+                children: []
+            };
+            this._zenithEntities.push(entity);
+            const target = this._zenithEnsureDirectionalLight3D(entity);
+            if (target) {
+                target.directionX = dirX;
+                target.directionY = dirY;
+                target.directionZ = dirZ;
+                target.color = color || 'white';
+                target.intensity = intensity;
+                target.castShadows = castShadows !== false;
+            }
+            return entity;
+        }
+        spawnAudioListener3D(name, x, y, z, primary) {
+            const entity = {
+                id: this._zenithNextEntityId++,
+                name,
+                tag: '',
+                kind: 'listener3d',
+                x,
+                y,
+                z,
+                rotation: 0,
+                rotationX: 0,
+                rotationY: 0,
+                rotationZ: 0,
+                scaleX: 1,
+                scaleY: 1,
+                scaleZ: 1,
+                parent: null,
+                children: []
+            };
+            this._zenithEntities.push(entity);
+            const target = this._zenithEnsureAudioListener3D(entity);
+            if (target) {
+                if (primary) {
+                    for (const existing of this._zenithEntities) {
+                        if (existing !== target && existing.kind === 'listener3d') existing.primary = false;
+                    }
+                    this._zenithPrimaryAudioListener3D = target;
+                } else if (this._zenithPrimaryAudioListener3D === target) {
+                    this._zenithPrimaryAudioListener3D = null;
+                }
+                target.primary = primary === true;
+            }
+            return entity;
+        }
+        createMaterial(materialPath, shaderPath) {
+            const material = this._zenithEnsureMaterial(materialPath, shaderPath);
+            return material ? material.path : '';
+        }
+        materialExists(materialPath) {
+            return !!materialPath && this._zenithMaterials.has(materialPath);
+        }
+        setMaterialShaderPath(materialPath, shaderPath) {
+            const material = this._zenithEnsureMaterial(materialPath, shaderPath);
+            if (material) material.shaderPath = shaderPath;
+        }
+        materialShaderPath(materialPath) {
+            const material = this._zenithEnsureMaterial(materialPath);
+            return material ? (material.shaderPath || '') : '';
+        }
+        defineMaterialText(materialPath, propertyName, label, defaultValue) {
+            const property = this._zenithEnsureMaterialProperty(materialPath, propertyName, 'Text', label);
+            if (!property) return false;
+            property.stringValue = defaultValue;
+            return true;
+        }
+        defineMaterialNumber(materialPath, propertyName, label, defaultValue) {
+            const property = this._zenithEnsureMaterialProperty(materialPath, propertyName, 'Number', label);
+            if (!property) return false;
+            property.numberValue = defaultValue;
+            return true;
+        }
+        defineMaterialToggle(materialPath, propertyName, label, defaultValue) {
+            const property = this._zenithEnsureMaterialProperty(materialPath, propertyName, 'Toggle', label);
+            if (!property) return false;
+            property.boolValue = defaultValue === true;
+            return true;
+        }
+        defineMaterialRadio(materialPath, propertyName, label, optionsCsv, defaultValue) {
+            const property = this._zenithEnsureMaterialProperty(materialPath, propertyName, 'Radio', label);
+            if (!property) return false;
+            property.options = this._zenithParseMaterialOptions(optionsCsv);
+            property.stringValue = defaultValue;
+            return true;
+        }
+        defineMaterialImage(materialPath, propertyName, label, defaultValue) {
+            const property = this._zenithEnsureMaterialProperty(materialPath, propertyName, 'Image', label);
+            if (!property) return false;
+            property.stringValue = defaultValue;
+            return true;
+        }
+        defineMaterialButton(materialPath, propertyName, label, actionValue) {
+            const property = this._zenithEnsureMaterialProperty(materialPath, propertyName, 'Button', label);
+            if (!property) return false;
+            property.stringValue = actionValue;
+            return true;
+        }
+        defineMaterialColor(materialPath, propertyName, label, defaultValue) {
+            const property = this._zenithEnsureMaterialProperty(materialPath, propertyName, 'Color', label);
+            if (!property) return false;
+            property.stringValue = defaultValue;
+            return true;
+        }
+        setMaterialTextProperty(materialPath, propertyName, value) {
+            const property = this._zenithMaterialProperty(materialPath, propertyName);
+            if (!property) return false;
+            property.stringValue = value;
+            return true;
+        }
+        materialTextProperty(materialPath, propertyName) {
+            const property = this._zenithMaterialProperty(materialPath, propertyName);
+            return property ? (property.stringValue || '') : '';
+        }
+        setMaterialNumberProperty(materialPath, propertyName, value) {
+            const property = this._zenithMaterialProperty(materialPath, propertyName);
+            if (!property) return false;
+            property.numberValue = value;
+            return true;
+        }
+        materialNumberProperty(materialPath, propertyName) {
+            const property = this._zenithMaterialProperty(materialPath, propertyName);
+            return property ? (property.numberValue || 0) : 0;
+        }
+        setMaterialToggleProperty(materialPath, propertyName, value) {
+            const property = this._zenithMaterialProperty(materialPath, propertyName);
+            if (!property) return false;
+            property.boolValue = value === true;
+            return true;
+        }
+        materialToggleProperty(materialPath, propertyName) {
+            const property = this._zenithMaterialProperty(materialPath, propertyName);
+            return property ? property.boolValue === true : false;
+        }
+        setMaterialRadioProperty(materialPath, propertyName, value) {
+            const property = this._zenithMaterialProperty(materialPath, propertyName);
+            if (!property) return false;
+            property.stringValue = value;
+            return true;
+        }
+        materialRadioProperty(materialPath, propertyName) {
+            const property = this._zenithMaterialProperty(materialPath, propertyName);
+            return property ? (property.stringValue || '') : '';
+        }
+        setMaterialImageProperty(materialPath, propertyName, value) {
+            const property = this._zenithMaterialProperty(materialPath, propertyName);
+            if (!property) return false;
+            property.stringValue = value;
+            return true;
+        }
+        materialImageProperty(materialPath, propertyName) {
+            const property = this._zenithMaterialProperty(materialPath, propertyName);
+            return property ? (property.stringValue || '') : '';
+        }
+        setMaterialButtonProperty(materialPath, propertyName, value) {
+            const property = this._zenithMaterialProperty(materialPath, propertyName);
+            if (!property) return false;
+            property.stringValue = value;
+            return true;
+        }
+        materialButtonProperty(materialPath, propertyName) {
+            const property = this._zenithMaterialProperty(materialPath, propertyName);
+            return property ? (property.stringValue || '') : '';
+        }
+        setMaterialColorProperty(materialPath, propertyName, value) {
+            const property = this._zenithMaterialProperty(materialPath, propertyName);
+            if (!property) return false;
+            property.stringValue = value;
+            return true;
+        }
+        materialColorProperty(materialPath, propertyName) {
+            const property = this._zenithMaterialProperty(materialPath, propertyName);
+            return property ? (property.stringValue || '') : '';
+        }
+        materialPropertyCount(materialPath) {
+            const material = this._zenithEnsureMaterial(materialPath);
+            return material ? material.properties.size : 0;
+        }
+        setMeshMaterial(entity, materialPath) {
+            const target = this._zenithEnsureMesh3D(entity);
+            if (!target) return false;
+            target.materialPath = materialPath || '';
+            if (materialPath) this._zenithEnsureMaterial(materialPath);
+            return true;
+        }
+        meshMaterialPath(entity) {
+            return entity ? (entity.materialPath !== undefined ? entity.materialPath : '') : '';
+        }
+        playAudio(entity) {
+            if (!entity) return false;
+            if (entity.hasAudio2D === true) {
+                const target = this._zenithEnsureAudioSource2D(entity);
+                if (!target) return false;
+                target.isPlaying = true;
+                return true;
+            }
+            if (entity.hasAudio3D === true) {
+                const target = this._zenithEnsureAudioSource3D(entity);
+                if (!target) return false;
+                target.isPlaying = true;
+                return true;
+            }
+            return false;
+        }
+        stopAudio(entity) {
+            if (!entity) return false;
+            if (entity.hasAudio2D === true) {
+                const target = this._zenithEnsureAudioSource2D(entity);
+                if (!target) return false;
+                target.isPlaying = false;
+                return true;
+            }
+            if (entity.hasAudio3D === true) {
+                const target = this._zenithEnsureAudioSource3D(entity);
+                if (!target) return false;
+                target.isPlaying = false;
+                return true;
+            }
+            return false;
+        }
+        spawnCamera3D(name, x, y, z, fov, primary) {
+            const entity = {
+                id: this._zenithNextEntityId++,
+                name,
+                tag: '',
+                kind: 'camera3d',
+                x,
+                y,
+                z,
+                rotation: 0,
+                rotationX: 0,
+                rotationY: 0,
+                rotationZ: 0,
+                scaleX: 1,
+                scaleY: 1,
+                scaleZ: 1,
+                fov,
+                nearClip: 0.1,
+                farClip: 1000,
+                primary,
+                viewportX: 0,
+                viewportY: 0,
+                viewportWidth: 1,
+                viewportHeight: 1,
+                parent: null,
+                children: []
+            };
+            if (primary) {
+                for (const existing of this._zenithEntities) {
+                    if (existing.kind === 'camera3d') existing.primary = false;
+                }
+                this._zenithPrimaryCamera3D = entity;
+            }
+            this._zenithEntities.push(entity);
+            return entity;
+        }
+        setEntityPosition3D(entity, x, y, z) {
+            if (!entity) return;
+            entity.x = x;
+            entity.y = y;
+            entity.z = z;
+        }
+        moveEntity3D(entity, dx, dy, dz) {
+            if (!entity) return;
+            entity.x = (entity.x || 0) + dx;
+            entity.y = (entity.y || 0) + dy;
+            entity.z = (entity.z || 0) + dz;
+        }
+        entityPositionZ(entity) {
+            return entity ? (entity.z || 0) : 0;
+        }
+        transform2D(entity) {
+            const self = this;
+            return {
+                get x() { return entity ? (entity.x !== undefined ? entity.x : 0) : 0; },
+                set x(value) { const target = self._zenithEnsureTransform2D(entity); if (target) target.x = value; },
+                get y() { return entity ? (entity.y !== undefined ? entity.y : 0) : 0; },
+                set y(value) { const target = self._zenithEnsureTransform2D(entity); if (target) target.y = value; },
+                get rotation() { return entity ? (entity.rotation !== undefined ? entity.rotation : 0) : 0; },
+                set rotation(value) { const target = self._zenithEnsureTransform2D(entity); if (target) target.rotation = value; },
+                get scaleX() { return entity ? (entity.scaleX !== undefined ? entity.scaleX : 1) : 1; },
+                set scaleX(value) { const target = self._zenithEnsureTransform2D(entity); if (target) target.scaleX = value; },
+                get scaleY() { return entity ? (entity.scaleY !== undefined ? entity.scaleY : 1) : 1; },
+                set scaleY(value) { const target = self._zenithEnsureTransform2D(entity); if (target) target.scaleY = value; }
+            };
+        }
+        body2D(entity) {
+            const self = this;
+            return {
+                get x() { return entity ? (entity.x !== undefined ? entity.x : 0) : 0; },
+                set x(value) { const target = self._zenithEnsureBody2D(entity); if (target) target.x = value; },
+                get y() { return entity ? (entity.y !== undefined ? entity.y : 0) : 0; },
+                set y(value) { const target = self._zenithEnsureBody2D(entity); if (target) target.y = value; },
+                get vx() { return entity ? (entity.vx !== undefined ? entity.vx : 0) : 0; },
+                set vx(value) { const target = self._zenithEnsureBody2D(entity); if (target) target.vx = value; },
+                get vy() { return entity ? (entity.vy !== undefined ? entity.vy : 0) : 0; },
+                set vy(value) { const target = self._zenithEnsureBody2D(entity); if (target) target.vy = value; },
+                get mass() { return entity ? (entity.mass !== undefined ? entity.mass : 1) : 1; },
+                set mass(value) { const target = self._zenithEnsureBody2D(entity); if (target) target.mass = value > 0 ? value : 1; },
+                get gravityScale() { return entity ? (entity.gravityScale !== undefined ? entity.gravityScale : 1) : 1; },
+                set gravityScale(value) { const target = self._zenithEnsureBody2D(entity); if (target) target.gravityScale = value; },
+                get friction() { return entity ? (entity.friction !== undefined ? entity.friction : 0.2) : 0.2; },
+                set friction(value) { const target = self._zenithEnsureBody2D(entity); if (target) target.friction = value; },
+                get restitution() { return entity ? (entity.restitution !== undefined ? entity.restitution : 0) : 0; },
+                set restitution(value) { const target = self._zenithEnsureBody2D(entity); if (target) target.restitution = value; }
+            };
+        }
+        boxCollider2D(entity) {
+            const self = this;
+            return {
+                get offsetX() { return entity ? (entity.boxColliderOffsetX !== undefined ? entity.boxColliderOffsetX : 0) : 0; },
+                set offsetX(value) { const target = self._zenithEnsureBoxCollider2D(entity); if (target) target.boxColliderOffsetX = value; },
+                get offsetY() { return entity ? (entity.boxColliderOffsetY !== undefined ? entity.boxColliderOffsetY : 0) : 0; },
+                set offsetY(value) { const target = self._zenithEnsureBoxCollider2D(entity); if (target) target.boxColliderOffsetY = value; },
+                get width() { return entity ? (entity.boxColliderWidth !== undefined ? entity.boxColliderWidth : 1) : 1; },
+                set width(value) { const target = self._zenithEnsureBoxCollider2D(entity); if (target) target.boxColliderWidth = value > 0 ? value : 0.01; },
+                get height() { return entity ? (entity.boxColliderHeight !== undefined ? entity.boxColliderHeight : 1) : 1; },
+                set height(value) { const target = self._zenithEnsureBoxCollider2D(entity); if (target) target.boxColliderHeight = value > 0 ? value : 0.01; },
+                get isTrigger() { return entity ? entity.boxColliderIsTrigger === true : false; },
+                set isTrigger(value) { const target = self._zenithEnsureBoxCollider2D(entity); if (target) target.boxColliderIsTrigger = value === true; },
+                get enabled() { return entity ? entity.boxColliderEnabled !== false : true; },
+                set enabled(value) { const target = self._zenithEnsureBoxCollider2D(entity); if (target) target.boxColliderEnabled = value !== false; }
+            };
+        }
+        circleCollider2D(entity) {
+            const self = this;
+            return {
+                get offsetX() { return entity ? (entity.circleColliderOffsetX !== undefined ? entity.circleColliderOffsetX : 0) : 0; },
+                set offsetX(value) { const target = self._zenithEnsureCircleCollider2D(entity); if (target) target.circleColliderOffsetX = value; },
+                get offsetY() { return entity ? (entity.circleColliderOffsetY !== undefined ? entity.circleColliderOffsetY : 0) : 0; },
+                set offsetY(value) { const target = self._zenithEnsureCircleCollider2D(entity); if (target) target.circleColliderOffsetY = value; },
+                get radius() { return entity ? (entity.circleColliderRadius !== undefined ? entity.circleColliderRadius : 0.5) : 0.5; },
+                set radius(value) { const target = self._zenithEnsureCircleCollider2D(entity); if (target) target.circleColliderRadius = value > 0 ? value : 0.01; },
+                get isTrigger() { return entity ? entity.circleColliderIsTrigger === true : false; },
+                set isTrigger(value) { const target = self._zenithEnsureCircleCollider2D(entity); if (target) target.circleColliderIsTrigger = value === true; },
+                get enabled() { return entity ? entity.circleColliderEnabled !== false : true; },
+                set enabled(value) { const target = self._zenithEnsureCircleCollider2D(entity); if (target) target.circleColliderEnabled = value !== false; }
+            };
+        }
+        capsuleCollider2D(entity) {
+            const self = this;
+            return {
+                get offsetX() { return entity ? (entity.capsuleColliderOffsetX !== undefined ? entity.capsuleColliderOffsetX : 0) : 0; },
+                set offsetX(value) { const target = self._zenithEnsureCapsuleCollider2D(entity); if (target) target.capsuleColliderOffsetX = value; },
+                get offsetY() { return entity ? (entity.capsuleColliderOffsetY !== undefined ? entity.capsuleColliderOffsetY : 0) : 0; },
+                set offsetY(value) { const target = self._zenithEnsureCapsuleCollider2D(entity); if (target) target.capsuleColliderOffsetY = value; },
+                get height() { return entity ? (entity.capsuleColliderHeight !== undefined ? entity.capsuleColliderHeight : 2) : 2; },
+                set height(value) { const target = self._zenithEnsureCapsuleCollider2D(entity); if (target) target.capsuleColliderHeight = Math.max(value, (target.capsuleColliderRadius !== undefined ? target.capsuleColliderRadius : 0.5) * 2); },
+                get radius() { return entity ? (entity.capsuleColliderRadius !== undefined ? entity.capsuleColliderRadius : 0.5) : 0.5; },
+                set radius(value) { const target = self._zenithEnsureCapsuleCollider2D(entity); if (target) { target.capsuleColliderRadius = value > 0 ? value : 0.01; target.capsuleColliderHeight = Math.max(target.capsuleColliderHeight !== undefined ? target.capsuleColliderHeight : 2, target.capsuleColliderRadius * 2); } },
+                get isTrigger() { return entity ? entity.capsuleColliderIsTrigger === true : false; },
+                set isTrigger(value) { const target = self._zenithEnsureCapsuleCollider2D(entity); if (target) target.capsuleColliderIsTrigger = value === true; },
+                get enabled() { return entity ? entity.capsuleColliderEnabled !== false : true; },
+                set enabled(value) { const target = self._zenithEnsureCapsuleCollider2D(entity); if (target) target.capsuleColliderEnabled = value !== false; }
+            };
+        }
+        camera2D(entity) {
+            const self = this;
+            return {
+                get x() { return entity ? (entity.x !== undefined ? entity.x : 0) : 0; },
+                set x(value) { const target = self._zenithEnsureCamera2D(entity); if (target) target.x = value; },
+                get y() { return entity ? (entity.y !== undefined ? entity.y : 0) : 0; },
+                set y(value) { const target = self._zenithEnsureCamera2D(entity); if (target) target.y = value; },
+                get zoom() { return entity ? (entity.zoom !== undefined ? entity.zoom : 1) : 1; },
+                set zoom(value) { const target = self._zenithEnsureCamera2D(entity); if (target) target.zoom = value; },
+                get primary() { return entity ? entity.primary === true : false; },
+                set primary(value) {
+                    const target = self._zenithEnsureCamera2D(entity);
+                    if (!target) return;
+                    if (value) {
+                        for (const existing of self._zenithEntities) {
+                            if (existing !== target && existing.kind === 'camera2d') existing.primary = false;
+                        }
+                        self._zenithPrimaryCamera = target;
+                    } else if (self._zenithPrimaryCamera === target) {
+                        self._zenithPrimaryCamera = null;
+                    }
+                    target.primary = value === true;
+                },
+                get viewportX() { return entity ? (entity.viewportX !== undefined ? entity.viewportX : 0) : 0; },
+                set viewportX(value) { const target = self._zenithEnsureCamera2D(entity); if (target) target.viewportX = value; },
+                get viewportY() { return entity ? (entity.viewportY !== undefined ? entity.viewportY : 0) : 0; },
+                set viewportY(value) { const target = self._zenithEnsureCamera2D(entity); if (target) target.viewportY = value; },
+                get viewportWidth() { return entity ? (entity.viewportWidth !== undefined ? entity.viewportWidth : 1) : 1; },
+                set viewportWidth(value) { const target = self._zenithEnsureCamera2D(entity); if (target) target.viewportWidth = value; },
+                get viewportHeight() { return entity ? (entity.viewportHeight !== undefined ? entity.viewportHeight : 1) : 1; },
+                set viewportHeight(value) { const target = self._zenithEnsureCamera2D(entity); if (target) target.viewportHeight = value; }
+            };
+        }
+        audioListener2D(entity) {
+            const self = this;
+            return {
+                get x() { return entity ? (entity.x !== undefined ? entity.x : 0) : 0; },
+                set x(value) { const target = self._zenithEnsureAudioListener2D(entity); if (target) target.x = value; },
+                get y() { return entity ? (entity.y !== undefined ? entity.y : 0) : 0; },
+                set y(value) { const target = self._zenithEnsureAudioListener2D(entity); if (target) target.y = value; },
+                get gain() { return entity ? (entity.gain !== undefined ? entity.gain : 1) : 1; },
+                set gain(value) { const target = self._zenithEnsureAudioListener2D(entity); if (target) target.gain = value; },
+                get primary() { return entity ? entity.primary === true : false; },
+                set primary(value) {
+                    const target = self._zenithEnsureAudioListener2D(entity);
+                    if (!target) return;
+                    if (value) {
+                        for (const existing of self._zenithEntities) {
+                            if (existing !== target && existing.kind === 'listener2d') existing.primary = false;
+                        }
+                        self._zenithPrimaryAudioListener = target;
+                    } else if (self._zenithPrimaryAudioListener === target) {
+                        self._zenithPrimaryAudioListener = null;
+                    }
+                    target.primary = value === true;
+                },
+                get enabled() { return entity ? entity.enabled !== false : true; },
+                set enabled(value) { const target = self._zenithEnsureAudioListener2D(entity); if (target) target.enabled = value !== false; }
+            };
+        }
+        sprite2D(entity) {
+            const self = this;
+            return {
+                get width() { return entity ? (entity.w !== undefined ? entity.w : 1) : 1; },
+                set width(value) { const target = self._zenithEnsureSprite2D(entity); if (target) target.w = value; },
+                get height() { return entity ? (entity.h !== undefined ? entity.h : 1) : 1; },
+                set height(value) { const target = self._zenithEnsureSprite2D(entity); if (target) target.h = value; },
+                get anchorX() { return entity ? (entity.anchorX !== undefined ? entity.anchorX : 0.5) : 0.5; },
+                set anchorX(value) { const target = self._zenithEnsureSprite2D(entity); if (target) target.anchorX = value; },
+                get anchorY() { return entity ? (entity.anchorY !== undefined ? entity.anchorY : 0.5) : 0.5; },
+                set anchorY(value) { const target = self._zenithEnsureSprite2D(entity); if (target) target.anchorY = value; },
+                get color() { return entity ? (entity.color !== undefined ? entity.color : 'white') : 'white'; },
+                set color(value) { const target = self._zenithEnsureSprite2D(entity); if (target) target.color = value; },
+                get texturePath() { return entity ? (entity.texturePath !== undefined ? entity.texturePath : '') : ''; },
+                set texturePath(value) { const target = self._zenithEnsureSprite2D(entity); if (target) target.texturePath = value; },
+                get sortOrder() { return entity ? (entity.sortOrder !== undefined ? entity.sortOrder : 0) : 0; },
+                set sortOrder(value) { const target = self._zenithEnsureSprite2D(entity); if (target) target.sortOrder = value; },
+                get visible() { return entity ? entity.visible !== false : true; },
+                set visible(value) { const target = self._zenithEnsureSprite2D(entity); if (target) target.visible = value !== false; }
+            };
+        }
+        character2D(entity) {
+            const self = this;
+            return {
+                get x() { return entity ? (entity.x !== undefined ? entity.x : 0) : 0; },
+                set x(value) { const target = self._zenithEnsureCharacter2D(entity); if (target) target.x = value; },
+                get y() { return entity ? (entity.y !== undefined ? entity.y : 0) : 0; },
+                set y(value) { const target = self._zenithEnsureCharacter2D(entity); if (target) target.y = value; },
+                get vx() { return entity ? (entity.vx !== undefined ? entity.vx : 0) : 0; },
+                set vx(value) { const target = self._zenithEnsureCharacter2D(entity); if (target) target.vx = value; },
+                get vy() { return entity ? (entity.vy !== undefined ? entity.vy : 0) : 0; },
+                set vy(value) { const target = self._zenithEnsureCharacter2D(entity); if (target) target.vy = value; },
+                get moveSpeed() { return entity ? (entity.moveSpeed !== undefined ? entity.moveSpeed : 10) : 10; },
+                set moveSpeed(value) { const target = self._zenithEnsureCharacter2D(entity); if (target) target.moveSpeed = value; },
+                get jumpForce() { return entity ? (entity.jumpForce !== undefined ? entity.jumpForce : 12) : 12; },
+                set jumpForce(value) { const target = self._zenithEnsureCharacter2D(entity); if (target) target.jumpForce = value; },
+                get isGrounded() { return entity ? entity.isGrounded === true : false; },
+                set isGrounded(value) { const target = self._zenithEnsureCharacter2D(entity); if (target) target.isGrounded = value === true; },
+                get facingRight() { return entity ? entity.facingRight !== false : true; },
+                set facingRight(value) { const target = self._zenithEnsureCharacter2D(entity); if (target) target.facingRight = value !== false; },
+                get texturePath() { return entity ? (entity.texturePath !== undefined ? entity.texturePath : '') : ''; },
+                set texturePath(value) { const target = self._zenithEnsureCharacter2D(entity); if (target) target.texturePath = value || ''; },
+                get color() { return entity ? (entity.color !== undefined ? entity.color : 'white') : 'white'; },
+                set color(value) { const target = self._zenithEnsureCharacter2D(entity); if (target) target.color = value; }
+            };
+        }
+        audioSource2D(entity) {
+            const self = this;
+            return {
+                get x() { return entity ? (entity.x !== undefined ? entity.x : 0) : 0; },
+                set x(value) { const target = self._zenithEnsureAudioSource2D(entity); if (target) target.x = value; },
+                get y() { return entity ? (entity.y !== undefined ? entity.y : 0) : 0; },
+                set y(value) { const target = self._zenithEnsureAudioSource2D(entity); if (target) target.y = value; },
+                get clipPath() { return entity ? (entity.clipPath !== undefined ? entity.clipPath : '') : ''; },
+                set clipPath(value) { const target = self._zenithEnsureAudioSource2D(entity); if (target) target.clipPath = value || ''; },
+                get volume() { return entity ? (entity.volume !== undefined ? entity.volume : 1) : 1; },
+                set volume(value) { const target = self._zenithEnsureAudioSource2D(entity); if (target) target.volume = value; },
+                get pitch() { return entity ? (entity.pitch !== undefined ? entity.pitch : 1) : 1; },
+                set pitch(value) { const target = self._zenithEnsureAudioSource2D(entity); if (target) target.pitch = value; },
+                get loop() { return entity ? entity.loop === true : false; },
+                set loop(value) { const target = self._zenithEnsureAudioSource2D(entity); if (target) target.loop = value === true; },
+                get playOnAwake() { return entity ? entity.playOnAwake === true : false; },
+                set playOnAwake(value) { const target = self._zenithEnsureAudioSource2D(entity); if (target) target.playOnAwake = value === true; },
+                get isPlaying() { return entity ? entity.isPlaying === true : false; },
+                set isPlaying(value) { const target = self._zenithEnsureAudioSource2D(entity); if (target) target.isPlaying = value === true; }
+            };
+        }
+        transform3D(entity) {
+            const self = this;
+            return {
+                get x() { return entity ? (entity.x !== undefined ? entity.x : 0) : 0; },
+                set x(value) { const target = self._zenithEnsureTransform3D(entity); if (target) target.x = value; },
+                get y() { return entity ? (entity.y !== undefined ? entity.y : 0) : 0; },
+                set y(value) { const target = self._zenithEnsureTransform3D(entity); if (target) target.y = value; },
+                get z() { return entity ? (entity.z !== undefined ? entity.z : 0) : 0; },
+                set z(value) { const target = self._zenithEnsureTransform3D(entity); if (target) target.z = value; },
+                get rotationX() { return entity ? (entity.rotationX !== undefined ? entity.rotationX : 0) : 0; },
+                set rotationX(value) { const target = self._zenithEnsureTransform3D(entity); if (target) target.rotationX = value; },
+                get rotationY() { return entity ? (entity.rotationY !== undefined ? entity.rotationY : 0) : 0; },
+                set rotationY(value) { const target = self._zenithEnsureTransform3D(entity); if (target) target.rotationY = value; },
+                get rotationZ() { return entity ? (entity.rotationZ !== undefined ? entity.rotationZ : 0) : 0; },
+                set rotationZ(value) { const target = self._zenithEnsureTransform3D(entity); if (target) target.rotationZ = value; },
+                get scaleX() { return entity ? (entity.scaleX !== undefined ? entity.scaleX : 1) : 1; },
+                set scaleX(value) { const target = self._zenithEnsureTransform3D(entity); if (target) target.scaleX = value; },
+                get scaleY() { return entity ? (entity.scaleY !== undefined ? entity.scaleY : 1) : 1; },
+                set scaleY(value) { const target = self._zenithEnsureTransform3D(entity); if (target) target.scaleY = value; },
+                get scaleZ() { return entity ? (entity.scaleZ !== undefined ? entity.scaleZ : 1) : 1; },
+                set scaleZ(value) { const target = self._zenithEnsureTransform3D(entity); if (target) target.scaleZ = value; }
+            };
+        }
+        body3D(entity) {
+            const self = this;
+            return {
+                get x() { return entity ? (entity.x !== undefined ? entity.x : 0) : 0; },
+                set x(value) { const target = self._zenithEnsureBody3D(entity); if (target) target.x = value; },
+                get y() { return entity ? (entity.y !== undefined ? entity.y : 0) : 0; },
+                set y(value) { const target = self._zenithEnsureBody3D(entity); if (target) target.y = value; },
+                get z() { return entity ? (entity.z !== undefined ? entity.z : 0) : 0; },
+                set z(value) { const target = self._zenithEnsureBody3D(entity); if (target) target.z = value; },
+                get vx() { return entity ? (entity.vx !== undefined ? entity.vx : 0) : 0; },
+                set vx(value) { const target = self._zenithEnsureBody3D(entity); if (target) target.vx = value; },
+                get vy() { return entity ? (entity.vy !== undefined ? entity.vy : 0) : 0; },
+                set vy(value) { const target = self._zenithEnsureBody3D(entity); if (target) target.vy = value; },
+                get vz() { return entity ? (entity.vz !== undefined ? entity.vz : 0) : 0; },
+                set vz(value) { const target = self._zenithEnsureBody3D(entity); if (target) target.vz = value; },
+                get mass() { return entity ? (entity.mass !== undefined ? entity.mass : 1) : 1; },
+                set mass(value) { const target = self._zenithEnsureBody3D(entity); if (target) target.mass = value > 0 ? value : 1; },
+                get gravityScale() { return entity ? (entity.gravityScale !== undefined ? entity.gravityScale : 1) : 1; },
+                set gravityScale(value) { const target = self._zenithEnsureBody3D(entity); if (target) target.gravityScale = value; },
+                get friction() { return entity ? (entity.friction !== undefined ? entity.friction : 0.2) : 0.2; },
+                set friction(value) { const target = self._zenithEnsureBody3D(entity); if (target) target.friction = value; },
+                get restitution() { return entity ? (entity.restitution !== undefined ? entity.restitution : 0) : 0; },
+                set restitution(value) { const target = self._zenithEnsureBody3D(entity); if (target) target.restitution = value; },
+                get useGravity() { return entity ? entity.useGravity !== false : true; },
+                set useGravity(value) { const target = self._zenithEnsureBody3D(entity); if (target) target.useGravity = value !== false; }
+            };
+        }
+        boxCollider3D(entity) {
+            const self = this;
+            return {
+                get offsetX() { return entity ? (entity.boxCollider3DOffsetX !== undefined ? entity.boxCollider3DOffsetX : 0) : 0; },
+                set offsetX(value) { const target = self._zenithEnsureBoxCollider3D(entity); if (target) target.boxCollider3DOffsetX = value; },
+                get offsetY() { return entity ? (entity.boxCollider3DOffsetY !== undefined ? entity.boxCollider3DOffsetY : 0) : 0; },
+                set offsetY(value) { const target = self._zenithEnsureBoxCollider3D(entity); if (target) target.boxCollider3DOffsetY = value; },
+                get offsetZ() { return entity ? (entity.boxCollider3DOffsetZ !== undefined ? entity.boxCollider3DOffsetZ : 0) : 0; },
+                set offsetZ(value) { const target = self._zenithEnsureBoxCollider3D(entity); if (target) target.boxCollider3DOffsetZ = value; },
+                get width() { return entity ? (entity.boxCollider3DWidth !== undefined ? entity.boxCollider3DWidth : 1) : 1; },
+                set width(value) { const target = self._zenithEnsureBoxCollider3D(entity); if (target) target.boxCollider3DWidth = value > 0 ? value : 0.01; },
+                get height() { return entity ? (entity.boxCollider3DHeight !== undefined ? entity.boxCollider3DHeight : 1) : 1; },
+                set height(value) { const target = self._zenithEnsureBoxCollider3D(entity); if (target) target.boxCollider3DHeight = value > 0 ? value : 0.01; },
+                get depth() { return entity ? (entity.boxCollider3DDepth !== undefined ? entity.boxCollider3DDepth : 1) : 1; },
+                set depth(value) { const target = self._zenithEnsureBoxCollider3D(entity); if (target) target.boxCollider3DDepth = value > 0 ? value : 0.01; },
+                get isTrigger() { return entity ? entity.boxCollider3DIsTrigger === true : false; },
+                set isTrigger(value) { const target = self._zenithEnsureBoxCollider3D(entity); if (target) target.boxCollider3DIsTrigger = value === true; },
+                get enabled() { return entity ? entity.boxCollider3DEnabled !== false : true; },
+                set enabled(value) { const target = self._zenithEnsureBoxCollider3D(entity); if (target) target.boxCollider3DEnabled = value !== false; }
+            };
+        }
+        sphereCollider3D(entity) {
+            const self = this;
+            return {
+                get offsetX() { return entity ? (entity.sphereCollider3DOffsetX !== undefined ? entity.sphereCollider3DOffsetX : 0) : 0; },
+                set offsetX(value) { const target = self._zenithEnsureSphereCollider3D(entity); if (target) target.sphereCollider3DOffsetX = value; },
+                get offsetY() { return entity ? (entity.sphereCollider3DOffsetY !== undefined ? entity.sphereCollider3DOffsetY : 0) : 0; },
+                set offsetY(value) { const target = self._zenithEnsureSphereCollider3D(entity); if (target) target.sphereCollider3DOffsetY = value; },
+                get offsetZ() { return entity ? (entity.sphereCollider3DOffsetZ !== undefined ? entity.sphereCollider3DOffsetZ : 0) : 0; },
+                set offsetZ(value) { const target = self._zenithEnsureSphereCollider3D(entity); if (target) target.sphereCollider3DOffsetZ = value; },
+                get radius() { return entity ? (entity.sphereCollider3DRadius !== undefined ? entity.sphereCollider3DRadius : 0.5) : 0.5; },
+                set radius(value) { const target = self._zenithEnsureSphereCollider3D(entity); if (target) target.sphereCollider3DRadius = value > 0 ? value : 0.01; },
+                get isTrigger() { return entity ? entity.sphereCollider3DIsTrigger === true : false; },
+                set isTrigger(value) { const target = self._zenithEnsureSphereCollider3D(entity); if (target) target.sphereCollider3DIsTrigger = value === true; },
+                get enabled() { return entity ? entity.sphereCollider3DEnabled !== false : true; },
+                set enabled(value) { const target = self._zenithEnsureSphereCollider3D(entity); if (target) target.sphereCollider3DEnabled = value !== false; }
+            };
+        }
+        camera3D(entity) {
+            const self = this;
+            return {
+                get x() { return entity ? (entity.x !== undefined ? entity.x : 0) : 0; },
+                set x(value) { const target = self._zenithEnsureCamera3D(entity); if (target) target.x = value; },
+                get y() { return entity ? (entity.y !== undefined ? entity.y : 0) : 0; },
+                set y(value) { const target = self._zenithEnsureCamera3D(entity); if (target) target.y = value; },
+                get z() { return entity ? (entity.z !== undefined ? entity.z : 0) : 0; },
+                set z(value) { const target = self._zenithEnsureCamera3D(entity); if (target) target.z = value; },
+                get rotationX() { return entity ? (entity.rotationX !== undefined ? entity.rotationX : 0) : 0; },
+                set rotationX(value) { const target = self._zenithEnsureCamera3D(entity); if (target) target.rotationX = value; },
+                get rotationY() { return entity ? (entity.rotationY !== undefined ? entity.rotationY : 0) : 0; },
+                set rotationY(value) { const target = self._zenithEnsureCamera3D(entity); if (target) target.rotationY = value; },
+                get rotationZ() { return entity ? (entity.rotationZ !== undefined ? entity.rotationZ : 0) : 0; },
+                set rotationZ(value) { const target = self._zenithEnsureCamera3D(entity); if (target) target.rotationZ = value; },
+                get fov() { return entity ? (entity.fov !== undefined ? entity.fov : 60) : 60; },
+                set fov(value) { const target = self._zenithEnsureCamera3D(entity); if (target) target.fov = value; },
+                get nearClip() { return entity ? (entity.nearClip !== undefined ? entity.nearClip : 0.1) : 0.1; },
+                set nearClip(value) { const target = self._zenithEnsureCamera3D(entity); if (target) target.nearClip = value; },
+                get farClip() { return entity ? (entity.farClip !== undefined ? entity.farClip : 1000) : 1000; },
+                set farClip(value) { const target = self._zenithEnsureCamera3D(entity); if (target) target.farClip = value; },
+                get primary() { return entity ? entity.primary === true : false; },
+                set primary(value) {
+                    const target = self._zenithEnsureCamera3D(entity);
+                    if (!target) return;
+                    if (value) {
+                        for (const existing of self._zenithEntities) {
+                            if (existing !== target && existing.kind === 'camera3d') existing.primary = false;
+                        }
+                        self._zenithPrimaryCamera3D = target;
+                    } else if (self._zenithPrimaryCamera3D === target) {
+                        self._zenithPrimaryCamera3D = null;
+                    }
+                    target.primary = value === true;
+                },
+                get viewportX() { return entity ? (entity.viewportX !== undefined ? entity.viewportX : 0) : 0; },
+                set viewportX(value) { const target = self._zenithEnsureCamera3D(entity); if (target) target.viewportX = value; },
+                get viewportY() { return entity ? (entity.viewportY !== undefined ? entity.viewportY : 0) : 0; },
+                set viewportY(value) { const target = self._zenithEnsureCamera3D(entity); if (target) target.viewportY = value; },
+                get viewportWidth() { return entity ? (entity.viewportWidth !== undefined ? entity.viewportWidth : 1) : 1; },
+                set viewportWidth(value) { const target = self._zenithEnsureCamera3D(entity); if (target) target.viewportWidth = value; },
+                get viewportHeight() { return entity ? (entity.viewportHeight !== undefined ? entity.viewportHeight : 1) : 1; },
+                set viewportHeight(value) { const target = self._zenithEnsureCamera3D(entity); if (target) target.viewportHeight = value; }
+            };
+        }
+        audioListener3D(entity) {
+            const self = this;
+            return {
+                get x() { return entity ? (entity.x !== undefined ? entity.x : 0) : 0; },
+                set x(value) { const target = self._zenithEnsureAudioListener3D(entity); if (target) target.x = value; },
+                get y() { return entity ? (entity.y !== undefined ? entity.y : 0) : 0; },
+                set y(value) { const target = self._zenithEnsureAudioListener3D(entity); if (target) target.y = value; },
+                get z() { return entity ? (entity.z !== undefined ? entity.z : 0) : 0; },
+                set z(value) { const target = self._zenithEnsureAudioListener3D(entity); if (target) target.z = value; },
+                get gain() { return entity ? (entity.gain !== undefined ? entity.gain : 1) : 1; },
+                set gain(value) { const target = self._zenithEnsureAudioListener3D(entity); if (target) target.gain = value; },
+                get primary() { return entity ? entity.primary === true : false; },
+                set primary(value) {
+                    const target = self._zenithEnsureAudioListener3D(entity);
+                    if (!target) return;
+                    if (value) {
+                        for (const existing of self._zenithEntities) {
+                            if (existing !== target && existing.kind === 'listener3d') existing.primary = false;
+                        }
+                        self._zenithPrimaryAudioListener3D = target;
+                    } else if (self._zenithPrimaryAudioListener3D === target) {
+                        self._zenithPrimaryAudioListener3D = null;
+                    }
+                    target.primary = value === true;
+                },
+                get enabled() { return entity ? entity.enabled !== false : true; },
+                set enabled(value) { const target = self._zenithEnsureAudioListener3D(entity); if (target) target.enabled = value !== false; }
+            };
+        }
+        pointLight3D(entity) {
+            const self = this;
+            return {
+                get x() { return entity ? (entity.x !== undefined ? entity.x : 0) : 0; },
+                set x(value) { const target = self._zenithEnsurePointLight3D(entity); if (target) target.x = value; },
+                get y() { return entity ? (entity.y !== undefined ? entity.y : 0) : 0; },
+                set y(value) { const target = self._zenithEnsurePointLight3D(entity); if (target) target.y = value; },
+                get z() { return entity ? (entity.z !== undefined ? entity.z : 0) : 0; },
+                set z(value) { const target = self._zenithEnsurePointLight3D(entity); if (target) target.z = value; },
+                get intensity() { return entity ? (entity.intensity !== undefined ? entity.intensity : 1) : 1; },
+                set intensity(value) { const target = self._zenithEnsurePointLight3D(entity); if (target) target.intensity = value; },
+                get range() { return entity ? (entity.range !== undefined ? entity.range : 10) : 10; },
+                set range(value) { const target = self._zenithEnsurePointLight3D(entity); if (target) target.range = value; },
+                get color() { return entity ? (entity.color !== undefined ? entity.color : 'white') : 'white'; },
+                set color(value) { const target = self._zenithEnsurePointLight3D(entity); if (target) target.color = value || 'white'; },
+                get enabled() { return entity ? entity.enabled !== false : true; },
+                set enabled(value) { const target = self._zenithEnsurePointLight3D(entity); if (target) target.enabled = value !== false; }
+            };
+        }
+        directionalLight3D(entity) {
+            const self = this;
+            return {
+                get x() { return entity ? (entity.x !== undefined ? entity.x : 0) : 0; },
+                set x(value) { const target = self._zenithEnsureDirectionalLight3D(entity); if (target) target.x = value; },
+                get y() { return entity ? (entity.y !== undefined ? entity.y : 0) : 0; },
+                set y(value) { const target = self._zenithEnsureDirectionalLight3D(entity); if (target) target.y = value; },
+                get z() { return entity ? (entity.z !== undefined ? entity.z : 0) : 0; },
+                set z(value) { const target = self._zenithEnsureDirectionalLight3D(entity); if (target) target.z = value; },
+                get directionX() { return entity ? (entity.directionX !== undefined ? entity.directionX : 0) : 0; },
+                set directionX(value) { const target = self._zenithEnsureDirectionalLight3D(entity); if (target) target.directionX = value; },
+                get directionY() { return entity ? (entity.directionY !== undefined ? entity.directionY : -1) : -1; },
+                set directionY(value) { const target = self._zenithEnsureDirectionalLight3D(entity); if (target) target.directionY = value; },
+                get directionZ() { return entity ? (entity.directionZ !== undefined ? entity.directionZ : 0) : 0; },
+                set directionZ(value) { const target = self._zenithEnsureDirectionalLight3D(entity); if (target) target.directionZ = value; },
+                get intensity() { return entity ? (entity.intensity !== undefined ? entity.intensity : 1) : 1; },
+                set intensity(value) { const target = self._zenithEnsureDirectionalLight3D(entity); if (target) target.intensity = value; },
+                get color() { return entity ? (entity.color !== undefined ? entity.color : 'white') : 'white'; },
+                set color(value) { const target = self._zenithEnsureDirectionalLight3D(entity); if (target) target.color = value || 'white'; },
+                get castShadows() { return entity ? entity.castShadows !== false : true; },
+                set castShadows(value) { const target = self._zenithEnsureDirectionalLight3D(entity); if (target) target.castShadows = value !== false; },
+                get enabled() { return entity ? entity.enabled !== false : true; },
+                set enabled(value) { const target = self._zenithEnsureDirectionalLight3D(entity); if (target) target.enabled = value !== false; }
+            };
+        }
+        mesh3D(entity) {
+            const self = this;
+            return {
+                get meshPath() { return entity ? (entity.meshPath !== undefined ? entity.meshPath : '') : ''; },
+                set meshPath(value) { const target = self._zenithEnsureMesh3D(entity); if (target) target.meshPath = value; },
+                get shaderPath() { return entity ? (entity.shaderPath !== undefined ? entity.shaderPath : '') : ''; },
+                set shaderPath(value) { const target = self._zenithEnsureMesh3D(entity); if (target) target.shaderPath = value; },
+                get materialPath() { return entity ? (entity.materialPath !== undefined ? entity.materialPath : '') : ''; },
+                set materialPath(value) { const target = self._zenithEnsureMesh3D(entity); if (target) { target.materialPath = value || ''; if (value) self._zenithEnsureMaterial(value); } },
+                get visible() { return entity ? entity.visible !== false : true; },
+                set visible(value) { const target = self._zenithEnsureMesh3D(entity); if (target) target.visible = value !== false; },
+                get castShadows() { return entity ? entity.castShadows !== false : true; },
+                set castShadows(value) { const target = self._zenithEnsureMesh3D(entity); if (target) target.castShadows = value !== false; }
+            };
+        }
+        character3D(entity) {
+            const self = this;
+            return {
+                get x() { return entity ? (entity.x !== undefined ? entity.x : 0) : 0; },
+                set x(value) { const target = self._zenithEnsureCharacter3D(entity); if (target) target.x = value; },
+                get y() { return entity ? (entity.y !== undefined ? entity.y : 0) : 0; },
+                set y(value) { const target = self._zenithEnsureCharacter3D(entity); if (target) target.y = value; },
+                get z() { return entity ? (entity.z !== undefined ? entity.z : 0) : 0; },
+                set z(value) { const target = self._zenithEnsureCharacter3D(entity); if (target) target.z = value; },
+                get vx() { return entity ? (entity.vx !== undefined ? entity.vx : 0) : 0; },
+                set vx(value) { const target = self._zenithEnsureCharacter3D(entity); if (target) target.vx = value; },
+                get vy() { return entity ? (entity.vy !== undefined ? entity.vy : 0) : 0; },
+                set vy(value) { const target = self._zenithEnsureCharacter3D(entity); if (target) target.vy = value; },
+                get vz() { return entity ? (entity.vz !== undefined ? entity.vz : 0) : 0; },
+                set vz(value) { const target = self._zenithEnsureCharacter3D(entity); if (target) target.vz = value; },
+                get moveSpeed() { return entity ? (entity.moveSpeed !== undefined ? entity.moveSpeed : 6) : 6; },
+                set moveSpeed(value) { const target = self._zenithEnsureCharacter3D(entity); if (target) target.moveSpeed = value; },
+                get turnSpeed() { return entity ? (entity.turnSpeed !== undefined ? entity.turnSpeed : 4) : 4; },
+                set turnSpeed(value) { const target = self._zenithEnsureCharacter3D(entity); if (target) target.turnSpeed = value; },
+                get isGrounded() { return entity ? entity.isGrounded === true : false; },
+                set isGrounded(value) { const target = self._zenithEnsureCharacter3D(entity); if (target) target.isGrounded = value === true; },
+                get useGravity() { return entity ? entity.useGravity !== false : true; },
+                set useGravity(value) { const target = self._zenithEnsureCharacter3D(entity); if (target) target.useGravity = value !== false; },
+                get meshPath() { return entity ? (entity.meshPath !== undefined ? entity.meshPath : '') : ''; },
+                set meshPath(value) { const target = self._zenithEnsureCharacter3D(entity); if (target) target.meshPath = value || ''; },
+                get shaderPath() { return entity ? (entity.shaderPath !== undefined ? entity.shaderPath : '') : ''; },
+                set shaderPath(value) { const target = self._zenithEnsureCharacter3D(entity); if (target) target.shaderPath = value || ''; },
+                get materialPath() { return entity ? (entity.materialPath !== undefined ? entity.materialPath : '') : ''; },
+                set materialPath(value) { const target = self._zenithEnsureCharacter3D(entity); if (target) { target.materialPath = value || ''; if (value) self._zenithEnsureMaterial(value); } }
+            };
+        }
+        audioSource3D(entity) {
+            const self = this;
+            return {
+                get x() { return entity ? (entity.x !== undefined ? entity.x : 0) : 0; },
+                set x(value) { const target = self._zenithEnsureAudioSource3D(entity); if (target) target.x = value; },
+                get y() { return entity ? (entity.y !== undefined ? entity.y : 0) : 0; },
+                set y(value) { const target = self._zenithEnsureAudioSource3D(entity); if (target) target.y = value; },
+                get z() { return entity ? (entity.z !== undefined ? entity.z : 0) : 0; },
+                set z(value) { const target = self._zenithEnsureAudioSource3D(entity); if (target) target.z = value; },
+                get clipPath() { return entity ? (entity.clipPath !== undefined ? entity.clipPath : '') : ''; },
+                set clipPath(value) { const target = self._zenithEnsureAudioSource3D(entity); if (target) target.clipPath = value || ''; },
+                get volume() { return entity ? (entity.volume !== undefined ? entity.volume : 1) : 1; },
+                set volume(value) { const target = self._zenithEnsureAudioSource3D(entity); if (target) target.volume = value; },
+                get pitch() { return entity ? (entity.pitch !== undefined ? entity.pitch : 1) : 1; },
+                set pitch(value) { const target = self._zenithEnsureAudioSource3D(entity); if (target) target.pitch = value; },
+                get loop() { return entity ? entity.loop === true : false; },
+                set loop(value) { const target = self._zenithEnsureAudioSource3D(entity); if (target) target.loop = value === true; },
+                get playOnAwake() { return entity ? entity.playOnAwake === true : false; },
+                set playOnAwake(value) { const target = self._zenithEnsureAudioSource3D(entity); if (target) target.playOnAwake = value === true; },
+                get isPlaying() { return entity ? entity.isPlaying === true : false; },
+                set isPlaying(value) { const target = self._zenithEnsureAudioSource3D(entity); if (target) target.isPlaying = value === true; },
+                get minDistance() { return entity ? (entity.minDistance !== undefined ? entity.minDistance : 1) : 1; },
+                set minDistance(value) { const target = self._zenithEnsureAudioSource3D(entity); if (target) target.minDistance = value; },
+                get maxDistance() { return entity ? (entity.maxDistance !== undefined ? entity.maxDistance : 20) : 20; },
+                set maxDistance(value) { const target = self._zenithEnsureAudioSource3D(entity); if (target) target.maxDistance = value; }
+            };
+        }
+        setSpriteColor(entity, color) {
+            if (entity) entity.color = color;
+        }
+        setSpriteTexture(entity, texturePath) {
+            if (entity) entity.texturePath = texturePath;
+        }
+        spriteTexturePath(entity) {
+            return entity && entity.texturePath ? entity.texturePath : '';
+        }
+        attachBody2D(entity, mass, gravityScale, friction, restitution) {
+            if (!entity) return;
+            entity.hasBody = true;
+            entity.mass = mass > 0 ? mass : 1;
+            entity.gravityScale = gravityScale;
+            entity.friction = friction;
+            entity.restitution = restitution;
+            entity.vx = entity.vx || 0;
+            entity.vy = entity.vy || 0;
+        }
+        attachBoxCollider2D(entity, width, height, isTrigger) {
+            const target = this._zenithEnsureBoxCollider2D(entity);
+            if (!target) return;
+            target.boxColliderWidth = width > 0 ? width : 0.01;
+            target.boxColliderHeight = height > 0 ? height : 0.01;
+            target.boxColliderIsTrigger = isTrigger === true;
+        }
+        attachCircleCollider2D(entity, radius, isTrigger) {
+            const target = this._zenithEnsureCircleCollider2D(entity);
+            if (!target) return;
+            target.circleColliderRadius = radius > 0 ? radius : 0.01;
+            target.circleColliderIsTrigger = isTrigger === true;
+        }
+        attachCapsuleCollider2D(entity, height, radius, isTrigger) {
+            const target = this._zenithEnsureCapsuleCollider2D(entity);
+            if (!target) return;
+            target.capsuleColliderRadius = radius > 0 ? radius : 0.01;
+            target.capsuleColliderHeight = Math.max(height, target.capsuleColliderRadius * 2);
+            target.capsuleColliderIsTrigger = isTrigger === true;
+        }
+        setBodyVelocity2D(entity, vx, vy) {
+            if (!entity) return;
+            entity.vx = vx;
+            entity.vy = vy;
+        }
+        applyBodyImpulse2D(entity, ix, iy) {
+            if (!entity) return;
+            const mass = entity.mass && entity.mass > 0 ? entity.mass : 1;
+            entity.vx = (entity.vx || 0) + (ix / mass);
+            entity.vy = (entity.vy || 0) + (iy / mass);
+        }
+        bodyVelocityX(entity) {
+            return entity ? (entity.vx || 0) : 0;
+        }
+        bodyVelocityY(entity) {
+            return entity ? (entity.vy || 0) : 0;
+        }
+        overlaps2D(first, second) {
+            if (!first || !second) return false;
+            const firstBox = this._zenithBoxColliderBounds2D(first);
+            const secondBox = this._zenithBoxColliderBounds2D(second);
+            const firstCircle = this._zenithCircleColliderState2D(first);
+            const secondCircle = this._zenithCircleColliderState2D(second);
+            const firstCapsule = this._zenithCapsuleColliderState2D(first);
+            const secondCapsule = this._zenithCapsuleColliderState2D(second);
+            if (firstBox && secondBox) {
+                if (firstBox.minX <= secondBox.maxX && firstBox.maxX >= secondBox.minX && firstBox.minY <= secondBox.maxY && firstBox.maxY >= secondBox.minY) return true;
+            }
+            if (firstBox && secondCircle && this._zenithBoxIntersectsCircle2D(firstBox, secondCircle)) return true;
+            if (firstBox && secondCapsule && this._zenithCapsuleIntersectsBox2D(secondCapsule, firstBox)) return true;
+            if (firstCircle && secondBox && this._zenithBoxIntersectsCircle2D(secondBox, firstCircle)) return true;
+            if (firstCircle && secondCapsule && this._zenithCapsuleIntersectsCircle2D(secondCapsule, firstCircle)) return true;
+            if (firstCircle && secondCircle) {
+                const dx = firstCircle.x - secondCircle.x;
+                const dy = firstCircle.y - secondCircle.y;
+                const radius = firstCircle.radius + secondCircle.radius;
+                if ((dx * dx) + (dy * dy) <= (radius * radius)) return true;
+            }
+            if (firstCapsule && secondBox && this._zenithCapsuleIntersectsBox2D(firstCapsule, secondBox)) return true;
+            if (firstCapsule && secondCircle && this._zenithCapsuleIntersectsCircle2D(firstCapsule, secondCircle)) return true;
+            if (firstCapsule && secondCapsule && this._zenithCapsuleIntersectsCapsule2D(firstCapsule, secondCapsule)) return true;
+            return false;
+        }
+        containsPoint2D(entity, x, y) {
+            const box = this._zenithBoxColliderBounds2D(entity);
+            if (box && x >= box.minX && x <= box.maxX && y >= box.minY && y <= box.maxY) return true;
+            const circle = this._zenithCircleColliderState2D(entity);
+            if (circle) {
+                const dx = x - circle.x;
+                const dy = y - circle.y;
+                if ((dx * dx) + (dy * dy) <= (circle.radius * circle.radius)) return true;
+            }
+            const capsule = this._zenithCapsuleColliderState2D(entity);
+            if (capsule && this._zenithCapsuleContainsPoint2D(capsule, x, y)) return true;
+            return false;
+        }
+        _zenithRaycastCircle2D(originX, originY, dirX, dirY, circle, maxDistance) {
+            if (!circle || maxDistance < 0) return null;
+            const ocX = originX - circle.x;
+            const ocY = originY - circle.y;
+            const b = (ocX * dirX) + (ocY * dirY);
+            const c = (ocX * ocX) + (ocY * ocY) - (circle.radius * circle.radius);
+            if (c > 0 && b > 0) return null;
+            const discriminant = (b * b) - c;
+            if (discriminant < 0) return null;
+            let distance = -b - Math.sqrt(discriminant);
+            if (distance < 0) distance = 0;
+            if (distance > maxDistance) return null;
+            const pointX = originX + (dirX * distance);
+            const pointY = originY + (dirY * distance);
+            let normalX = pointX - circle.x;
+            let normalY = pointY - circle.y;
+            const normalLength = Math.sqrt((normalX * normalX) + (normalY * normalY));
+            if (normalLength > 0.0000001) {
+                normalX /= normalLength;
+                normalY /= normalLength;
+            } else {
+                normalX = -dirX;
+                normalY = -dirY;
+            }
+            return { distance, pointX, pointY, normalX, normalY };
+        }
+        _zenithRaycastBox2D(originX, originY, dirX, dirY, bounds, maxDistance) {
+            if (!bounds || maxDistance < 0) return null;
+            const dirEpsilon = 0.0000001;
+            let tMin = 0;
+            let tMax = maxDistance;
+            let normalX = 0;
+            let normalY = 0;
+            const axisTest = (origin, dir, min, max, nx, ny) => {
+                if (Math.abs(dir) <= dirEpsilon) {
+                    return origin >= min && origin <= max;
+                }
+                let near = (min - origin) / dir;
+                let far = (max - origin) / dir;
+                let hitNx = nx;
+                let hitNy = ny;
+                if (near > far) {
+                    const swap = near;
+                    near = far;
+                    far = swap;
+                    hitNx = -nx;
+                    hitNy = -ny;
+                }
+                if (near > tMin) {
+                    tMin = near;
+                    normalX = hitNx;
+                    normalY = hitNy;
+                }
+                if (far < tMax) tMax = far;
+                return tMin <= tMax;
+            };
+            if (!axisTest(originX, dirX, bounds.minX, bounds.maxX, -1, 0)) return null;
+            if (!axisTest(originY, dirY, bounds.minY, bounds.maxY, 0, -1)) return null;
+            if (tMax < 0) return null;
+            const distance = tMin >= 0 ? tMin : 0;
+            if (distance > maxDistance) return null;
+            const pointX = originX + (dirX * distance);
+            const pointY = originY + (dirY * distance);
+            if (distance === 0 && normalX === 0 && normalY === 0) {
+                normalX = -dirX;
+                normalY = -dirY;
+            }
+            return { distance, pointX, pointY, normalX, normalY };
+        }
+        raycast2D(originX, originY, directionX, directionY, maxDistance) {
+            const dirLength = Math.sqrt((directionX * directionX) + (directionY * directionY));
+            if (dirLength <= 0.0000001 || maxDistance < 0) {
+                return { hit: false, entity: null, distance: 0, pointX: 0, pointY: 0, normalX: 0, normalY: 0 };
+            }
+            const dirX = directionX / dirLength;
+            const dirY = directionY / dirLength;
+            let bestHit = { hit: false, entity: null, distance: 0, pointX: 0, pointY: 0, normalX: 0, normalY: 0 };
+            let bestDistance = maxDistance;
+            for (const entity of this._zenithEntities) {
+                if (!entity) continue;
+                const box = this._zenithBoxColliderBounds2D(entity);
+                if (box) {
+                    const hit = this._zenithRaycastBox2D(originX, originY, dirX, dirY, box, bestDistance);
+                    if (hit && hit.distance <= bestDistance) {
+                        bestDistance = hit.distance;
+                        bestHit = { hit: true, entity, distance: hit.distance, pointX: hit.pointX, pointY: hit.pointY, normalX: hit.normalX, normalY: hit.normalY };
+                    }
+                }
+                const circle = this._zenithCircleColliderState2D(entity);
+                if (circle) {
+                    const hit = this._zenithRaycastCircle2D(originX, originY, dirX, dirY, circle, bestDistance);
+                    if (hit && hit.distance <= bestDistance) {
+                        bestDistance = hit.distance;
+                        bestHit = { hit: true, entity, distance: hit.distance, pointX: hit.pointX, pointY: hit.pointY, normalX: hit.normalX, normalY: hit.normalY };
+                    }
+                }
+                const capsule = this._zenithCapsuleColliderState2D(entity);
+                if (capsule) {
+                    const hit = this._zenithRaycastCapsule2D(originX, originY, dirX, dirY, capsule, bestDistance);
+                    if (hit && hit.distance <= bestDistance) {
+                        bestDistance = hit.distance;
+                        bestHit = { hit: true, entity, distance: hit.distance, pointX: hit.pointX, pointY: hit.pointY, normalX: hit.normalX, normalY: hit.normalY };
+                    }
+                }
+            }
+            return bestHit;
+        }
+        attachBoxCollider3D(entity, width, height, depth, isTrigger) {
+            const target = this._zenithEnsureBoxCollider3D(entity);
+            if (!target) return;
+            target.boxCollider3DWidth = width > 0 ? width : 0.01;
+            target.boxCollider3DHeight = height > 0 ? height : 0.01;
+            target.boxCollider3DDepth = depth > 0 ? depth : 0.01;
+            target.boxCollider3DIsTrigger = isTrigger === true;
+        }
+        attachSphereCollider3D(entity, radius, isTrigger) {
+            const target = this._zenithEnsureSphereCollider3D(entity);
+            if (!target) return;
+            target.sphereCollider3DRadius = radius > 0 ? radius : 0.01;
+            target.sphereCollider3DIsTrigger = isTrigger === true;
+        }
+        overlaps3D(first, second) {
+            if (!first || !second) return false;
+            const firstBox = this._zenithBoxColliderBounds3D(first);
+            const secondBox = this._zenithBoxColliderBounds3D(second);
+            const firstSphere = this._zenithSphereColliderState3D(first);
+            const secondSphere = this._zenithSphereColliderState3D(second);
+            if (firstBox && secondBox) {
+                if (firstBox.minX <= secondBox.maxX && firstBox.maxX >= secondBox.minX && firstBox.minY <= secondBox.maxY && firstBox.maxY >= secondBox.minY && firstBox.minZ <= secondBox.maxZ && firstBox.maxZ >= secondBox.minZ) return true;
+            }
+            if (firstBox && secondSphere && this._zenithBoxIntersectsSphere3D(firstBox, secondSphere)) return true;
+            if (firstSphere && secondBox && this._zenithBoxIntersectsSphere3D(secondBox, firstSphere)) return true;
+            if (firstSphere && secondSphere) {
+                const dx = firstSphere.x - secondSphere.x;
+                const dy = firstSphere.y - secondSphere.y;
+                const dz = firstSphere.z - secondSphere.z;
+                const radius = firstSphere.radius + secondSphere.radius;
+                if ((dx * dx) + (dy * dy) + (dz * dz) <= (radius * radius)) return true;
+            }
+            return false;
+        }
+        containsPoint3D(entity, x, y, z) {
+            const box = this._zenithBoxColliderBounds3D(entity);
+            if (box && x >= box.minX && x <= box.maxX && y >= box.minY && y <= box.maxY && z >= box.minZ && z <= box.maxZ) return true;
+            const sphere = this._zenithSphereColliderState3D(entity);
+            if (sphere) {
+                const dx = x - sphere.x;
+                const dy = y - sphere.y;
+                const dz = z - sphere.z;
+                if ((dx * dx) + (dy * dy) + (dz * dz) <= (sphere.radius * sphere.radius)) return true;
+            }
+            return false;
+        }
+        raycast3D(originX, originY, originZ, directionX, directionY, directionZ, maxDistance) {
+            const dirLength = Math.sqrt((directionX * directionX) + (directionY * directionY) + (directionZ * directionZ));
+            if (dirLength <= 0.0000001 || maxDistance < 0) {
+                return { hit: false, entity: null, distance: 0, pointX: 0, pointY: 0, pointZ: 0, normalX: 0, normalY: 0, normalZ: 0 };
+            }
+            const dirX = directionX / dirLength;
+            const dirY = directionY / dirLength;
+            const dirZ = directionZ / dirLength;
+            let bestHit = { hit: false, entity: null, distance: 0, pointX: 0, pointY: 0, pointZ: 0, normalX: 0, normalY: 0, normalZ: 0 };
+            let bestDistance = maxDistance;
+            for (const entity of this._zenithEntities) {
+                if (!entity) continue;
+                const box = this._zenithBoxColliderBounds3D(entity);
+                if (box) {
+                    const hit = this._zenithRaycastBox3D(originX, originY, originZ, dirX, dirY, dirZ, box, bestDistance);
+                    if (hit && hit.distance <= bestDistance) {
+                        bestDistance = hit.distance;
+                        bestHit = { hit: true, entity, distance: hit.distance, pointX: hit.pointX, pointY: hit.pointY, pointZ: hit.pointZ, normalX: hit.normalX, normalY: hit.normalY, normalZ: hit.normalZ };
+                    }
+                }
+                const sphere = this._zenithSphereColliderState3D(entity);
+                if (sphere) {
+                    const hit = this._zenithRaycastSphere3D(originX, originY, originZ, dirX, dirY, dirZ, sphere, bestDistance);
+                    if (hit && hit.distance <= bestDistance) {
+                        bestDistance = hit.distance;
+                        bestHit = { hit: true, entity, distance: hit.distance, pointX: hit.pointX, pointY: hit.pointY, pointZ: hit.pointZ, normalX: hit.normalX, normalY: hit.normalY, normalZ: hit.normalZ };
+                    }
+                }
+            }
+            return bestHit;
+        }
+        followPrimaryCamera2D(target, offsetX, offsetY, smoothing) {
+            if (!this._zenithPrimaryCamera || !target) return false;
+            const blend = Math.max(0, Math.min(1, smoothing));
+            const desiredX = (target.x || 0) + offsetX;
+            const desiredY = (target.y || 0) + offsetY;
+            this._zenithPrimaryCamera.x += (desiredX - (this._zenithPrimaryCamera.x || 0)) * blend;
+            this._zenithPrimaryCamera.y += (desiredY - (this._zenithPrimaryCamera.y || 0)) * blend;
+            if (blend >= 1) {
+                this._zenithPrimaryCamera.x = desiredX;
+                this._zenithPrimaryCamera.y = desiredY;
+            }
+            return true;
+        }
+        _zenithDrawWorld2D(canvas) {
+            const camera = this._zenithPrimaryCamera;
+            const zoom = camera && camera.zoom > 0 ? camera.zoom : 1;
+            const cameraCenterX = camera ? (camera.x || 0) : 0;
+            const cameraCenterY = camera ? (camera.y || 0) : 0;
+            for (const entity of this._zenithEntities) {
+                if (entity.kind !== 'sprite2d' || entity.visible === false) continue;
+                let drawX = entity.x || 0;
+                let drawY = entity.y || 0;
+                let drawW = (entity.w || 1) * zoom;
+                let drawH = (entity.h || 1) * zoom;
+                if (camera) {
+                    drawX = ((entity.x || 0) - cameraCenterX) * zoom + 40;
+                    drawY = ((entity.y || 0) - cameraCenterY) * zoom + 12;
+                }
+                drawX -= drawW * 0.5;
+                drawY -= drawH * 0.5;
+                canvas.drawRect(drawX, drawY, drawW, drawH, entity.color || 'white');
+                if (this.drawEntityNames && entity.name) {
+                    canvas.drawText(entity.name, drawX, drawY - 1, 'white');
+                }
+            }
+        }
+        load() {
+            if (this._zenithLoaded) return;
+            this._zenithLoaded = true;
+            if (this.onLoad) this.onLoad();
+        }
+        updateFrame(frameDt) {
+            this.load();
+            if (frameDt < 0) frameDt = 0;
+            if (frameDt > this.maxFrameDelta) frameDt = this.maxFrameDelta;
+            this._zenithFrameCount += 1;
+            this._zenithLastFrameDelta = frameDt;
+            this._zenithLastFixedSteps = 0;
+            if (this.onFrame) this.onFrame(frameDt);
+            if (this.paused || this.fixedDeltaTime <= 0) return;
+            this._zenithAccumulator += frameDt;
+            while (this._zenithAccumulator + 0.000001 >= this.fixedDeltaTime && this._zenithLastFixedSteps < this.maxFixedStepsPerFrame) {
+                this.simulateFixedStep(this.fixedDeltaTime);
+                this._zenithAccumulator -= this.fixedDeltaTime;
+                this._zenithLastFixedSteps += 1;
+                this._zenithFixedStepCount += 1;
+            }
+            if (this._zenithLastFixedSteps === this.maxFixedStepsPerFrame && this._zenithAccumulator >= this.fixedDeltaTime) {
+                this._zenithAccumulator = this._zenithAccumulator % this.fixedDeltaTime;
+                this._zenithDroppedStepFrames += 1;
+            }
+        }
+        simulateFixedStep(dt) {
+            this.load();
+            if (this.onFixedUpdate) this.onFixedUpdate(dt);
+            if (this.autoSimulatePhysics) {
+                for (const entity of this._zenithEntities) {
+                    if (!entity.hasBody) continue;
+                    entity.vy = (entity.vy || 0) + (9.81 * (entity.gravityScale == null ? 1 : entity.gravityScale) * dt);
+                    entity.x = (entity.x || 0) + ((entity.vx || 0) * dt);
+                    entity.y = (entity.y || 0) + ((entity.vy || 0) * dt);
+                }
+            }
+            if (this.onPostPhysics) this.onPostPhysics(dt);
+        }
+        render(canvas) {
+            this.load();
+            if (this.onDraw) this.onDraw(canvas, this.interpolationAlpha());
+        }
+        setPaused(value) {
+            this.paused = value;
+        }
+        isLoaded() {
+            return this._zenithLoaded;
+        }
+        interpolationAlpha() {
+            if (this.fixedDeltaTime <= 0) return 0.0;
+            const alpha = this._zenithAccumulator / this.fixedDeltaTime;
+            if (alpha < 0) return 0.0;
+            if (alpha > 1) return 1.0;
+            return alpha;
+        }
+        totalFrames() {
+            return this._zenithFrameCount;
+        }
+        totalFixedSteps() {
+            return this._zenithFixedStepCount;
+        }
+        framesWithDroppedSteps() {
+            return this._zenithDroppedStepFrames;
+        }
+        lastSubstepCount() {
+            return this._zenithLastFixedSteps;
+        }
+        accumulatedTime() {
+            return this._zenithAccumulator;
+        }
+        frameDelta() {
+            return this._zenithLastFrameDelta;
+        }
+        init() {
+            this.load();
+        }
+        update(dt) {
+            this.updateFrame(dt);
+        }
+        draw(canvas) {
+            canvas.clear(this.clearColor || 'black');
+            if (this.autoRenderWorld2D) this._zenithDrawWorld2D(canvas);
+            this.render(canvas);
+        }
+}
+    async function main() {
+        let scene = new CodeFirstScene();
+        zenith.runGameLoop(scene);
+    }
+        window.onload = async () => {
+            if (typeof wasmPromises !== 'undefined' && wasmPromises.length > 0) {
+                zenith.println('[WASM] Waiting for ' + wasmPromises.length + ' WASM module(s)...');
+                await Promise.all(wasmPromises);
+                zenith.println('[WASM] All modules loaded. Ready.');
+            }
+            // Define fallback mocks if WASM failed to load
+            if (typeof encrypt === 'undefined') {
+                window.encrypt = function(plaintext, key) {
+                    let result = '';
+                    for (let i = 0; i < plaintext.length; i++) {
+                        result += String.fromCharCode(plaintext.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+                    }
+                    return btoa(result);
+                };
+            }
+            if (typeof decrypt === 'undefined') {
+                window.decrypt = function(ciphertext, key) {
+                    try {
+                        let plaintext = atob(ciphertext);
+                        let result = '';
+                        for (let i = 0; i < plaintext.length; i++) {
+                            result += String.fromCharCode(plaintext.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+                        }
+                        return result;
+                    } catch (e) {
+                        return 'Decryption Error: Invalid Key/Data';
+                    }
+                };
+            }
+            if (typeof deriveKey === 'undefined') {
+                window.deriveKey = function(password, salt) {
+                    return btoa(password + ':' + salt);
+                };
+            }
+            if (typeof println === 'undefined') window.println = (msg) => zenith.println(msg);
+            if (typeof print === 'undefined') window.print = (msg) => zenith.print(msg);
+            main();
+        };
+    </script>
+</body>
+</html>

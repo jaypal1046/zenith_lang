@@ -1,0 +1,993 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zenith Web Application</title>
+    <meta name="description" content="Statically rendered Zenith web application.">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        body {
+            background: radial-gradient(circle at top right, #1a1a2e, #0a0a0f);
+            color: #e2e8f0;
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            box-sizing: border-box;
+        }
+        #zenith-ui-root {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 250px;
+            width: 100%;
+        }
+        .zenith-column {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        .zenith-row {
+            display: flex;
+            flex-direction: row;
+            gap: 16px;
+            align-items: center;
+            width: 100%;
+            flex-wrap: wrap;
+            box-sizing: border-box;
+        }
+        .zenith-text {
+            font-size: 1rem;
+            line-height: 1.5;
+        }
+        .zenith-input {
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid rgba(0, 242, 254, 0.3);
+            border-radius: 8px;
+            padding: 8px 12px;
+            color: #f8fafc;
+            font-family: inherit;
+            font-size: 0.95rem;
+            min-width: 0;
+            outline: none;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        .zenith-input:focus {
+            border-color: #00f2fe;
+            box-shadow: 0 0 10px rgba(0, 242, 254, 0.4);
+            background: rgba(15, 23, 42, 0.8);
+        }
+        .interactive-btn {
+            background: linear-gradient(135deg, #059669, #10b981);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .interactive-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+        }
+    </style>
+    <script>
+        // Helper to compute element path for focus preservation
+        function getElementPath(root, el) {
+            const path = [];
+            let current = el;
+            while (current && current !== root) {
+                let parent = current.parentNode;
+                if (!parent) break;
+                let index = Array.prototype.indexOf.call(parent.childNodes, current);
+                path.unshift(index);
+                current = parent;
+            }
+            return current === root ? path : null;
+        }
+
+        // Helper to find element by path for focus preservation
+        function getElementByPath(root, path) {
+            if (!path) return null;
+            let current = root;
+            for (let index of path) {
+                if (!current || !current.childNodes || index >= current.childNodes.length) {
+                    return null;
+                }
+                current = current.childNodes[index];
+            }
+            return current;
+        }
+
+        // Helper to copy JS string to WASM memory
+        function writeWasmString(instance, str) {
+            const encoder = new TextEncoder();
+            const bytes = encoder.encode(str + "\0");
+            const allocFn = instance.exports.alloc || instance.exports.malloc;
+            if (!allocFn) {
+                console.error("WASM module does not export alloc/malloc!");
+                return 0;
+            }
+            const ptr = allocFn(bytes.length);
+            const mem = new Uint8Array(instance.exports.memory.buffer);
+            mem.set(bytes, ptr);
+            return ptr;
+        }
+
+        // Helper to read JS string from WASM memory
+        function readWasmString(instance, ptr) {
+            if (ptr === 0) return "";
+            const mem = new Uint8Array(instance.exports.memory.buffer);
+            let end = ptr;
+            while (mem[end] !== 0) end++;
+            const bytes = mem.slice(ptr, end);
+            const decoder = new TextDecoder();
+            const str = decoder.decode(bytes);
+            const freeFn = instance.exports.dealloc || instance.exports.free;
+            if (freeFn) freeFn(ptr, bytes.length + 1);
+            return str;
+        }
+
+        // Generic wrapper for WASM functions taking/returning strings
+        function callWasmStringToString(instance, fnName, ...args) {
+            const fn = instance.exports[fnName];
+            if (!fn) {
+                console.error('WASM function not found: ' + fnName);
+                return "";
+            }
+            const ptrs = args.map(arg => typeof arg === 'string' ? writeWasmString(instance, arg) : arg);
+            const retPtr = fn(...ptrs);
+            const result = readWasmString(instance, retPtr);
+            const freeFn = instance.exports.dealloc || instance.exports.free;
+            if (freeFn) {
+                ptrs.forEach((ptr, i) => {
+                    if (typeof args[i] === 'string') {
+                        freeFn(ptr, new TextEncoder().encode(args[i]).length + 1);
+                    }
+                });
+            }
+            return result;
+        }
+
+        const wasmPromises = [];
+
+        async function loadRawWasm(url, exportsToGlobal) {
+            try {
+                const response = await fetch(url);
+                const bytes = await response.arrayBuffer();
+                const results = await WebAssembly.instantiate(bytes, { env: {
+                    abort: () => { console.error('abort called'); }
+                }});
+                const instance = results.instance;
+                for (const fnName of exportsToGlobal) {
+                    window[fnName] = function(...args) {
+                        return callWasmStringToString(instance, fnName, ...args);
+                    };
+                }
+                console.log('[WASM] Raw WASM module loaded from ' + url);
+            } catch (err) {
+                console.error('[WASM Error] Failed to load ' + url + ': ' + err);
+            }
+        }
+
+        async function loadDartWasm(wasmUrl, mjsUrl, exportsToGlobal) {
+            try {
+                const module = await import(mjsUrl);
+                const dartInstance = await module.instantiate(fetch(wasmUrl));
+                for (const fnName of exportsToGlobal) {
+                    if (dartInstance[fnName]) {
+                        window[fnName] = dartInstance[fnName];
+                    } else if (dartInstance.exports && dartInstance.exports[fnName]) {
+                        window[fnName] = dartInstance.exports[fnName];
+                    } else {
+                        window[fnName] = dartInstance[fnName];
+                    }
+                }
+                console.log('[WASM] Dart WASM module loaded from ' + wasmUrl);
+            } catch (err) {
+                console.warn('[WASM Warning] Failed to load Dart WASM via JS module, trying raw loader: ' + err);
+                await loadRawWasm(wasmUrl, exportsToGlobal);
+            }
+        }
+
+    </script>
+</head>
+<body>
+    <div id="zenith-ui-root"></div>
+
+    <script>
+        // Platform Detection Constants
+        const isAndroid = false;
+        const isIos = false;
+        const isMac = false;
+        const isLinux = false;
+        const isWeb = true;
+        const isWindows = false;
+
+        // Form Validation Helpers
+        function isEmail(val) {
+            const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            return re.test(val) ? "" : "Invalid email address";
+        }
+        function isRequired(val) {
+            return val && val.trim().length > 0 ? "" : "This field is required";
+        }
+
+        // Navigation Helper
+        function navigate(path) {
+            if (typeof window !== 'undefined' && window.zenithRouter) {
+                window.zenithRouter.navigate(path);
+            }
+        }
+
+        // SPA Client-Side Router
+        class ZenithRouter {
+            constructor() {
+                this.routes = {};
+                window.addEventListener('popstate', () => this.handleRoute());
+                document.addEventListener('click', (e) => {
+                    const link = e.target.closest('a');
+                    if (link && link.getAttribute('href') && link.getAttribute('href').startsWith('/')) {
+                        e.preventDefault();
+                        this.navigate(link.getAttribute('href'));
+                    }
+                });
+            }
+            register(path, componentClass) {
+                this.routes[path] = componentClass;
+            }
+            navigate(path) {
+                window.history.pushState({}, '', path);
+                this.handleRoute();
+            }
+            handleRoute() {
+                const path = window.location.pathname || '/';
+                const componentClass = this.routes[path] || this.routes['/'] || Object.values(this.routes)[0];
+                if (componentClass) {
+                    const inst = new componentClass();
+                    inst.render();
+                } else {
+                    console.warn('[Router] No routed class registered.');
+                }
+            }
+        }
+        window.zenithRouter = new ZenithRouter();
+
+        const zenith = {
+            runGameLoop: function(game) {
+                if (game.init) game.init();
+                const root = document.getElementById('zenith-ui-root');
+                root.innerHTML = '';
+                const canvasEl = document.createElement('canvas');
+                canvasEl.width = 640;
+                canvasEl.height = 480;
+                canvasEl.style.display = 'block';
+                canvasEl.style.margin = '20px auto';
+                canvasEl.style.background = '#000000';
+                canvasEl.style.borderRadius = '12px';
+                canvasEl.style.boxShadow = '0 10px 30px rgba(0, 0, 0, 0.5)';
+                root.appendChild(canvasEl);
+                const ctx = canvasEl.getContext('2d');
+                const canvas = {
+                    clear: function(color = 'black') {
+                        ctx.fillStyle = color;
+                        ctx.fillRect(0, 0, canvasEl.width, canvasEl.height);
+                    },
+                    drawRect: function(x, y, w, h, color = 'white') {
+                        ctx.fillStyle = color;
+                        ctx.fillRect(x * 8, y * 20, w * 8, h * 20);
+                    },
+                    drawCircle: function(cx, cy, r, color = 'white') {
+                        ctx.fillStyle = color;
+                        ctx.beginPath();
+                        ctx.arc(cx * 8, cy * 20, r * 14, 0, Math.PI * 2);
+                        ctx.fill();
+                    },
+                    drawText: function(text, x, y, color = 'white') {
+                        ctx.fillStyle = color;
+                        ctx.font = '16px monospace';
+                        ctx.fillText(text, x * 8, y * 20 + 12);
+                    },
+                    present: function() {}
+                };
+                window._zenith_keys = {};
+                window._zenith_justPressed = {};
+                window._zenith_justReleased = {};
+                window.addEventListener('keydown', (e) => {
+                    if (!window._zenith_keys[e.key]) window._zenith_justPressed[e.key] = true;
+                    window._zenith_keys[e.key] = true;
+                });
+                window.addEventListener('keyup', (e) => {
+                    if (window._zenith_keys[e.key]) window._zenith_justReleased[e.key] = true;
+                    window._zenith_keys[e.key] = false;
+                });
+                window._zenith_mouseX = 0;
+                window._zenith_mouseY = 0;
+                canvasEl.addEventListener('mousemove', (e) => {
+                    const rect = canvasEl.getBoundingClientRect();
+                    window._zenith_mouseX = (e.clientX - rect.left) / 8.0;
+                    window._zenith_mouseY = (e.clientY - rect.top) / 20.0;
+                });
+                let lastTime = performance.now();
+                const loop = (time) => {
+                    const dt = (time - lastTime) / 1000;
+                    lastTime = time;
+                    if (game.update) game.update(dt);
+                    canvas.clear('black');
+                    if (game.draw) game.draw(canvas);
+                    window._zenith_justPressed = {};
+                    window._zenith_justReleased = {};
+                    requestAnimationFrame(loop);
+                };
+                requestAnimationFrame(loop);
+            },
+            consoleElement: null,
+            print: function(msg) {
+                if (!this.consoleElement) this.consoleElement = document.getElementById('zenith-console');
+                if (this.consoleElement) {
+                    this.consoleElement.textContent += msg;
+                    this.consoleElement.scrollTop = this.consoleElement.scrollHeight;
+                }
+                console.log(msg);
+            },
+            println: function(msg) {
+                this.print(msg + '\n');
+            },
+            encodeImageToBase64: async function(pathOrUrl) {
+                if (!pathOrUrl) return "";
+                if (pathOrUrl.startsWith("data:")) return pathOrUrl.split(",")[1];
+                try {
+                    const response = await fetch(pathOrUrl);
+                    const blob = await response.blob();
+                    return new Promise((resolve) => {
+                        const reader = new FileReader();
+                        reader.onloadend = () => {
+                            const base64String = reader.result.split(',')[1];
+                            resolve(base64String);
+                        };
+                        reader.readAsDataURL(blob);
+                    });
+                } catch (e) {
+                    return "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+                }
+            },
+            llmPrompt: async function(url, promptStr, isStreaming, imagePath) {
+                let imageBase64 = "";
+                if (imagePath) {
+                    this.println('[Runtime] Loading and encoding image: ' + imagePath);
+                    imageBase64 = await this.encodeImageToBase64(imagePath);
+                }
+                this.println('\n[Runtime] LLMClient sending prompt to local backend (' + url + '): "' + promptStr + '"');
+                if (imageBase64) {
+                    this.println('[Runtime] Image attached (Base64 length: ' + imageBase64.length + ' chars)');
+                }
+                try {
+                    const response = await fetch(url + '/api/generate', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            model: 'llama3',
+                            prompt: promptStr,
+                            stream: !!isStreaming,
+                            images: imageBase64 ? [imageBase64] : undefined
+                        })
+                    });
+                    if (response.ok) {
+                        if (isStreaming) {
+                            const reader = response.body.getReader();
+                            const decoder = new TextDecoder("utf-8");
+                            let buffer = "";
+                            let fullResponse = "";
+                            while (true) {
+                                const { value, done } = await reader.read();
+                                if (done) break;
+                                buffer += decoder.decode(value, { stream: true });
+                                const lines = buffer.split("\n");
+                                buffer = lines.pop();
+                                for (const line of lines) {
+                                    if (line.trim() === "") continue;
+                                    try {
+                                        const json = JSON.parse(line);
+                                        if (json.response) {
+                                            fullResponse += json.response;
+                                            this.print(json.response);
+                                        }
+                                    } catch (err) {}
+                                }
+                            }
+                            if (buffer.trim() !== "") {
+                                try {
+                                    const json = JSON.parse(buffer);
+                                    if (json.response) {
+                                        fullResponse += json.response;
+                                        this.print(json.response);
+                                    }
+                                } catch (err) {}
+                            }
+                            this.println("");
+                            return fullResponse;
+                        } else {
+                            const json = await response.json();
+                            return json.response;
+                        }
+                    }
+                } catch(e) {}
+                this.println('[Runtime Warning] Ollama backend not reachable. Falling back to simulated completion.');
+                let simulated = "Simulated response for prompt: '" + promptStr + "'";
+                if (imageBase64) {
+                    simulated += " with image '" + imagePath + "'";
+                }
+                if (isStreaming) {
+                    const tokens = simulated.split(" ");
+                    let fullText = "";
+                    for (const tok of tokens) {
+                        this.print(tok + " ");
+                        await new Promise(r => setTimeout(r, 50));
+                        fullText += tok + " ";
+                    }
+                    this.println("");
+                    return fullText;
+                } else {
+                    return simulated;
+                }
+            }
+        };
+
+        async function httpGet(url) {
+            zenith.println('[Network] httpGet: Fetching ' + url + '...');
+            try {
+                const response = await fetch(url);
+                if (response.ok) {
+                    return await response.text();
+                }
+            } catch(e) {}
+            zenith.println('[Network Error/CORS] Using mock response for ' + url);
+            if (url.includes('users')) {
+                return JSON.stringify({users: ["Sam", "Jay", "Alex"], status: "active"});
+            }
+            return JSON.stringify({message: "Hello from Zenith JS mock endpoint!", status: "success"});
+        }
+
+        async function httpPost(url, body) {
+            zenith.println('[Network] httpPost: Posting to ' + url + '...');
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: body
+                });
+                if (response.ok) {
+                    return await response.text();
+                }
+            } catch(e) {}
+            zenith.println('[Network Error/CORS] Using mock response for POST ' + url);
+            return JSON.stringify({status: "posted", received: JSON.parse(body)});
+        }
+
+        const UI = {
+            print: function(msg) { zenith.print(Array.isArray(msg) ? msg.join('') : msg); },
+            println: function(msg) { zenith.println(Array.isArray(msg) ? msg.join('') : msg); },
+            applyStyles: function(el, attrs = {}) {
+                if (!attrs) return;
+                if (attrs.color) el.style.color = attrs.color;
+                if (attrs.backgroundColor) el.style.backgroundColor = attrs.backgroundColor;
+                if (attrs.padding) el.style.padding = typeof attrs.padding === 'number' ? attrs.padding + 'px' : attrs.padding;
+                if (attrs.margin) el.style.margin = typeof attrs.margin === 'number' ? attrs.margin + 'px' : attrs.margin;
+                if (attrs.width) el.style.width = typeof attrs.width === 'number' ? attrs.width + 'px' : attrs.width;
+                if (attrs.height) el.style.height = typeof attrs.height === 'number' ? attrs.height + 'px' : attrs.height;
+                if (attrs.fontWeight) el.style.fontWeight = attrs.fontWeight;
+                if (attrs.flexDirection) el.style.flexDirection = attrs.flexDirection;
+                if (attrs.justifyContent) el.style.justifyContent = attrs.justifyContent;
+                if (attrs.alignItems) el.style.alignItems = attrs.alignItems;
+                if (attrs.flexGrow !== undefined) el.style.flexGrow = attrs.flexGrow;
+                if (attrs.gap) el.style.gap = typeof attrs.gap === 'number' ? attrs.gap + 'px' : attrs.gap;
+                if (attrs.fontSize) el.style.fontSize = typeof attrs.fontSize === 'number' ? attrs.fontSize + 'px' : attrs.fontSize;
+                if (attrs.borderRadius) el.style.borderRadius = typeof attrs.borderRadius === 'number' ? attrs.borderRadius + 'px' : attrs.borderRadius;
+                if (attrs.border) el.style.border = attrs.border;
+                if (attrs.opacity !== undefined) el.style.opacity = attrs.opacity;
+                if (attrs.cursor) el.style.cursor = attrs.cursor;
+                if (attrs.display) el.style.display = attrs.display;
+                if (attrs.boxShadow) el.style.boxShadow = attrs.boxShadow;
+                if (attrs.alignSelf) el.style.alignSelf = attrs.alignSelf;
+                if (attrs.fontFamily) el.style.fontFamily = attrs.fontFamily;
+                if (attrs.transition) el.style.transition = attrs.transition;
+                if (attrs.onClick && typeof attrs.onClick === 'function') {
+                    el.onclick = attrs.onClick;
+                }
+                if (attrs.onChange && typeof attrs.onChange === 'function') {
+                    el.oninput = function() { attrs.onChange(el.value); };
+                }
+            },
+            Column: function(children, attrs = {}) {
+                const el = document.createElement('div');
+                el.className = 'zenith-column';
+                const flatChildren = Array.isArray(children) ? children.flat() : [];
+                for (const child of flatChildren) {
+                    if (child) el.appendChild(child);
+                }
+                UI.applyStyles(el, attrs);
+                el.render = function() {
+                    UI.render(el);
+                    return el;
+                };
+                return el;
+            },
+            Row: function(children, attrs = {}) {
+                const el = document.createElement('div');
+                el.className = 'zenith-row';
+                const flatChildren = Array.isArray(children) ? children.flat() : [];
+                for (const child of flatChildren) {
+                    if (child) el.appendChild(child);
+                }
+                UI.applyStyles(el, attrs);
+                el.render = function() {
+                    UI.render(el);
+                    return el;
+                };
+                return el;
+            },
+            Text: function(text, attrs = {}) {
+                const el = document.createElement('span');
+                el.className = 'zenith-text';
+                el.textContent = Array.isArray(text) ? text.join('') : text;
+                UI.applyStyles(el, attrs);
+                el.render = function() {
+                    UI.render(el);
+                    return el;
+                };
+                return el;
+            },
+            Button: function(label, attrs = {}) {
+                const el = document.createElement('button');
+                el.className = 'interactive-btn';
+                el.textContent = Array.isArray(label) ? label.join('') : label;
+                UI.applyStyles(el, attrs);
+                el.render = function() {
+                    UI.render(el);
+                    return el;
+                };
+                return el;
+            },
+            TextField: function(placeholder, attrs = {}) {
+                const container = document.createElement('div');
+                container.style.display = 'flex';
+                container.style.flexDirection = 'column';
+                container.style.gap = '4px';
+                container.style.width = '100%';
+                const el = document.createElement('input');
+                el.type = 'text';
+                el.placeholder = Array.isArray(placeholder) ? placeholder.join('') : placeholder;
+                el.className = 'zenith-input';
+                el.style.width = '100%';
+                if (attrs.value) el.value = attrs.value;
+                const errorSpan = document.createElement('span');
+                errorSpan.style.color = '#ef4444';
+                errorSpan.style.fontSize = '0.8rem';
+                errorSpan.style.display = 'none';
+                container.appendChild(el);
+                container.appendChild(errorSpan);
+                UI.applyStyles(el, attrs);
+                if (attrs.validator && typeof attrs.validator === 'function') {
+                    const validate = () => {
+                        const err = attrs.validator(el.value);
+                        if (err && typeof err === 'string' && err.length > 0) {
+                            el.style.borderColor = '#ef4444';
+                            el.style.boxShadow = '0 0 0 1px #ef4444';
+                            errorSpan.textContent = err;
+                            errorSpan.style.display = 'block';
+                        } else if (err === false) {
+                            el.style.borderColor = '#ef4444';
+                            el.style.boxShadow = '0 0 0 1px #ef4444';
+                            errorSpan.textContent = 'Invalid input';
+                            errorSpan.style.display = 'block';
+                        } else {
+                            el.style.borderColor = '';
+                            el.style.boxShadow = '';
+                            errorSpan.style.display = 'none';
+                            errorSpan.textContent = '';
+                        }
+                    };
+                    el.oninput = function() {
+                        validate();
+                        if (attrs.onChange && typeof attrs.onChange === 'function') {
+                            attrs.onChange(el.value);
+                        }
+                    };
+                    if (el.value) {
+                        validate();
+                    }
+                } else {
+                    if (attrs.onChange && typeof attrs.onChange === 'function') {
+                        el.oninput = function() { attrs.onChange(el.value); };
+                    }
+                }
+                container.render = function() {
+                    UI.render(container);
+                    return container;
+                };
+                return container;
+            },
+            Checkbox: function(label, attrs = {}) {
+                const wrapper = document.createElement('label');
+                wrapper.style.display = 'flex';
+                wrapper.style.alignItems = 'center';
+                wrapper.style.gap = '8px';
+                wrapper.style.cursor = 'pointer';
+                wrapper.style.margin = '5px';
+                wrapper.style.color = '#e2e8f0';
+                const el = document.createElement('input');
+                el.type = 'checkbox';
+                el.style.width = '18px';
+                el.style.height = '18px';
+                el.style.accentColor = '#00f2fe';
+                el.style.cursor = 'pointer';
+                if (attrs.checked) el.checked = !!attrs.checked;
+                wrapper.appendChild(el);
+                const textSpan = document.createElement('span');
+                textSpan.textContent = Array.isArray(label) ? label.join('') : label;
+                wrapper.appendChild(textSpan);
+                UI.applyStyles(wrapper, attrs);
+                if (attrs.onChange && typeof attrs.onChange === 'function') {
+                    el.onchange = function() { attrs.onChange(el.checked); };
+                }
+                wrapper.render = function() {
+                    UI.render(wrapper);
+                    return wrapper;
+                };
+                return wrapper;
+            },
+            Slider: function(attrs = {}) {
+                const el = document.createElement('input');
+                el.type = 'range';
+                el.className = 'zenith-input';
+                el.style.accentColor = '#00f2fe';
+                el.style.cursor = 'pointer';
+                if (attrs.min !== undefined) el.min = attrs.min;
+                if (attrs.max !== undefined) el.max = attrs.max;
+                if (attrs.value !== undefined) el.value = attrs.value;
+                UI.applyStyles(el, attrs);
+                if (attrs.onChange && typeof attrs.onChange === 'function') {
+                    el.oninput = function() { attrs.onChange(parseInt(el.value, 10)); };
+                }
+                el.render = function() {
+                    UI.render(el);
+                    return el;
+                };
+                return el;
+            },
+            Toggle: function(label, attrs = {}) {
+                const wrapper = document.createElement('label');
+                wrapper.style.display = 'flex';
+                wrapper.style.alignItems = 'center';
+                wrapper.style.gap = '10px';
+                wrapper.style.cursor = 'pointer';
+                wrapper.style.margin = '5px';
+                const switchDiv = document.createElement('div');
+                switchDiv.style.position = 'relative';
+                switchDiv.style.width = '44px';
+                switchDiv.style.height = '24px';
+                switchDiv.style.backgroundColor = '#475569';
+                switchDiv.style.borderRadius = '12px';
+                switchDiv.style.transition = 'background-color 0.2s';
+                const knob = document.createElement('div');
+                knob.style.position = 'absolute';
+                knob.style.top = '2px';
+                knob.style.left = '2px';
+                knob.style.width = '20px';
+                knob.style.height = '20px';
+                knob.style.borderRadius = '50%';
+                knob.style.backgroundColor = '#ffffff';
+                knob.style.transition = 'transform 0.2s';
+                switchDiv.appendChild(knob);
+                let isOn = !!attrs.isOn;
+                const updateToggleUI = (state) => {
+                    isOn = state;
+                    if (isOn) {
+                        switchDiv.style.backgroundColor = '#10b981';
+                        knob.style.transform = 'translateX(20px)';
+                    } else {
+                        switchDiv.style.backgroundColor = '#475569';
+                        knob.style.transform = 'translateX(0)';
+                    }
+                };
+                updateToggleUI(isOn);
+                wrapper.onclick = (e) => {
+                    e.preventDefault();
+                    updateToggleUI(!isOn);
+                    if (attrs.onChange && typeof attrs.onChange === 'function') {
+                        attrs.onChange(isOn);
+                    }
+                };
+                wrapper.appendChild(switchDiv);
+                if (label) {
+                    const textSpan = document.createElement('span');
+                    textSpan.textContent = Array.isArray(label) ? label.join('') : label;
+                    textSpan.style.color = '#e2e8f0';
+                    wrapper.appendChild(textSpan);
+                }
+                UI.applyStyles(wrapper, attrs);
+                wrapper.render = function() {
+                    UI.render(wrapper);
+                    return wrapper;
+                };
+                return wrapper;
+            },
+            Dropdown: function(options, attrs = {}) {
+                const el = document.createElement('select');
+                el.className = 'zenith-input';
+                el.style.background = 'rgba(15, 23, 42, 0.8)';
+                el.style.color = '#f8fafc';
+                el.style.cursor = 'pointer';
+                const populateOptions = (str) => {
+                    el.innerHTML = '';
+                    const opts = str.split(',');
+                    for (const opt of opts) {
+                        const trimmed = opt.trim();
+                        if (!trimmed) continue;
+                        const optionEl = document.createElement('option');
+                        optionEl.value = trimmed;
+                        optionEl.textContent = trimmed;
+                        el.appendChild(optionEl);
+                    }
+                };
+                const optsStr = Array.isArray(options) ? options.join(',') : (options || attrs.options || "");
+                populateOptions(optsStr);
+                if (attrs.value) el.value = attrs.value;
+                UI.applyStyles(el, attrs);
+                if (attrs.onChange && typeof attrs.onChange === 'function') {
+                    el.onchange = function() { attrs.onChange(el.value); };
+                }
+                el.render = function() {
+                    UI.render(el);
+                    return el;
+                };
+                return el;
+            },
+            Image: function(url, attrs = {}) {
+                const el = document.createElement('img');
+                el.src = Array.isArray(url) ? url.join('') : url;
+                el.style.maxWidth = '100%';
+                el.style.borderRadius = '12px';
+                el.style.boxShadow = '0 8px 30px rgba(0, 0, 0, 0.5)';
+                el.style.border = '1px solid rgba(255, 255, 255, 0.1)';
+                UI.applyStyles(el, attrs);
+                el.render = function() {
+                    UI.render(el);
+                    return el;
+                };
+                return el;
+            },
+            Video: function(url, attrs = {}) {
+                const el = document.createElement('video');
+                el.src = Array.isArray(url) ? url.join('') : url;
+                el.controls = true;
+                el.style.maxWidth = '100%';
+                el.style.borderRadius = '12px';
+                el.style.boxShadow = '0 8px 30px rgba(0, 0, 0, 0.5)';
+                el.style.border = '1px solid rgba(255, 255, 255, 0.1)';
+                UI.applyStyles(el, attrs);
+                el.render = function() {
+                    UI.render(el);
+                    return el;
+                };
+                return el;
+            },
+            Scrolling: function(children, attrs = {}) {
+                const el = document.createElement('div');
+                el.style.display = 'flex';
+                el.style.flexDirection = 'column';
+                el.style.overflowY = 'auto';
+                el.style.maxHeight = '300px';
+                el.style.border = '1px solid rgba(255, 255, 255, 0.1)';
+                el.style.padding = '12px';
+                el.style.borderRadius = '12px';
+                el.style.background = 'rgba(0, 0, 0, 0.3)';
+                const flatChildren = Array.isArray(children) ? children.flat() : [];
+                for (const child of flatChildren) {
+                    if (child) el.appendChild(child);
+                }
+                UI.applyStyles(el, attrs);
+                el.render = function() {
+                    UI.render(el);
+                    return el;
+                };
+                return el;
+            },
+            Card: function(children, attrs = {}) {
+                const el = document.createElement('div');
+                el.style.display = 'flex';
+                el.style.flexDirection = 'column';
+                el.style.background = 'rgba(30, 41, 59, 0.6)';
+                el.style.backdropFilter = 'blur(12px)';
+                el.style.border = '1px solid rgba(255, 255, 255, 0.1)';
+                el.style.borderRadius = '16px';
+                el.style.padding = '20px';
+                el.style.margin = '10px 0';
+                el.style.boxShadow = '0 20px 40px rgba(0, 0, 0, 0.4)';
+                const flatChildren = Array.isArray(children) ? children.flat() : [];
+                for (const child of flatChildren) {
+                    if (child) el.appendChild(child);
+                }
+                UI.applyStyles(el, attrs);
+                el.render = function() {
+                    UI.render(el);
+                    return el;
+                };
+                return el;
+            },
+            Container: function(children, attrs = {}) {
+                const el = document.createElement('div');
+                el.style.display = 'flex';
+                el.style.flexDirection = 'column';
+                el.style.border = '1px solid rgba(255, 255, 255, 0.05)';
+                el.style.borderRadius = '12px';
+                el.style.padding = '16px';
+                el.style.background = 'rgba(255, 255, 255, 0.02)';
+                const flatChildren = Array.isArray(children) ? children.flat() : [];
+                for (const child of flatChildren) {
+                    if (child) el.appendChild(child);
+                }
+                UI.applyStyles(el, attrs);
+                el.render = function() {
+                    UI.render(el);
+                    return el;
+                };
+                return el;
+            },
+            render: function(element) {
+                const root = document.getElementById('zenith-ui-root');
+                root.innerHTML = '';
+                root.appendChild(element);
+            }
+        };
+    </script>
+    <script>
+function isKeyPressed(key) {
+    return !!window._zenith_keys[key];
+}
+
+function wasKeyPressed(key) {
+    return !!window._zenith_justPressed[key];
+}
+
+function wasKeyReleased(key) {
+    return !!window._zenith_justReleased[key];
+}
+
+function getAxis(negativeKey, positiveKey) {
+    return (window._zenith_keys[positiveKey] ? 1 : 0) - (window._zenith_keys[negativeKey] ? 1 : 0);
+}
+
+function getMouseX() {
+    return window._zenith_mouseX || 0;
+}
+
+function getMouseY() {
+    return window._zenith_mouseY || 0;
+}
+
+class GameplayInputSample {
+    constructor() {
+        this.player_x = 12.0;
+        this.player_y = 7.0;
+        this.player_w = 6.0;
+        this.player_h = 3.0;
+        this.move_speed = 18.0;
+        this.axis_x = 0.0;
+        this.axis_y = 0.0;
+        this.player_color = "green";
+        this.status_text = "Use WASD or arrows. Tap Space to flash yellow.";
+    }
+    init() {
+        println("GameplayInputSample initialized");
+    }
+    update(dt) {
+        this.axis_x = getAxis("a", "d");
+        this.axis_y = getAxis("w", "s");
+        if (isKeyPressed("ArrowLeft")) {
+            this.axis_x = this.axis_x - 1.0;
+        }
+        if (isKeyPressed("ArrowRight")) {
+            this.axis_x = this.axis_x + 1.0;
+        }
+        if (isKeyPressed("ArrowUp")) {
+            this.axis_y = this.axis_y - 1.0;
+        }
+        if (isKeyPressed("ArrowDown")) {
+            this.axis_y = this.axis_y + 1.0;
+        }
+        this.player_x = this.player_x + this.axis_x * this.move_speed * dt;
+        this.player_y = this.player_y + this.axis_y * this.move_speed * dt;
+        if (this.player_x < 0.0) {
+            this.player_x = 0.0;
+        }
+        if (this.player_y < 0.0) {
+            this.player_y = 0.0;
+        }
+        if (this.player_x > 74.0) {
+            this.player_x = 74.0;
+        }
+        if (this.player_y > 20.0) {
+            this.player_y = 20.0;
+        }
+        if (wasKeyPressed("Space")) {
+            this.player_color = "yellow";
+            this.status_text = "Space pressed this frame";
+        }
+        if (wasKeyReleased("Space")) {
+            this.player_color = "green";
+            this.status_text = "Space released this frame";
+        }
+    }
+    draw(canvas) {
+        let axis_text = "Axis X: ";
+        axis_text = axis_text + this.axis_x;
+        axis_text = axis_text + ", Axis Y: ";
+        axis_text = axis_text + this.axis_y;
+        let mouse_x_text = "Mouse X: ";
+        mouse_x_text = mouse_x_text + getMouseX();
+        let mouse_y_text = "Mouse Y: ";
+        mouse_y_text = mouse_y_text + getMouseY();
+        canvas.clear("black");
+        canvas.drawRect(this.player_x, this.player_y, this.player_w, this.player_h, this.player_color);
+        canvas.drawText("Gameplay Input Sample", 2.0, 1.0, "yellow");
+        canvas.drawText(this.status_text, 2.0, 3.0, "white");
+        canvas.drawText(axis_text, 2.0, 5.0, "cyan");
+        canvas.drawText(mouse_x_text, 2.0, 7.0, "magenta");
+        canvas.drawText(mouse_y_text, 2.0, 8.0, "magenta");
+    }
+}
+async function main() {
+    let game = new GameplayInputSample();
+    zenith.runGameLoop(game);
+}
+        window.onload = async () => {
+            if (typeof wasmPromises !== 'undefined' && wasmPromises.length > 0) {
+                zenith.println('[WASM] Waiting for ' + wasmPromises.length + ' WASM module(s)...');
+                await Promise.all(wasmPromises);
+                zenith.println('[WASM] All modules loaded. Ready.');
+            }
+            // Define fallback mocks if WASM failed to load
+            if (typeof encrypt === 'undefined') {
+                window.encrypt = function(plaintext, key) {
+                    let result = '';
+                    for (let i = 0; i < plaintext.length; i++) {
+                        result += String.fromCharCode(plaintext.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+                    }
+                    return btoa(result);
+                };
+            }
+            if (typeof decrypt === 'undefined') {
+                window.decrypt = function(ciphertext, key) {
+                    try {
+                        let plaintext = atob(ciphertext);
+                        let result = '';
+                        for (let i = 0; i < plaintext.length; i++) {
+                            result += String.fromCharCode(plaintext.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+                        }
+                        return result;
+                    } catch (e) {
+                        return 'Decryption Error: Invalid Key/Data';
+                    }
+                };
+            }
+            if (typeof deriveKey === 'undefined') {
+                window.deriveKey = function(password, salt) {
+                    return btoa(password + ':' + salt);
+                };
+            }
+            if (typeof println === 'undefined') window.println = (msg) => zenith.println(msg);
+            if (typeof print === 'undefined') window.print = (msg) => zenith.print(msg);
+            main();
+        };
+    </script>
+</body>
+</html>

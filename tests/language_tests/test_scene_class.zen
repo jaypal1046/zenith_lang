@@ -1,0 +1,235 @@
+import std.io;
+
+class SceneProbe() implements Scene {
+    EntityId player;
+    EntityId camera;
+    EntityId helper;
+    EntityId ambience;
+    EntityId listener;
+
+    Void onLoad() {
+        name = "SceneProbe";
+        clearColor = "cyan";
+        fixedDeltaTime = 0.02;
+        maxFrameDelta = 0.1;
+        maxFixedStepsPerFrame = 4;
+        autoRenderWorld2D = false;
+        drawEntityNames = false;
+        player = spawnCharacter2D("Player", "assets/player.png", 10.0, 8.0, 4.0, 2.0, "green");
+        setEntityTag(player, "hero");
+        camera = spawnCamera2D("Camera", 10.0, 8.0, 1.0, true);
+        ambience = spawnAudioSource2D("Ambience", "assets/player_hum.wav", 10.0, 8.0, true);
+        listener = spawnAudioListener2D("Listener", 10.0, 8.0, true);
+        helper = createEntity("Helper");
+        setEntityName(helper, "HelperNode");
+        setEntityTag(helper, "support");
+        setParent(helper, player);
+        setParent(ambience, player);
+        setParent(listener, camera);
+
+        Transform2DView player_transform = transform2D(player);
+        player_transform.rotation = 0.25;
+        player_transform.scaleX = 1.25;
+
+        Transform2DView helper_transform = transform2D(helper);
+        helper_transform.x = 11.0;
+        helper_transform.y = 8.0;
+
+        Sprite2DView player_sprite = sprite2D(player);
+        player_sprite.anchorX = 0.25;
+        player_sprite.anchorY = 0.75;
+        player_sprite.sortOrder = 2;
+
+        Body2DView player_body = body2D(player);
+        player_body.mass = 2.0;
+        player_body.gravityScale = 0.0;
+        player_body.friction = 0.1;
+        player_body.restitution = 0.0;
+        player_body.vx = 5.0;
+        player_body.vy = 0.0;
+
+        attachCapsuleCollider2D(player, 3.5, 1.1, false);
+        attachCircleCollider2D(helper, 0.9, true);
+
+        CapsuleCollider2DView player_hitbox = capsuleCollider2D(player);
+        player_hitbox.offsetY = 0.1;
+        player_hitbox.height = 3.7;
+
+        CircleCollider2DView helper_trigger = circleCollider2D(helper);
+        helper_trigger.offsetX = 0.5;
+        helper_trigger.radius = 1.1;
+
+        Character2DView player_character = character2D(player);
+        player_character.moveSpeed = 5.0;
+        player_character.jumpForce = 9.5;
+        player_character.isGrounded = true;
+        player_character.facingRight = false;
+
+        AudioSource2DView ambience_audio = audioSource2D(ambience);
+        ambience_audio.volume = 0.65;
+        ambience_audio.pitch = 1.1;
+        ambience_audio.loop = true;
+
+        AudioListener2DView main_listener = audioListener2D(listener);
+        main_listener.gain = 0.85;
+
+        Camera2DView main_camera = camera2D(camera);
+        main_camera.viewportWidth = 0.8;
+        main_camera.viewportHeight = 0.6;
+    }
+
+    Void onFixedUpdate(dt: Float) {
+        followPrimaryCamera2D(player, 0.0, 0.0, 1.0);
+    }
+}
+
+Void main() {
+    SceneProbe scene = SceneProbe();
+    scene.load();
+
+    if (scene.isLoaded()) {
+        println(scene.name);
+    }
+
+    println(scene.clearColor);
+
+    String entities = "entities=";
+    entities = entities + scene.entityCount();
+    println(entities);
+
+    println(scene.entityName(scene.findEntityByTag("hero")));
+    println(scene.character2D(scene.player).texturePath);
+    println(scene.audioSource2D(scene.ambience).clipPath);
+
+    String listener_primary = "listener_primary=";
+    listener_primary = listener_primary + scene.audioListener2D(scene.listener).primary;
+    println(listener_primary);
+
+    String children = "children=";
+    children = children + scene.childCount(scene.player);
+    println(children);
+
+    println(scene.entityName(scene.parentOf(scene.helper)));
+
+    Transform2DView player_transform = scene.transform2D(scene.player);
+    Body2DView player_body = scene.body2D(scene.player);
+    Camera2DView main_camera = scene.camera2D(scene.camera);
+
+    String start_x = "start_x=";
+    start_x = start_x + player_transform.x;
+    println(start_x);
+
+    scene.updateFrame(0.05);
+
+    String moved_x = "moved_x=";
+    moved_x = moved_x + scene.transform2D(scene.player).x;
+    println(moved_x);
+
+    String velocity_x = "vx=";
+    velocity_x = velocity_x + player_body.vx;
+    println(velocity_x);
+
+    String move_speed = "move_speed=";
+    move_speed = move_speed + scene.character2D(scene.player).moveSpeed;
+    println(move_speed);
+
+    String jump_force = "jump_force=";
+    jump_force = jump_force + scene.character2D(scene.player).jumpForce;
+    println(jump_force);
+
+    String audio_volume = "audio_volume=";
+    audio_volume = audio_volume + scene.audioSource2D(scene.ambience).volume;
+    println(audio_volume);
+
+    String listener_gain = "listener_gain=";
+    listener_gain = listener_gain + scene.audioListener2D(scene.listener).gain;
+    println(listener_gain);
+
+    String grounded = "grounded=";
+    grounded = grounded + scene.character2D(scene.player).isGrounded;
+    println(grounded);
+
+    String audio_playing = "audio_playing=";
+    audio_playing = audio_playing + scene.audioSource2D(scene.ambience).isPlaying;
+    println(audio_playing);
+
+    String facing = "facing_right=";
+    facing = facing + scene.character2D(scene.player).facingRight;
+    println(facing);
+
+    String zoom = "zoom=";
+    zoom = zoom + main_camera.zoom;
+    println(zoom);
+
+    String viewport = "viewport_width=";
+    viewport = viewport + main_camera.viewportWidth;
+    println(viewport);
+
+    String capsule_height = "capsule_height=";
+    capsule_height = capsule_height + scene.capsuleCollider2D(scene.player).height;
+    println(capsule_height);
+
+    String capsule_radius = "capsule_radius=";
+    capsule_radius = capsule_radius + scene.capsuleCollider2D(scene.player).radius;
+    println(capsule_radius);
+
+    String trigger_radius = "trigger_radius=";
+    trigger_radius = trigger_radius + scene.circleCollider2D(scene.helper).radius;
+    println(trigger_radius);
+
+    String overlap = "overlap=";
+    overlap = overlap + scene.overlaps2D(scene.player, scene.helper);
+    println(overlap);
+
+    String contains = "contains_center=";
+    contains = contains + scene.containsPoint2D(scene.player, scene.transform2D(scene.player).x, scene.transform2D(scene.player).y);
+    println(contains);
+
+    RaycastHit2DResult pick = scene.raycast2D(2.0, 8.0, 1.0, 0.0, 20.0);
+
+    String ray_hit = "ray_hit=";
+    ray_hit = ray_hit + pick.hit;
+    println(ray_hit);
+
+    String ray_name = "ray_name=";
+    ray_name = ray_name + scene.entityName(pick.entity);
+    println(ray_name);
+
+    String ray_distance = "ray_distance=";
+    ray_distance = ray_distance + pick.distance;
+    println(ray_distance);
+
+    String ray_point_x = "ray_point_x=";
+    ray_point_x = ray_point_x + pick.pointX;
+    println(ray_point_x);
+
+    String ray_normal_x = "ray_normal_x=";
+    ray_normal_x = ray_normal_x + pick.normalX;
+    println(ray_normal_x);
+
+    if (scene.isEntityAlive(scene.camera)) {
+        println("camera-alive");
+    }
+
+    scene.clearParent(scene.helper);
+
+    String cleared = "children_after_clear=";
+    cleared = cleared + scene.childCount(scene.player);
+    println(cleared);
+
+    scene.stopAudio(scene.ambience);
+
+    String audio_stopped = "audio_stopped=";
+    audio_stopped = audio_stopped + scene.audioSource2D(scene.ambience).isPlaying;
+    println(audio_stopped);
+
+    String listener_enabled = "listener_enabled=";
+    listener_enabled = listener_enabled + scene.audioListener2D(scene.listener).enabled;
+    println(listener_enabled);
+
+    scene.destroyEntity(scene.camera);
+
+    if (!scene.isEntityAlive(scene.camera)) {
+        println("camera-destroyed");
+    }
+}

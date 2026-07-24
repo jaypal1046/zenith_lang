@@ -1,0 +1,92 @@
+// Zenith Code-First Game Starter
+import std.io;
+
+class StarterScene() implements Scene {
+    EntityId camera;
+    EntityId player;
+    String playerMaterial = "";
+
+    Void onLoad() {
+        name = "StarterScene";
+        clearColor = "black";
+        fixedDeltaTime = 0.016;
+        maxFrameDelta = 0.05;
+        maxFixedStepsPerFrame = 6;
+        autoRenderWorld2D = true;
+        drawEntityNames = false;
+
+        debugOverlayEnabled = true;
+        minimalInspectorEnabled = true;
+        debugDrawColliders2D = true;
+        debugDrawTransforms2D = true;
+        debugDrawCameraBounds2D = true;
+        debugDrawRuntimeStats = true;
+        debugOverlayColor = "cyan";
+
+        camera = spawnCamera2D("Camera", 16.0, 9.0, 1.0, true);
+        player = spawnCharacter2D("Player", "assets/textures/player.png", 16.0, 9.0, 2.0, 2.0, "green");
+        setEntityTag(player, "hero");
+        attachCapsuleCollider2D(player, 1.8, 0.7, false);
+
+        Character2DView hero = character2D(player);
+        hero.moveSpeed = 7.0;
+        hero.jumpForce = 10.0;
+        hero.isGrounded = true;
+
+        playerMaterial = createMaterial("assets/materials/player.mat", "");
+        defineMaterialText(playerMaterial, "displayName", "Display Name", "Player");
+        defineMaterialRadio(playerMaterial, "mode", "Mode", "idle,run,jump", "idle");
+        defineMaterialImage(playerMaterial, "portrait", "Portrait", "assets/textures/player.png");
+        defineMaterialButton(playerMaterial, "focus", "Focus", "focusPlayer");
+        defineMaterialColor(playerMaterial, "tint", "Tint", "#33dd88");
+        defineMaterialToggle(playerMaterial, "ghost", "Ghost", false);
+        defineMaterialNumber(playerMaterial, "speed", "Speed", 7.0);
+
+        setMaterialPropertyCallback(playerMaterial, "displayName", "applyDisplayName");
+        setMaterialPropertyCallback(playerMaterial, "mode", "applyMode");
+        setMaterialPropertyCallback(playerMaterial, "speed", "applySpeed");
+
+        setMaterialTextProperty(playerMaterial, "displayName", "Hero");
+        setMaterialRadioProperty(playerMaterial, "mode", "idle");
+        setMaterialColorProperty(playerMaterial, "tint", "#33dd88");
+        setMaterialToggleProperty(playerMaterial, "ghost", false);
+        setMaterialNumberProperty(playerMaterial, "speed", 7.0);
+
+        inspectEntity(player);
+        inspectMaterial(playerMaterial);
+    }
+
+    Void applyDisplayName(value: String) {
+        setEntityName(player, value);
+    }
+
+    Void applyMode(value: String) {
+        if (value == "run") {
+            character2D(player).moveSpeed = 9.0;
+        }
+        if (value == "jump") {
+            character2D(player).jumpForce = 12.0;
+        }
+        if (value == "idle") {
+            character2D(player).moveSpeed = 7.0;
+        }
+    }
+
+    Void applySpeed(value: Float) {
+        character2D(player).moveSpeed = value;
+    }
+
+    Void focusPlayer() {
+        inspectEntity(player);
+        inspectMaterial(playerMaterial);
+    }
+
+    Void onFixedUpdate(dt: Float) {
+        followPrimaryCamera2D(player, 0.0, 0.0, 1.0);
+    }
+}
+
+Void main() {
+    StarterScene scene = StarterScene();
+    scene.run();
+}

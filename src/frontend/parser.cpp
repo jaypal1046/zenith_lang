@@ -224,6 +224,9 @@ std::unique_ptr<ExprNode> Parser::parseExpression() {
         auto expr = parseExpression();
         return locate(std::make_unique<UnaryExprNode>(op, std::move(expr)), op_tok);
     }
+    std::unique_ptr<ExprNode> left_node;
+    bool has_primary = false;
+
     // If it's a list literal
     if (current().type == TokenType::PUNCT && current().value == "[") {
         return parseListLiteral();
@@ -234,12 +237,13 @@ std::unique_ptr<ExprNode> Parser::parseExpression() {
     }
     // If it's a function call or UI component (identifier followed by '(')
     if (current().type == TokenType::ID && peek().type == TokenType::PUNCT && peek().value == "(") {
-        return parseUIComponent();
+        left_node = parseUIComponent();
+        has_primary = true;
     }
 
     // Handle TYPE tokens used as constructor expressions: Ref<Node>("val"), Weak<T>(ref), etc.
     // e.g. Ref<Node>("hello") — TYPE token + '<' generics + '(' args
-    if (current().type == TokenType::TYPE &&
+    if (!has_primary && current().type == TokenType::TYPE &&
         (peek().type == TokenType::OP && peek().value == "<") ||
         (current().type == TokenType::TYPE && peek().type == TokenType::PUNCT && peek().value == "(")) {
         const Token& call_tok = current();
@@ -269,31 +273,33 @@ std::unique_ptr<ExprNode> Parser::parseExpression() {
             }
             expect(TokenType::PUNCT, "Expected ')' to close constructor call");
         }
-        return call_node;
+        left_node = std::move(call_node);
+        has_primary = true;
     }
 
-    std::unique_ptr<ExprNode> left_node;
-    const Token& start_tok = current();
-    if (current().type == TokenType::PUNCT && current().value == "(") {
-        advance();
-        left_node = parseExpression();
-        expect(TokenType::PUNCT, "Expected ')' after grouped expression");
-    } else if (current().type == TokenType::STRING) {
-        left_node = locate(std::make_unique<StringLiteralNode>(std::string(current().value)), start_tok);
-        advance();
-    } else if (current().type == TokenType::INT) {
-        left_node = locate(std::make_unique<NumberLiteralNode>(std::string(current().value), false), start_tok);
-        advance();
-    } else if (current().type == TokenType::FLOAT) {
-        left_node = locate(std::make_unique<NumberLiteralNode>(std::string(current().value), true), start_tok);
-        advance();
-    } else if (current().value == "true" || current().value == "false") {
-        left_node = locate(std::make_unique<BoolLiteralNode>(current().value == "true"), start_tok);
-        advance();
-    } else {
-        std::string left_val(current().value);
-        left_node = locate(std::make_unique<IdentifierNode>(left_val), start_tok);
-        advance(); // Consume identifier
+    if (!has_primary) {
+        const Token& start_tok = current();
+        if (current().type == TokenType::PUNCT && current().value == "(") {
+            advance();
+            left_node = parseExpression();
+            expect(TokenType::PUNCT, "Expected ')' after grouped expression");
+        } else if (current().type == TokenType::STRING) {
+            left_node = locate(std::make_unique<StringLiteralNode>(std::string(current().value)), start_tok);
+            advance();
+        } else if (current().type == TokenType::INT) {
+            left_node = locate(std::make_unique<NumberLiteralNode>(std::string(current().value), false), start_tok);
+            advance();
+        } else if (current().type == TokenType::FLOAT) {
+            left_node = locate(std::make_unique<NumberLiteralNode>(std::string(current().value), true), start_tok);
+            advance();
+        } else if (current().value == "true" || current().value == "false") {
+            left_node = locate(std::make_unique<BoolLiteralNode>(current().value == "true"), start_tok);
+            advance();
+        } else {
+            std::string left_val(current().value);
+            left_node = locate(std::make_unique<IdentifierNode>(left_val), start_tok);
+            advance(); // Consume identifier
+        }
     }
 
     // Parse Dot Notation (OOP)
@@ -883,206 +889,13 @@ std::unique_ptr<AgentOrchestrationNode> Parser::parseOrchestration() {
                 expect(TokenType::PUNCT, "Expected ']' to end agents list");
             } else if (key == "strategy") {
                 orch_node->strategy = current().value;
-        fn->parameters = std::move(parameters);
-        fn->generic_params = std::move(generic_params);
-        fn->is_async = is_async;
-        
-        fn->body = parseBlock();
-        return fn;
-    }
-}
-
-std::unique_ptr<ClassDeclNode> Parser::parseClass(bool is_managed) {
-    const Token& start_tok = current();
-    expect(TokenType::KEYWORD, "Expected 'class'");
-    std::string class_name(current().value);
-    expect(TokenType::ID, "Expected class name");
-    
-    auto class_node = locate(std::make_unique<ClassDeclNode>(class_name), start_tok);
-    class_node->is_managed = is_managed;  // Set from @managed annotation
-
-    // Parse optional generic parameters: <T, U, ...>
-    if (match(TokenType::OP, "<")) {
-        do {
-            if (current().type == TokenType::ID && std::isupper(static_cast<unsigned char>(current().value[0]))) {
-                class_node->generic_params.push_back(std::string(current().value));
-                advance();
-            } else {
-                std::cerr << "Parser Error: Expected generic type parameter (e.g., T, U) at line " << current().line << "\n";
-                exit(1);
-            }
-        } while (match(TokenType::PUNCT, ","));
-        expect(TokenType::OP, "Expected '>' to close generic parameters");
-    }
-
-    if (match(TokenType::PUNCT, "(")) {
-        if (current().type != TokenType::PUNCT || current().value != ")") {
-            class_node->primary_constructor_args.push_back(parseParameter());
-            while (match(TokenType::PUNCT, ",")) {
-                class_node->primary_constructor_args.push_back(parseParameter());
-            }
-        }
-        expect(TokenType::PUNCT, "Expected ')' after primary constructor parameters");
-    }
-
-    if (match(TokenType::KEYWORD, "implements")) {
-        std::string interface_name(current().value);
-        expect(TokenType::ID, "Expected interface name");
-        class_node->implemented_interfaces.push_back(interface_name);
-        while (match(TokenType::PUNCT, ",")) {
-            std::string next_name(current().value);
-            expect(TokenType::ID, "Expected interface name");
-            class_node->implemented_interfaces.push_back(next_name);
-        }
-    }
-
-    expect(TokenType::PUNCT, "Expected '{' to start class body");
-    
-    while (current().type != TokenType::PUNCT || current().value != "}") {
-        bool is_agentic = false;
-        bool is_async = false;
-        while (current().type == TokenType::KEYWORD && (current().value == "agentic" || current().value == "async")) {
-            if (current().value == "agentic") {
-                is_agentic = true;
-            } else if (current().value == "async") {
-                is_async = true;
-            }
-            advance();
-        }
-        
-        bool is_let = false;
-        if (current().type == TokenType::KEYWORD && current().value == "let") {
-            is_let = true;
-            advance();
-        }
-        
-        if (is_let) {
-            const Token& type_tok = prev();
-            std::string field_name(current().value);
-            expect(TokenType::ID, "Expected field name");
-            expect(TokenType::OP, "=");
-            auto init = parseExpression();
-            expect(TokenType::PUNCT, "Expected ';'");
-            auto return_type = locate(std::make_unique<TypeNode>("Auto"), type_tok);
-            class_node->fields.push_back(locate(std::make_unique<VarDeclNode>(std::move(return_type), field_name, std::move(init)), type_tok));
-        } else if (current().type == TokenType::TYPE || (current().type == TokenType::ID && std::isupper(static_cast<unsigned char>(current().value[0])))) {
-            const Token& type_tok = current();
-            auto return_type = parseType();
-            if (current().type == TokenType::ID && peek().value != "(") {
-                std::string field_name(current().value);
-                expect(TokenType::ID, "Expected field name");
-                std::unique_ptr<ExprNode> init = nullptr;
-                if (match(TokenType::OP, "=")) {
-                    init = parseExpression();
-                }
-                expect(TokenType::PUNCT, "Expected ';'");
-                class_node->fields.push_back(locate(std::make_unique<VarDeclNode>(std::move(return_type), field_name, std::move(init)), type_tok));
-            } else {
-                class_node->methods.push_back(parseFunction(is_agentic, is_async, std::move(return_type)));
-            }
-        } else {
-            std::cerr << "Parser Error: Unexpected token in class body at line " << current().line << "\n";
-            exit(1);
-        }
-    }
-    
-    expect(TokenType::PUNCT, "Expected '}' to end class body");
-    return class_node;
-}
-
-std::unique_ptr<InterfaceDeclNode> Parser::parseInterface() {
-    const Token& start_tok = current();
-    expect(TokenType::KEYWORD, "Expected 'interface'");
-    std::string interface_name(current().value);
-    expect(TokenType::ID, "Expected interface name");
-    
-    auto interface_node = locate(std::make_unique<InterfaceDeclNode>(interface_name), start_tok);
-    
-    expect(TokenType::PUNCT, "Expected '{' to start interface body");
-    
-    while (current().type != TokenType::PUNCT || current().value != "}") {
-        bool is_agentic = false;
-        bool is_async = false;
-        while (current().type == TokenType::KEYWORD && (current().value == "agentic" || current().value == "async")) {
-            if (current().value == "agentic") {
-                is_agentic = true;
-            } else if (current().value == "async") {
-                is_async = true;
-            }
-            advance();
-        }
-        
-        if (current().type == TokenType::TYPE || (current().type == TokenType::ID && std::isupper(static_cast<unsigned char>(current().value[0])))) {
-            const Token& type_tok = current();
-            auto return_type = parseType();
-            
-            std::string fn_name(current().value);
-            expect(TokenType::ID, "Expected function name");
-            
-            expect(TokenType::PUNCT, "Expected '('");
-            std::vector<std::unique_ptr<VarDeclNode>> parameters;
-            if (current().type != TokenType::PUNCT || current().value != ")") {
-                parameters.push_back(parseParameter());
-                while (match(TokenType::PUNCT, ",")) {
-                    parameters.push_back(parseParameter());
-                }
-            }
-            expect(TokenType::PUNCT, "Expected ')' after parameters");
-            expect(TokenType::PUNCT, "Expected ';' after interface function declaration");
-            
-            auto fn = locate(std::make_unique<FunctionNode>(std::move(return_type), fn_name), type_tok);
-            fn->parameters = std::move(parameters);
-            fn->is_async = is_async;
-            interface_node->methods.push_back(std::move(fn));
-        } else {
-            std::cerr << "Parser Error: Unexpected token in interface body at line " << current().line << "\n";
-            exit(1);
-        }
-    }
-    
-    expect(TokenType::PUNCT, "Expected '}' to end interface body");
-    return interface_node;
-}
-
-std::unique_ptr<AgentOrchestrationNode> Parser::parseOrchestration() {
-    const Token& start_tok = current();
-    expect(TokenType::KEYWORD, "orchestration");
-    
-    std::string name(current().value);
-    expect(TokenType::ID, "Expected orchestration name");
-    
-    expect(TokenType::PUNCT, "{");
-    
-    auto orch_node = locate(std::make_unique<AgentOrchestrationNode>(name), start_tok);
-    
-    while (current().type != TokenType::PUNCT || current().value != "}") {
-        if (current().type == TokenType::ID) {
-            std::string key(current().value);
-            advance();
-            expect(TokenType::PUNCT, "Expected ':' after orchestration parameter");
-            
-            if (key == "agents") {
-                expect(TokenType::PUNCT, "Expected '[' for agents list");
-                while (current().type != TokenType::PUNCT || current().value != "]") {
-                    if (current().type == TokenType::ID) {
-                        orch_node->agents.push_back(std::string(current().value));
-                        advance();
-                    } else {
-                        std::cerr << "Parser Error: Expected agent function identifier at line " << current().line << "\n";
-                        exit(1);
-                    }
-                    if (current().type == TokenType::PUNCT && current().value == ",") {
-                        advance();
-                    }
-                }
-                expect(TokenType::PUNCT, "Expected ']' to end agents list");
-            } else if (key == "strategy") {
-                orch_node->strategy = current().value;
                 expect(TokenType::STRING, "Expected strategy string literal");
             } else {
                 std::cerr << "Parser Error: Unknown orchestration key '" << key << "' at line " << current().line << "\n";
                 exit(1);
             }
+        } else {
+            advance();
         }
         if (current().type == TokenType::PUNCT && current().value == ",") {
             advance();

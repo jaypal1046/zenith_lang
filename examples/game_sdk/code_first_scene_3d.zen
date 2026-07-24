@@ -1,0 +1,415 @@
+import std.io;
+
+class CodeFirstScene3D() implements Scene {
+    EntityId ship;
+    EntityId camera;
+    EntityId engineAudio;
+    EntityId listener;
+    EntityId beaconLight;
+    EntityId sunLight;
+    Float elapsed = 0.0;
+    String shipMaterial = "";
+    String shipMaterialVariant = "";
+    Int inspectCount = 0;
+    String inspectStatus = "Idle";
+    String surfaceModeStatus = "";
+    String tintStatus = "";
+    Bool boostTrailStatus = true;
+    Float roughnessStatus = 0.0;
+
+    Void onLoad() {
+        name = "CodeFirstScene3D";
+        clearColor = "navy";
+        fixedDeltaTime = 0.05;
+        autoRenderWorld2D = false;
+        drawEntityNames = false;
+
+        MeshHandleView ship_mesh_asset = loadMesh("assets/ship.glb");
+        ShaderHandleView ship_shader_asset = loadShader("assets/ship.shader");
+        MaterialHandleView ship_material_asset = loadMaterial("assets/ship.mat", "assets/ship.shader");
+        AudioHandleView engine_clip_asset = loadAudio("assets/engine.wav", true);
+
+        ship = spawnCharacter3DHandle("Ship", ship_mesh_asset, ship_shader_asset, ship_material_asset, 0.0, 1.0, -6.0);
+        camera = spawnCamera3D("OrbitCamera", 0.0, 3.0, 8.0, 75.0, true);
+        engineAudio = spawnAudioSource3DHandle("EngineAudio", engine_clip_asset, 0.0, 1.0, -6.0, true);
+        listener = spawnAudioListener3D("MainListener3D", 0.0, 3.0, 8.0, true);
+        beaconLight = spawnPointLight3D("BeaconLight", 0.0, 1.5, -5.0, "#55d4ff", 1.6, 18.0);
+        sunLight = spawnDirectionalLight3D("SunLight", 0.0, 6.0, 0.0, -0.2, -1.0, 0.1, "#fff2c4", 1.2, true);
+        setEntityTag(ship, "hero3d");
+        setParent(engineAudio, ship);
+        setParent(listener, camera);
+        setParent(beaconLight, ship);
+
+        Body3DView ship_body = body3D(ship);
+        ship_body.mass = 4.0;
+        ship_body.vx = 3.0;
+        ship_body.vz = -1.0;
+
+        attachSphereCollider3D(ship, 1.6, false);
+        attachBoxCollider3D(engineAudio, 2.0, 1.4, 3.0, true);
+
+        Character3DView ship_character = character3D(ship);
+        AudioSource3DView engine_audio = audioSource3D(engineAudio);
+        AudioListener3DView main_listener = audioListener3D(listener);
+        PointLight3DView beacon_light = pointLight3D(beaconLight);
+        DirectionalLight3DView sun_light = directionalLight3D(sunLight);
+        SphereCollider3DView ship_hull = sphereCollider3D(ship);
+        BoxCollider3DView audio_trigger = boxCollider3D(engineAudio);
+        ship_character.moveSpeed = 8.0;
+        ship_character.turnSpeed = 2.0;
+        ship_character.useGravity = false;
+        ship_character.isGrounded = true;
+        ship_hull.offsetZ = 0.2;
+        audio_trigger.offsetX = 0.4;
+        audio_trigger.depth = 3.4;
+        engine_audio.volume = 0.7;
+        engine_audio.loop = true;
+        engine_audio.minDistance = 2.0;
+        engine_audio.maxDistance = 30.0;
+        main_listener.gain = 0.95;
+        beacon_light.range = 20.0;
+        beacon_light.intensity = 1.8;
+        sun_light.directionY = -1.0;
+        sun_light.castShadows = true;
+
+        shipMaterial = ship_material_asset.path;
+        defineMaterialText(shipMaterial, "displayName", "Display Name", "Sky Runner");
+        defineMaterialRadio(shipMaterial, "surfaceMode", "Surface Mode", "opaque,cutout,transparent", "opaque");
+        defineMaterialImage(shipMaterial, "albedo", "Albedo", "assets/ship_albedo.png");
+        defineMaterialButton(shipMaterial, "inspect", "Inspect", "inspectShip");
+        defineMaterialColor(shipMaterial, "tint", "Tint", "#55d4ff");
+        defineMaterialToggle(shipMaterial, "boostTrail", "Boost Trail", true);
+        defineMaterialNumber(shipMaterial, "roughness", "Roughness", 0.35);
+
+        MaterialPropertyView display_property = materialProperty(shipMaterial, "displayName");
+        display_property.stringValue = "Sky Runner";
+        display_property.callback = "applyDisplayName";
+
+        MaterialPropertyView surface_property = materialProperty(shipMaterial, "surfaceMode");
+        surface_property.options = "opaque,cutout,transparent";
+        surface_property.callback = "applySurfaceMode";
+        MaterialPropertyOptionView first_surface_option = materialPropertyOption(shipMaterial, "surfaceMode", 0);
+        first_surface_option.label = "Opaque";
+
+        MaterialPropertyView tint_property = materialProperty(shipMaterial, "tint");
+        tint_property.callback = "applyTint";
+
+        MaterialPropertyView boost_property = materialProperty(shipMaterial, "boostTrail");
+        boost_property.callback = "applyBoostTrail";
+
+        MaterialPropertyView roughness_property = materialProperty(shipMaterial, "roughness");
+        roughness_property.callback = "applyRoughness";
+
+        shipMaterialVariant = cloneMaterial(shipMaterial, "assets/ship_variant.mat");
+        MaterialPropertyView variant_tint = materialProperty(shipMaterialVariant, "tint");
+        variant_tint.stringValue = "#ffb347";
+        addMaterialPropertyOption(shipMaterialVariant, "surfaceMode", "Hologram", "hologram");
+
+        Mesh3DView ship_mesh = mesh3D(ship);
+        ship_mesh.mesh = ship_mesh_asset;
+        ship_mesh.shader = ship_shader_asset;
+        ship_mesh.material = ship_material_asset;
+        ship_mesh.visible = true;
+        ship_mesh.castShadows = true;
+
+        notifyMaterialProperty(shipMaterial, "displayName");
+        notifyMaterialProperty(shipMaterial, "surfaceMode");
+        notifyMaterialProperty(shipMaterial, "tint");
+        notifyMaterialProperty(shipMaterial, "boostTrail");
+        notifyMaterialProperty(shipMaterial, "roughness");
+    }
+
+    Void inspectShip() {
+        inspectCount = inspectCount + 1;
+        inspectStatus = "Inspecting ";
+        inspectStatus = inspectStatus + entityName(ship);
+    }
+
+    Void applyDisplayName(value: String) {
+        setEntityName(ship, value);
+    }
+
+    Void applySurfaceMode(value: String) {
+        surfaceModeStatus = value;
+        Mesh3DView ship_mesh = mesh3D(ship);
+        if (value == "transparent") {
+            ship_mesh.castShadows = false;
+        } else {
+            ship_mesh.castShadows = true;
+        }
+    }
+
+    Void applyTint(value: String) {
+        tintStatus = value;
+        PointLight3DView beacon_light = pointLight3D(beaconLight);
+        beacon_light.color = value;
+    }
+
+    Void applyBoostTrail(value: Bool) {
+        boostTrailStatus = value;
+        AudioSource3DView engine_audio = audioSource3D(engineAudio);
+        engine_audio.loop = value;
+    }
+
+    Void applyRoughness(value: Float) {
+        roughnessStatus = value;
+        PointLight3DView beacon_light = pointLight3D(beaconLight);
+        beacon_light.intensity = 1.2 + value;
+    }
+
+    Void onFrame(dt: Float) {
+        elapsed = elapsed + dt;
+
+        Transform3DView ship_transform = transform3D(ship);
+        Camera3DView main_camera = camera3D(camera);
+        AudioSource3DView engine_audio = audioSource3D(engineAudio);
+        AudioListener3DView main_listener = audioListener3D(listener);
+        PointLight3DView beacon_light = pointLight3D(beaconLight);
+        DirectionalLight3DView sun_light = directionalLight3D(sunLight);
+        MaterialPropertyView surface_property = materialProperty(shipMaterial, "surfaceMode");
+        MaterialPropertyView tint_property = materialProperty(shipMaterial, "tint");
+        MaterialPropertyView boost_property = materialProperty(shipMaterial, "boostTrail");
+        MaterialPropertyView roughness_property = materialProperty(shipMaterial, "roughness");
+
+        ship_transform.rotationY += dt * 0.6;
+        ship_transform.rotationX = 0.1;
+
+        if (elapsed > 1.0) {
+            if (surfaceModeStatus != "transparent") {
+                surface_property.stringValue = "transparent";
+                notifyMaterialProperty(shipMaterial, "surfaceMode");
+            }
+            if (tintStatus != "#9ef7ff") {
+                tint_property.stringValue = "#9ef7ff";
+                notifyMaterialProperty(shipMaterial, "tint");
+            }
+        }
+
+        if (elapsed > 1.5) {
+            if (boostTrailStatus == true) {
+                boost_property.boolValue = false;
+                notifyMaterialProperty(shipMaterial, "boostTrail");
+            }
+        }
+
+        if (elapsed > 2.0) {
+            if (roughnessStatus < 0.65) {
+                roughness_property.numberValue = 0.65;
+                notifyMaterialProperty(shipMaterial, "roughness");
+            }
+        }
+
+        if (elapsed > 0.75) {
+            if (inspectCount == 0) {
+                triggerMaterialButton(shipMaterial, "inspect");
+            }
+        }
+
+        followPrimaryCamera3D(ship, 0.0, 2.5, 9.0, 0.2);
+        main_camera.rotationX = -0.15;
+        main_listener.x = main_camera.x;
+        main_listener.y = main_camera.y;
+        main_listener.z = main_camera.z;
+        engine_audio.x = ship_transform.x;
+        engine_audio.y = ship_transform.y;
+        engine_audio.z = ship_transform.z;
+        beacon_light.intensity = 1.3 + (elapsed * 0.1);
+        sun_light.directionX = -0.2 + (elapsed * 0.02);
+
+        if (ship_transform.z < -6.5) {
+            playAudio(engineAudio);
+        } else {
+            stopAudio(engineAudio);
+        }
+
+        engine_audio.pitch = 0.9 + (elapsed * 0.05);
+    }
+
+    Void onDraw(canvas: Canvas, alpha: Float) {
+        Transform3DView ship_transform = transform3D(ship);
+        Body3DView ship_body = body3D(ship);
+        Character3DView ship_character = character3D(ship);
+        Camera3DView main_camera = camera3D(camera);
+        Mesh3DView ship_mesh = mesh3D(ship);
+        AudioSource3DView engine_audio = audioSource3D(engineAudio);
+        AudioListener3DView main_listener = audioListener3D(listener);
+        PointLight3DView beacon_light = pointLight3D(beaconLight);
+        DirectionalLight3DView sun_light = directionalLight3D(sunLight);
+        SphereCollider3DView ship_hull = sphereCollider3D(ship);
+        BoxCollider3DView audio_trigger = boxCollider3D(engineAudio);
+        RaycastHit3DResult pick = raycast3D(main_camera.x, main_camera.y, main_camera.z, 0.0, -0.15, -1.0, 20.0);
+        MaterialPropertyView display_property = materialProperty(shipMaterial, "displayName");
+        MaterialPropertyView surface_property = materialProperty(shipMaterial, "surfaceMode");
+        MaterialPropertyView albedo_property = materialProperty(shipMaterial, "albedo");
+        MaterialPropertyView inspect_property = materialProperty(shipMaterial, "inspect");
+        MaterialPropertyView tint_property = materialProperty(shipMaterial, "tint");
+        MaterialPropertyView first_property = materialPropertyAt(shipMaterial, 0);
+        MaterialPropertyView variant_tint = materialProperty(shipMaterialVariant, "tint");
+        MaterialPropertyOptionView first_surface_option = materialPropertyOption(shipMaterial, "surfaceMode", 0);
+        MaterialPropertyOptionView variant_surface_option = materialPropertyOption(shipMaterialVariant, "surfaceMode", 3);
+
+        String header = "Zenith 3D Scene Runtime";
+
+        String elapsed_text = "Elapsed: ";
+        elapsed_text = elapsed_text + elapsed;
+
+        String position_text = "Ship Pos: ";
+        position_text = position_text + ship_transform.x;
+        position_text = position_text + ", ";
+        position_text = position_text + ship_transform.y;
+        position_text = position_text + ", ";
+        position_text = position_text + ship_transform.z;
+
+        String velocity_text = "Ship Vel: ";
+        velocity_text = velocity_text + ship_body.vx;
+        velocity_text = velocity_text + ", ";
+        velocity_text = velocity_text + ship_body.vy;
+        velocity_text = velocity_text + ", ";
+        velocity_text = velocity_text + ship_body.vz;
+
+        String mesh_text = "Mesh: ";
+        mesh_text = mesh_text + ship_mesh.meshPath;
+
+        String shader_text = "Shader: ";
+        shader_text = shader_text + ship_mesh.shaderPath;
+
+        String material_text = "Material: ";
+        material_text = material_text + meshMaterialPath(ship);
+
+        String property_text = "Name / Surface: ";
+        property_text = property_text + display_property.stringValue;
+        property_text = property_text + " / ";
+        property_text = property_text + surface_property.stringValue;
+
+        String schema_text = "Kind / Label: ";
+        schema_text = schema_text + surface_property.kind;
+        schema_text = schema_text + " / ";
+        schema_text = schema_text + surface_property.label;
+
+        String asset_text = "Image / Tint: ";
+        asset_text = asset_text + albedo_property.stringValue;
+        asset_text = asset_text + " / ";
+        asset_text = asset_text + tint_property.stringValue;
+
+        String action_text = "Action / Count: ";
+        action_text = action_text + inspect_property.stringValue;
+        action_text = action_text + " / ";
+        action_text = action_text + inspect_property.triggerCount;
+
+        String inspect_text = "Inspect / Status: ";
+        inspect_text = inspect_text + inspectCount;
+        inspect_text = inspect_text + " / ";
+        inspect_text = inspect_text + inspectStatus;
+
+        String binding_text = "Name / Callback: ";
+        binding_text = binding_text + entityName(ship);
+        binding_text = binding_text + " / ";
+        binding_text = binding_text + surface_property.callback;
+
+        String option_text = "First / Options: ";
+        option_text = option_text + first_property.name;
+        option_text = option_text + " / ";
+        option_text = option_text + surface_property.options;
+
+        String variant_text = "Variant / Option: ";
+        variant_text = variant_text + variant_tint.stringValue;
+        variant_text = variant_text + " / ";
+        variant_text = variant_text + variant_surface_option.value;
+
+        String radio_text = "Radio Label / Count: ";
+        radio_text = radio_text + first_surface_option.label;
+        radio_text = radio_text + " / ";
+        radio_text = radio_text + materialPropertyOptionCount(shipMaterial, "surfaceMode");
+
+        String runtime_text = "Surface / Tint: ";
+        runtime_text = runtime_text + surfaceModeStatus;
+        runtime_text = runtime_text + " / ";
+        runtime_text = runtime_text + pointLight3D(beaconLight).color;
+
+        String sync_text = "Boost / Roughness: ";
+        sync_text = sync_text + boostTrailStatus;
+        sync_text = sync_text + " / ";
+        sync_text = sync_text + roughnessStatus;
+
+        String character_text = "Move / Turn / Grounded: ";
+        character_text = character_text + ship_character.moveSpeed;
+        character_text = character_text + " / ";
+        character_text = character_text + ship_character.turnSpeed;
+        character_text = character_text + " / ";
+        character_text = character_text + ship_character.isGrounded;
+
+        String audio_text = "Audio / Range: ";
+        audio_text = audio_text + engine_audio.clipPath;
+        audio_text = audio_text + " / ";
+        audio_text = audio_text + engine_audio.minDistance;
+        audio_text = audio_text + "-";
+        audio_text = audio_text + engine_audio.maxDistance;
+
+        String listener_text = "Listener Gain / Primary: ";
+        listener_text = listener_text + main_listener.gain;
+        listener_text = listener_text + " / ";
+        listener_text = listener_text + main_listener.primary;
+
+        String light_text = "Point / Sun: ";
+        light_text = light_text + beacon_light.range;
+        light_text = light_text + " / ";
+        light_text = light_text + sun_light.castShadows;
+
+        String camera_text = "Camera Z/FOV: ";
+        camera_text = camera_text + main_camera.z;
+        camera_text = camera_text + " / ";
+        camera_text = camera_text + main_camera.fov;
+
+        String tag_text = "Tag: ";
+        tag_text = tag_text + entityTag(ship);
+
+        String collider_text = "Hull / Trigger: ";
+        collider_text = collider_text + ship_hull.radius;
+        collider_text = collider_text + " / ";
+        collider_text = collider_text + audio_trigger.depth;
+
+        String overlap_text = "Overlap / Contains: ";
+        overlap_text = overlap_text + overlaps3D(ship, engineAudio);
+        overlap_text = overlap_text + " / ";
+        overlap_text = overlap_text + containsPoint3D(ship, ship_transform.x, ship_transform.y, ship_transform.z);
+
+        String ray_text = "Ray Hit / Distance: ";
+        ray_text = ray_text + pick.hit;
+        ray_text = ray_text + " / ";
+        ray_text = ray_text + pick.distance;
+
+        canvas.drawText(header, 2.0, 1.0, "yellow");
+        canvas.drawText(elapsed_text, 2.0, 3.0, "white");
+        canvas.drawText(position_text, 2.0, 5.0, "cyan");
+        canvas.drawText(velocity_text, 2.0, 7.0, "green");
+        canvas.drawText(mesh_text, 2.0, 9.0, "magenta");
+        canvas.drawText(shader_text, 2.0, 11.0, "white");
+        canvas.drawText(material_text, 2.0, 13.0, "yellow");
+        canvas.drawText(property_text, 2.0, 15.0, "cyan");
+        canvas.drawText(schema_text, 2.0, 17.0, "white");
+        canvas.drawText(asset_text, 2.0, 19.0, "green");
+        canvas.drawText(action_text, 2.0, 21.0, "magenta");
+        canvas.drawText(inspect_text, 2.0, 23.0, "white");
+        canvas.drawText(binding_text, 2.0, 25.0, "yellow");
+        canvas.drawText(option_text, 2.0, 27.0, "yellow");
+        canvas.drawText(variant_text, 2.0, 29.0, "white");
+        canvas.drawText(radio_text, 2.0, 31.0, "cyan");
+        canvas.drawText(runtime_text, 2.0, 33.0, "white");
+        canvas.drawText(sync_text, 2.0, 35.0, "green");
+        canvas.drawText(character_text, 2.0, 37.0, "white");
+        canvas.drawText(audio_text, 2.0, 39.0, "green");
+        canvas.drawText(listener_text, 2.0, 41.0, "yellow");
+        canvas.drawText(light_text, 2.0, 43.0, "cyan");
+        canvas.drawText(camera_text, 2.0, 45.0, "yellow");
+        canvas.drawText(tag_text, 2.0, 47.0, "cyan");
+        canvas.drawText(collider_text, 2.0, 49.0, "magenta");
+        canvas.drawText(overlap_text, 2.0, 51.0, "white");
+        canvas.drawText(ray_text, 2.0, 53.0, "green");
+        canvas.drawText("3D scene state stays code-first and backend-stable.", 2.0, 56.0, "white");
+    }
+}
+
+Void main() {
+    CodeFirstScene3D scene = CodeFirstScene3D();
+    scene.run();
+}

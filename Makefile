@@ -4,7 +4,7 @@ CXXFLAGS = -O3 -std=c++17 -Iinclude
 # Platform-specific linker flags
 UNAME := $(shell uname -s 2>/dev/null || echo Windows)
 ifeq ($(UNAME),Windows)
-    LDFLAGS = -lws2_32 -luser32 -lgdi32 -lcomctl32
+    LDFLAGS = -lws2_32 -luser32 -lgdi32 -lcomctl32 -lopengl32
     TARGET = zenith.exe
     PYTHON = py
 else ifeq ($(UNAME),Darwin)

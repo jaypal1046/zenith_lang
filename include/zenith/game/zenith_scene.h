@@ -2107,6 +2107,19 @@ public:
         collider->isTrigger = isTrigger;
     }
 
+    void attachCapsuleCollider3D(EntityId entity, float height, float radius, bool isTrigger) {
+        if (!world.isAlive(entity)) {
+            return;
+        }
+        physics::CapsuleCollider3D* collider = world.getCapsuleCollider3D(entity);
+        if (collider == nullptr) {
+            collider = &world.addCapsuleCollider3D(entity);
+        }
+        collider->radius = radius <= 0.0f ? 0.01f : radius;
+        collider->height = std::max(height, collider->radius * 2.0f);
+        collider->isTrigger = isTrigger;
+    }
+
     void setCharacterMove3D(EntityId entity, float x, float y, float z) {
         if (Character3DComponent* character = ensureCharacter3DViewComponent(entity)) {
             character->moveInput = physics::Vec3(x, y, z);
@@ -2117,6 +2130,14 @@ public:
         if (Character3DComponent* character = ensureCharacter3DViewComponent(entity)) {
             character->jumpQueued = true;
         }
+    }
+
+    EntityId instantiatePrefab2D(EntityId source, float posX, float posY, std::string entityName = "") {
+        return world.instantiatePrefab2D(source, posX, posY, entityName);
+    }
+
+    EntityId instantiatePrefab3D(EntityId source, float posX, float posY, float posZ, std::string entityName = "") {
+        return world.instantiatePrefab3D(source, posX, posY, posZ, entityName);
     }
 
     bool overlaps3D(EntityId first, EntityId second) const {
@@ -2685,6 +2706,10 @@ public:
     bool setMaterialColorProperty(std::string materialPath, std::string propertyName, std::string value) {
         std::shared_ptr<resource::MaterialAsset> material = ensureMaterialAsset(materialPath);
         return material ? material->setColor(propertyName, value) : false;
+    }
+
+    bool createMaterialVariant(std::string sourceMaterialPath, std::string variantPath) {
+        return !cloneMaterial(sourceMaterialPath, variantPath).empty();
     }
 
     std::string materialColorProperty(std::string materialPath, std::string propertyName) {

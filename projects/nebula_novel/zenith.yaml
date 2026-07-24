@@ -1,0 +1,7 @@
+name: nebula_novel
+version: 1.0.0
+description: "Nebula Crisis Episode 01 - A Code-First Zenith Visual Novel Game"
+target: game
+dependencies: []
+assets:
+  - path: "C:/Users/jaypr/Downloads/EP01 - Art Resources/Art"

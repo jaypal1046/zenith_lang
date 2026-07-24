@@ -1,0 +1,224 @@
+import std.io;
+
+@library("builtin")
+foreign "C" {
+    Bool isKeyPressed(String key);
+    Bool wasKeyPressed(String key);
+}
+
+class NebulaNovelScene() implements Scene {
+    Int currentStep = 0;
+    Bool isChoiceActive = false;
+    Float elapsed = 0.0;
+
+    String currentSpeaker = "Captain Nova";
+    String currentText = "Stardate 4092. Deep space sector 7. All primary systems nominal.";
+    String choiceAText = "";
+    String choiceBText = "";
+    Int nextA = 0;
+    Int nextB = 0;
+    String statusMessage = "";
+
+    Void setStepData(stepId: Int, speaker: String, text: String, optA: String, optB: String, nA: Int, nB: Int, status: String) {
+        currentStep = stepId;
+        currentSpeaker = speaker;
+        currentText = text;
+        choiceAText = optA;
+        choiceBText = optB;
+        nextA = nA;
+        nextB = nB;
+        statusMessage = status;
+
+        if (optA != "") {
+            isChoiceActive = true;
+        } else {
+            isChoiceActive = false;
+        }
+    }
+
+    Void loadStoryNode(nodeId: Int) {
+        if (nodeId == 0) {
+            setStepData(0, "Captain Nova", "Stardate 4092. We have entered the uncharted outer nebula near Sector 7.", "", "", 1, 1, "NOMINAL");
+        } else {
+            if (nodeId == 1) {
+                setStepData(1, "Lieutenant Ray", "Captain! Long-range sensors are detecting an energy anomaly ahead in the nebula quadrant.", "1. Investigate the Signal", "2. Raise Deflector Shields & Hold Position", 2, 3, "ALERT");
+            } else {
+                if (nodeId == 2) {
+                    setStepData(2, "Ship Computer", "WARNING: Thermal overload in main power core! Emergency venting sequence engaged immediately.", "", "", 4, 4, "OVERHEAT");
+                } else {
+                    if (nodeId == 3) {
+                        setStepData(3, "Captain Nova", "Shields up to maximum! Rerouting auxiliary power to thermal dampeners.", "", "", 4, 4, "SHIELDS 100%");
+                    } else {
+                        if (nodeId == 4) {
+                            setStepData(4, "Lieutenant Ray", "Power levels are back in safe parameters! The ship and crew are secure.", "", "", 5, 5, "STABILIZED");
+                        } else {
+                            if (nodeId == 5) {
+                                setStepData(5, "Captain Nova", "Great work crew! Sector 7 survey complete. Setting course for home station.", "", "", 0, 0, "COMPLETE");
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Void advanceStory() {
+        if (isChoiceActive == false) {
+            loadStoryNode(nextA);
+        }
+    }
+
+    Void chooseOption(optionNum: Int) {
+        if (isChoiceActive) {
+            if (optionNum == 1) {
+                loadStoryNode(nextA);
+            } else {
+                if (optionNum == 2) {
+                    loadStoryNode(nextB);
+                }
+            }
+        }
+    }
+
+    Void onLoad() {
+        clearColor = "dark_slate";
+        autoRenderWorld2D = false;
+        debugOverlayEnabled = false;
+        loadStoryNode(0);
+    }
+
+    Void onUpdate(dt: Float) {
+        elapsed = elapsed + dt;
+
+        if (wasKeyPressed("Space")) {
+            advanceStory();
+        } else {
+            if (wasKeyPressed("Enter")) {
+                advanceStory();
+            } else {
+                if (wasKeyPressed("Digit1")) {
+                    chooseOption(1);
+                } else {
+                    if (wasKeyPressed("Digit2")) {
+                        chooseOption(2);
+                    }
+                }
+            }
+        }
+    }
+
+    Void onDraw(canvas: Canvas, alpha: Float) {
+        Float screenW = canvas.mediaWidth();
+        Float screenH = canvas.mediaHeight();
+
+        // Enforce minimum responsive game viewport bounds
+        if (screenW < 80.0) {
+            screenW = 80.0;
+        }
+        if (screenH < 24.0) {
+            screenH = 24.0;
+        }
+
+        // --- 1. Deep Space Background ---
+        canvas.drawRect(0.0, 0.0, screenW, screenH, "dark_slate");
+
+        // Starfield dots
+        canvas.drawPoint(canvas.pctX(15.0), canvas.pctY(10.0), "sky_blue");
+        canvas.drawPoint(canvas.pctX(30.0), canvas.pctY(25.0), "white");
+        canvas.drawPoint(canvas.pctX(70.0), canvas.pctY(15.0), "amber");
+        canvas.drawPoint(canvas.pctX(85.0), canvas.pctY(35.0), "sky_blue");
+        canvas.drawPoint(canvas.pctX(45.0), canvas.pctY(50.0), "emerald");
+        canvas.drawPoint(canvas.pctX(60.0), canvas.pctY(30.0), "white");
+
+        // --- 2. Top Sleek Sci-Fi Header Bar ---
+        canvas.drawRect(0.0, 0.0, screenW, 2.0, "dark_navy");
+        canvas.drawFrameRect(0.0, 0.0, screenW, 2.0, "panel_border");
+        canvas.drawText("ZENITH GAME ENGINE * NEBULA CRISIS", 2.0, 0.5, "sky_blue");
+
+        // Right-anchored status alert badge
+        Float statusX = screenW - 28.0;
+        if (statusX < 35.0) {
+            statusX = 35.0;
+        }
+        canvas.drawText("STATUS: " + statusMessage, statusX, 0.5, "emerald");
+
+        // --- 3. Character Portrait Avatar Frame ---
+        Float avatarW = 18.0;
+        Float avatarH = 8.0;
+        if (currentSpeaker == "Captain Nova") {
+            canvas.drawRect(3.0, 3.0, avatarW, avatarH, "glass_panel");
+            canvas.drawFrameRect(3.0, 3.0, avatarW, avatarH, "sky_blue");
+            canvas.drawRect(3.0, 3.0, avatarW, 1.5, "slate");
+            canvas.drawText("[ CAPTAIN ]", 5.0, 3.2, "amber");
+            canvas.drawText("NOVA", 7.0, 6.0, "white");
+        } else {
+            if (currentSpeaker == "Lieutenant Ray") {
+                canvas.drawRect(3.0, 3.0, avatarW, avatarH, "glass_panel");
+                canvas.drawFrameRect(3.0, 3.0, avatarW, avatarH, "emerald");
+                canvas.drawRect(3.0, 3.0, avatarW, 1.5, "slate");
+                canvas.drawText("[ LIEUTENANT ]", 4.0, 3.2, "sky_blue");
+                canvas.drawText("RAY", 7.0, 6.0, "white");
+            } else {
+                canvas.drawRect(3.0, 3.0, avatarW, avatarH, "glass_panel");
+                canvas.drawFrameRect(3.0, 3.0, avatarW, avatarH, "red");
+                canvas.drawRect(3.0, 3.0, avatarW, 1.5, "slate");
+                canvas.drawText("[ COMPUTER ]", 4.0, 3.2, "red");
+                canvas.drawText("AI CORE", 6.0, 6.0, "white");
+            }
+        }
+
+        // --- 4. Interactive Choice Cards (Center Top) ---
+        if (isChoiceActive) {
+            Float cardX = 24.0;
+            Float cardW = screenW - 27.0;
+            if (cardW < 40.0) {
+                cardW = 40.0;
+            }
+
+            canvas.drawRect(cardX, 3.0, cardW, 3.0, "glass_panel");
+            canvas.drawFrameRect(cardX, 3.0, cardW, 3.0, "sky_blue");
+            canvas.drawText(choiceAText, cardX + 2.0, 4.0, "amber");
+
+            canvas.drawRect(cardX, 7.0, cardW, 3.0, "glass_panel");
+            canvas.drawFrameRect(cardX, 7.0, cardW, 3.0, "sky_blue");
+            canvas.drawText(choiceBText, cardX + 2.0, 8.0, "amber");
+
+            canvas.drawText("--> Press [1] or [2] to select action <--", cardX + 2.0, 11.0, "emerald");
+        }
+
+        // --- 5. Responsive Dialogue Panel (Bottom) ---
+        Float dlgX = 2.0;
+        Float dlgY = screenH - 10.0;
+        Float dlgW = screenW - 4.0;
+        Float dlgH = 9.0;
+
+        if (dlgY < 12.0) {
+            dlgY = 12.0;
+        }
+
+        canvas.drawRect(dlgX, dlgY, dlgW, dlgH, "dark_navy");
+        canvas.drawFrameRect(dlgX, dlgY, dlgW, dlgH, "panel_border");
+
+        // Speaker Pill Badge
+        canvas.drawRect(dlgX + 2.0, dlgY - 1.0, 22.0, 1.8, "slate");
+        canvas.drawFrameRect(dlgX + 2.0, dlgY - 1.0, 22.0, 1.8, "sky_blue");
+        canvas.drawText(" " + currentSpeaker + " ", dlgX + 3.0, dlgY - 0.6, "amber");
+
+        // Wrapped Story Text Body (Safe Margins)
+        canvas.drawTextWrapped(currentText, dlgX + 3.0, dlgY + 1.8, dlgW - 6.0, "white");
+
+        // Advance Indicator (Anchored Bottom Right with Generous Right Padding)
+        if (isChoiceActive == false) {
+            Float promptX = dlgX + dlgW - 48.0;
+            if (promptX < dlgX + 3.0) {
+                promptX = dlgX + 3.0;
+            }
+            canvas.drawText("Press [SPACE] / [ENTER] to continue >>", promptX, dlgY + dlgH - 1.5, "sky_blue");
+        }
+    }
+}
+
+Void main() {
+    NebulaNovelScene scene = NebulaNovelScene();
+    scene.run();
+}

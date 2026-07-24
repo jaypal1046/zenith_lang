@@ -1,226 +1,56 @@
-# Zenith Language - Implementation Summary
+# Zenith Game SDK - Implementation Summary
 
-## ✅ Completed Features
+Last updated: July 24, 2026
 
-### 1. Website UI Improvements (`zenith_docs_site`)
-
-The documentation website has been built with modern, professional UI components:
-
-#### Components (`lib/components/`)
-- **Navigation** - Responsive app bar with logo, navigation links, and GitHub star button
-- **Footer** - Professional footer with branding, social links, and legal links
-- **Feature Grid** - 6-card grid showcasing language features with icons and descriptions
-- **Platform Showcase** - 4-card display of supported platforms (Desktop, Mobile, Web, WASM)
-- **Code Demo** - Interactive code editor with live preview panel
-
-#### Pages (`lib/pages/`)
-- **Home Page** - Complete landing page with:
-  - Hero section with gradient background
-  - Platform showcase
-  - Feature grid
-  - Code demo section
-  - Cookbook preview with 6 categories
-  - Package ecosystem section (Rust & Dart bridges)
-  - Call-to-action section
-- **Cookbook Page** - Recipe browser with search and categories
-- **Docs Page** - Documentation viewer
-- **Platforms Page** - Detailed platform information
-- **Packages Page** - Package integration guides
-
-#### Styling Features
-- Modern gradient backgrounds (Purple/Indigo/Pink)
-- Material Design cards with elevation
-- Responsive layouts
-- Consistent color scheme (#6366F1 primary)
-- Smooth animations and transitions
+Zenith is a pure code-first game SDK and programming language. Every scene, entity, component, material, camera, physics body, collider, and asset lifetime is 100% visible and controllable in explicit code without depending on editor-heavy visual workflows.
 
 ---
 
-### 2. CLI Commands (`tools/zenith_cli.py`)
+## ✅ Completed Core Features
 
-#### Run Commands
-```bash
-zenith run web <file.zen>          # Run on web browser
-zenith run android <file.zen>      # Run on Android device
-zenith run ios <file.zen>          # Run on iOS device
-zenith run desktop <file.zen>      # Run on desktop
-zenith run wasm <file.zen>         # Run on WASM runtime
-zenith run <file.zen> -t <target>  # Alternative syntax
-```
+### 1. Code-First Game Runtime Engine (`include/zenith/game/`)
+- **World & ECS Architecture** ([zenith_world.h](include/zenith/game/zenith_world.h)):
+  - 21 component pools (`Transform2D`, `Transform3D`, `RigidBody2D`, `RigidBody3D`, `BoxCollider2D`, `CircleCollider2D`, `CapsuleCollider2D`, `BoxCollider3D`, `SphereCollider3D`, `CapsuleCollider3D`, `SpriteRenderer2D`, `Tilemap2DComponent`, `Character2DComponent`, `Character3DComponent`, `MeshRenderer3D`, `AudioSource2DComponent`, `AudioSource3DComponent`, `Camera2DComponent`, `Camera3DComponent`, `AudioListener2DComponent`, `AudioListener3DComponent`, `PointLight3DComponent`, `DirectionalLight3DComponent`, `RelationshipComponent`, `LayerMaskComponent`) backed by continuous sparse-dense arrays (`ComponentPool<T>`).
+  - Zero heap churn and zero string lookups on hot frame execution paths.
+- **Physics Engine & Query API** ([zenith_physics.h](include/zenith/game/zenith_physics.h)):
+  - 2D/3D RigidBody dynamics, Euler integration, gravity scales, velocity friction, restitution, and spatial hash partitioning.
+  - Box, Circle, Sphere, and Capsule colliders with AABB bounding calculation and sweep/raycast query routines (`raycast2DMask`, `raycast3DMask`, `RaycastHit2DResult`, `RaycastHit3DResult`).
+- **Scene Abstraction & View API** ([zenith_scene.h](include/zenith/game/zenith_scene.h)):
+  - Code-first scene lifecycle (`onLoad`, `onFixedUpdate`, `onUpdate`, `onDraw`).
+  - Code-first view proxies (`body2D`, `body3D`, `character2D`, `character3D`, `sprite2D`, `tilemap2D`, `camera2D`, `camera3D`, `audioSource2D`, `audioSource3D`).
+- **Resource Management & Asset Database** ([zenith_resource.h](include/zenith/game/zenith_resource.h)):
+  - Typed numeric resource handles (`TextureHandle`, `MeshHandle`, `MaterialHandle`, `AudioHandle`, `ShaderHandle`).
+  - Asset bundles, memory budget tracking, hot reload file watching, and baked `.meta` sidecars.
 
-#### Build Commands
-```bash
-zenith build web <file.zen>        # Build for web
-zenith build android <file.zen>    # Build for Android
-zenith build ios <file.zen>        # Build for iOS
-zenith build desktop <file.zen>    # Build for desktop
-zenith build wasm <file.zen>       # Build for WASM
-zenith build <file.zen> -r         # Release mode
-zenith build <file.zen> -o <dir>   # Custom output directory
-```
+### 2. Code-First Prefab Instancing & Material Variants
+- **Prefab Instancing**:
+  - `instantiatePrefab2D` and `instantiatePrefab3D` deep-clone component structures and parent/child hierarchies into linear memory slots with direct coordinate positioning.
+- **Material Variant Presets**:
+  - `createMaterialVariant` & `MaterialAsset::cloneVariant` duplicate property bags, schemas, and shader bindings directly from code without disk reloads.
 
-#### Device Management
-```bash
-zenith device-manager              # Manage devices interactively
-zenith device-manager -q           # List devices without prompts
-```
+### 3. Playable Sample Game & Test Slices
+- **Canonical Sample Game**: [examples/game_sdk/playable_slice.zen](examples/game_sdk/playable_slice.zen)
+  - Arena Crawler game demonstrating tilemaps, player runner character, capsule colliders, battery pickup triggers, exit gate unlocking, layer/mask rules, audio clips, follow camera, asset bundle management, and live canvas debug view.
+- **Automated Test Slices**:
+  - [tests/language_tests/test_playable_slice.zen](tests/language_tests/test_playable_slice.zen)
+  - [tests/language_tests/test_character_controller_3d.zen](tests/language_tests/test_character_controller_3d.zen)
+  - [tests/language_tests/test_prefabs_and_materials.zen](tests/language_tests/test_prefabs_and_materials.zen)
 
----
-
-### 3. Device Manager Features
-
-#### Auto-Detection
-- **Desktop**: Local system always available
-- **Android**: Detects via ADB (`adb devices -l`)
-- **iOS**: Detects via ideviceinstaller (`idevice_id -l`)
-- **Web**: Default browser
-- **WASM**: WASM runtime
-
-#### Interactive Selection Flow
-When running an application:
-1. Check for saved default device
-2. If found, use automatically and notify user
-3. If not found, show interactive menu:
-   ```
-   Select a device for android:
-   ----------------------------------------
-   1. Pixel 6 (emulator-5554)
-   2. Samsung Galaxy (device-id-123)
-   ----------------------------------------
-   Enter device number (1-2): 
-   Set as default device? (y/N):
-   ```
-
-#### Configuration Storage
-- Path: `~/.zenith/devices.json`
-- Format:
-  ```json
-  {
-    "default_device": {
-      "id": "emulator-5554",
-      "name": "Pixel 6 (emulator-5554)",
-      "type": "android"
-    }
-  }
-  ```
-
-#### Device Manager Command Output
-```
-📱 Zenith Device Manager
-============================================================
-
-DESKTOP:
-----------------------------------------
-  • Local Desktop (ID: local)
-
-ANDROID:
-----------------------------------------
-  • Pixel 6 (ID: emulator-5554)
-
-IOS:
-----------------------------------------
-  No devices detected
-
-WEB:
-----------------------------------------
-  • Default Browser (ID: browser)
-
-WASM:
-----------------------------------------
-  • WASM Runtime (ID: wasm-runtime)
-
-============================================================
-
-Default device: Pixel 6 (emulator-5554)
-```
+### 4. CLI Workflows & Scaffolding (`src/main.cpp`)
+- `zenith create <name> --template=game` - Scaffolds game project directory with `zenith.yaml`, `assets/`, `scenes/main.zen`, and test runners.
+- `zenith serve <file.zen>` - Starts live game preview dev server with asset watcher and hot reload.
+- `zenith assets import <source>` - Scans asset directories, bakes JSON `.meta` metadata sidecars, and registers them into `zenith_assets.db`.
+- `zenith assets list` - Displays registered asset handles, groups, and memory usage.
 
 ---
 
-## 📁 File Structure
+## 🗺️ Architectural Core Summary
 
-```
-/workspace/
-├── tools/
-│   ├── zenith_cli.py              # Main CLI implementation
-│   └── README_CLI.md              # CLI documentation
-├── zenith_docs_site/
-│   ├── lib/
-│   │   ├── main.zenith            # App entry point
-│   │   ├── components/
-│   │   │   ├── navigation.zenith
-│   │   │   ├── footer.zenith
-│   │   │   ├── feature_grid.zenith
-│   │   │   ├── platform_showcase.zenith
-│   │   │   └── code_demo.zenith
-│   │   └── pages/
-│   │       ├── home_page.zenith
-│   │       ├── cookbook_page.zenith
-│   │       ├── docs_page.zenith
-│   │       ├── platforms_page.zenith
-│   │       └── packages_page.zenith
-│   └── content/
-│       └── cookbook/              # 25+ recipe tutorials
-└── index.html                     # Landing page (HTML version)
-```
-
----
-
-## 🚀 Usage Examples
-
-### Quick Start
-```bash
-# First run - will prompt for device selection
-zenith run myapp.zen
-
-# Subsequent runs - uses saved default
-zenith run myapp.zen
-
-# Run on specific platform
-zenith run web myapp.zen
-zenith run android myapp.zen
-
-# Build release version
-zenith build android myapp.zen --release
-```
-
-### Multi-Platform Testing
-```bash
-# Test on all platforms
-zenith run desktop myapp.zen
-zenith run android myapp.zen
-zenith run ios myapp.zen
-zenith run web myapp.zen
-```
-
-### Device Management
-```bash
-# View all devices
-zenith device-manager
-
-# Set new default device
-zenith device-manager
-# Follow interactive prompts
-```
-
----
-
-## 🎯 Key Features
-
-1. **Cross-Platform Support** - Desktop, Android, iOS, Web, WASM
-2. **Smart Device Selection** - Auto-detect + interactive menu + defaults
-3. **Modern UI** - Professional documentation site with Material Design
-4. **Complete CLI** - Run, build, and device management commands
-5. **Persistent Configuration** - Remembers your device preferences
-6. **Extensible** - Easy to add new platforms or devices
-
----
-
-## 📖 Documentation
-
-- CLI Guide: `/workspace/tools/README_CLI.md`
-- Website Source: `/workspace/zenith_docs_site/lib/`
-- Cookbook: `/workspace/zenith_docs_site/content/cookbook/`
-
----
-
-**All requested features have been implemented and are ready to use!** ✨
+| Subsystem | Source Location | Mental Model |
+| :--- | :--- | :--- |
+| **Language Frontend** | `src/frontend/` | Fast parsing, static analysis, first-class math types (`Vec2`, `Vec3`, `Mat4`) |
+| **Code Generators** | `src/backend/` | Native C++, JS, and WASM transpilation targets |
+| **Game World & ECS** | `include/zenith/game/zenith_world.h` | Continuous SoA arrays (`ComponentPool<T>`), typed `EntityId`, zero string lookup |
+| **Physics Simulation** | `include/zenith/game/zenith_physics.h` | 2D/3D rigid bodies, 3D character controller, Raycast/Sweep queries |
+| **Scene & Views** | `include/zenith/game/zenith_scene.h` | Code-first scene lifecycle, view proxies, prefabs, minimal inspector |
+| **Resource Database** | `include/zenith/game/zenith_resource.h` | Typed handles, asset bundles, memory budget tracking, hot reload |

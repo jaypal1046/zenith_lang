@@ -1,0 +1,158 @@
+import std.io;
+
+@library("builtin")
+foreign "C" {
+    Bool isKeyPressed(String key);
+    Bool wasKeyPressed(String key);
+}
+
+class VisualNovelScene() implements Scene {
+    EntityId bgEntity;
+    EntityId charEntity;
+    EntityId dialogueBarEntity;
+
+    Int currentStep = 0;
+    Bool isChoiceActive = false;
+    Int choiceMade = 0;
+    Float elapsed = 0.0;
+
+    String currentSpeaker = "Captain Nova";
+    String currentText = "Stardate 4092. Deep space sector 7. All systems operating normally.";
+    String currentBg = "C:/Users/jaypr/Downloads/EP01 - Art Resources/Art/spaceshipFlying.png";
+    String currentChar = "C:/Users/jaypr/Downloads/EP01 - Art Resources/Art/happy.png";
+    String choiceAText = "";
+    String choiceBText = "";
+    Int nextA = 0;
+    Int nextB = 0;
+
+    Void setStepData(stepId: Int, speaker: String, text: String, bg: String, charPic: String, optA: String, optB: String, nA: Int, nB: Int) {
+        currentStep = stepId;
+        currentSpeaker = speaker;
+        currentText = text;
+        currentBg = bg;
+        currentChar = charPic;
+        choiceAText = optA;
+        choiceBText = optB;
+        nextA = nA;
+        nextB = nB;
+
+        if (optA != "") {
+            isChoiceActive = true;
+        } else {
+            isChoiceActive = false;
+        }
+
+        sprite2D(bgEntity).texture = loadTexture(currentBg);
+        sprite2D(charEntity).texture = loadTexture(currentChar);
+    }
+
+    Void loadStoryNode(nodeId: Int) {
+        if (nodeId == 0) {
+            setStepData(0, "Captain Nova", "Stardate 4092. We have entered the uncharted outer nebula.", "C:/Users/jaypr/Downloads/EP01 - Art Resources/Art/spaceshipFlying.png", "C:/Users/jaypr/Downloads/EP01 - Art Resources/Art/happy.png", "", "", 1, 1);
+        } else {
+            if (nodeId == 1) {
+                setStepData(1, "Lieutenant Ray", "Captain! Sensors are detecting an energy anomaly near the station.", "C:/Users/jaypr/Downloads/EP01 - Art Resources/Art/spaceshipFlying.png", "C:/Users/jaypr/Downloads/EP01 - Art Resources/Art/happy.png", "1. Investigate Anomaly", "2. Raise Shields & Hold Position", 2, 3);
+            } else {
+                if (nodeId == 2) {
+                    setStepData(2, "Ship Computer", "WARNING: Power surge detected in main reactor chamber!", "C:/Users/jaypr/Downloads/EP01 - Art Resources/Art/FaultCinematic.jpg", "C:/Users/jaypr/Downloads/EP01 - Art Resources/Art/happy.png", "", "", 4, 4);
+                } else {
+                    if (nodeId == 3) {
+                        setStepData(3, "Captain Nova", "Shields up! Prepare all stations for tactical standby.", "C:/Users/jaypr/Downloads/EP01 - Art Resources/Art/BG Bath.png", "C:/Users/jaypr/Downloads/EP01 - Art Resources/Art/happy.png", "", "", 4, 4);
+                    } else {
+                        if (nodeId == 4) {
+                            setStepData(4, "Lieutenant Ray", "Mission accomplished Captain! We stabilized the reactor and secured the sector.", "C:/Users/jaypr/Downloads/EP01 - Art Resources/Art/spaceshipFlying.png", "C:/Users/jaypr/Downloads/EP01 - Art Resources/Art/happy.png", "", "", 0, 0);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Void advanceStory() {
+        if (isChoiceActive == false) {
+            loadStoryNode(nextA);
+        }
+    }
+
+    Void chooseOption(optionNum: Int) {
+        if (isChoiceActive) {
+            if (optionNum == 1) {
+                loadStoryNode(nextA);
+            } else {
+                if (optionNum == 2) {
+                    loadStoryNode(nextB);
+                }
+            }
+        }
+    }
+
+    Void onLoad() {
+        clearColor = "#040810";
+        autoRenderWorld2D = true;
+        debugOverlayEnabled = true;
+
+        TextureHandleView bgTex = loadTexture("C:/Users/jaypr/Downloads/EP01 - Art Resources/Art/spaceshipFlying.png");
+        TextureHandleView charTex = loadTexture("C:/Users/jaypr/Downloads/EP01 - Art Resources/Art/happy.png");
+        TextureHandleView barTex = loadTexture("C:/Users/jaypr/Downloads/EP01 - Art Resources/Art/DialogueBar.png");
+
+        bgEntity = spawnSprite("Background", 32.0, 24.0, 64.0, 48.0, "white");
+        sprite2D(bgEntity).texture = bgTex;
+        sprite2D(bgEntity).sortOrder = -10;
+
+        charEntity = spawnSprite("CharacterPortrait", 44.0, 24.0, 24.0, 32.0, "white");
+        sprite2D(charEntity).texture = charTex;
+        sprite2D(charEntity).sortOrder = -2;
+
+        dialogueBarEntity = spawnSprite("DialogueBar", 32.0, 40.0, 60.0, 12.0, "white");
+        sprite2D(dialogueBarEntity).texture = barTex;
+        sprite2D(dialogueBarEntity).sortOrder = 0;
+
+        loadStoryNode(0);
+    }
+
+    Void onUpdate(dt: Float) {
+        elapsed = elapsed + dt;
+
+        if (wasKeyPressed("Space")) {
+            advanceStory();
+        } else {
+            if (wasKeyPressed("Enter")) {
+                advanceStory();
+            } else {
+                if (wasKeyPressed("Digit1")) {
+                    chooseOption(1);
+                } else {
+                    if (wasKeyPressed("Digit2")) {
+                        chooseOption(2);
+                    }
+                }
+            }
+        }
+    }
+
+    Void onDraw(canvas: Canvas, alpha: Float) {
+        String title = "ZENITH EPISODE 01: NEBULA CRISIS";
+        canvas.drawText(title, 2.0, 1.5, "#7de2ff");
+
+        canvas.drawFrameRect(2.0, 32.0, 60.0, 14.0, "#17344f");
+        canvas.drawText("[" + currentSpeaker + "]", 3.0, 33.5, "#ffe066");
+        canvas.drawText(currentText, 3.0, 36.5, "white");
+
+        if (isChoiceActive) {
+            canvas.drawFrameRect(12.0, 14.0, 40.0, 5.0, "#122033");
+            canvas.drawText(choiceAText, 14.0, 16.0, "#8ef9f3");
+
+            canvas.drawFrameRect(12.0, 21.0, 40.0, 5.0, "#122033");
+            canvas.drawText(choiceBText, 14.0, 23.0, "#8ef9f3");
+
+            canvas.drawText("Press [1] or [2] to select choice", 16.0, 28.0, "#ffd6a5");
+        } else {
+            canvas.drawText("Press [SPACE] or [ENTER] to continue...", 34.0, 44.0, "#c4b5fd");
+        }
+    }
+}
+
+Void main() {
+    VisualNovelScene scene = VisualNovelScene();
+    scene.run();
+}

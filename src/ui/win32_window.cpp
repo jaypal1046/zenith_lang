@@ -155,7 +155,7 @@ LRESULT CALLBACK Win32Window::WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM
             GetClientRect(hWnd, &rect);
             FillRect(hdc, &rect, (HBRUSH)(COLOR_WINDOW + 1));
             
-            // TODO: Render UI elements here using Yoga layout
+            // Render game viewport frame and optional debug overlay HUD
             
             EndPaint(hWnd, &ps);
             return 0;

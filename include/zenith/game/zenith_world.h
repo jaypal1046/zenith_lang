@@ -539,6 +539,11 @@ public:
         return sphereColliders3D.assign(entity, value);
     }
 
+    physics::CapsuleCollider3D& addCapsuleCollider3D(EntityId entity, const physics::CapsuleCollider3D& value = physics::CapsuleCollider3D()) {
+        requireAlive(entity);
+        return capsuleColliders3D.assign(entity, value);
+    }
+
     SpriteRenderer2D& addSpriteRenderer2D(EntityId entity, const SpriteRenderer2D& value = SpriteRenderer2D()) {
         requireAlive(entity);
         return spriteRenderers2D.assign(entity, value);
@@ -654,6 +659,7 @@ public:
     physics::CapsuleCollider2D* getCapsuleCollider2D(EntityId entity) { return capsuleColliders2D.get(entity); }
     physics::BoxCollider3D* getBoxCollider3D(EntityId entity) { return boxColliders3D.get(entity); }
     physics::SphereCollider3D* getSphereCollider3D(EntityId entity) { return sphereColliders3D.get(entity); }
+    physics::CapsuleCollider3D* getCapsuleCollider3D(EntityId entity) { return capsuleColliders3D.get(entity); }
     SpriteRenderer2D* getSpriteRenderer2D(EntityId entity) { return spriteRenderers2D.get(entity); }
     Tilemap2DComponent* getTilemap2D(EntityId entity) { return tilemaps2D.get(entity); }
     Character2DComponent* getCharacter2D(EntityId entity) { return characters2D.get(entity); }
@@ -681,6 +687,7 @@ public:
     const physics::CapsuleCollider2D* getCapsuleCollider2D(EntityId entity) const { return capsuleColliders2D.get(entity); }
     const physics::BoxCollider3D* getBoxCollider3D(EntityId entity) const { return boxColliders3D.get(entity); }
     const physics::SphereCollider3D* getSphereCollider3D(EntityId entity) const { return sphereColliders3D.get(entity); }
+    const physics::CapsuleCollider3D* getCapsuleCollider3D(EntityId entity) const { return capsuleColliders3D.get(entity); }
     const SpriteRenderer2D* getSpriteRenderer2D(EntityId entity) const { return spriteRenderers2D.get(entity); }
     const Tilemap2DComponent* getTilemap2D(EntityId entity) const { return tilemaps2D.get(entity); }
     const Character2DComponent* getCharacter2D(EntityId entity) const { return characters2D.get(entity); }
@@ -828,6 +835,32 @@ public:
             }
         }
         return clone;
+    }
+
+    EntityId instantiatePrefab2D(EntityId source, float posX, float posY, const std::string& entityName = "") {
+        EntityId instance = cloneEntityHierarchy(source, entityName);
+        if (instance) {
+            if (Transform2D* transform = transforms2D.get(instance)) {
+                transform->position = physics::Vec2(posX, posY);
+            }
+            if (physics::RigidBody2D* body = rigidBodies2D.get(instance)) {
+                body->position = physics::Vec2(posX, posY);
+            }
+        }
+        return instance;
+    }
+
+    EntityId instantiatePrefab3D(EntityId source, float posX, float posY, float posZ, const std::string& entityName = "") {
+        EntityId instance = cloneEntityHierarchy(source, entityName);
+        if (instance) {
+            if (Transform3D* transform = transforms3D.get(instance)) {
+                transform->position = physics::Vec3(posX, posY, posZ);
+            }
+            if (physics::RigidBody3D* body = rigidBodies3D.get(instance)) {
+                body->position = physics::Vec3(posX, posY, posZ);
+            }
+        }
+        return instance;
     }
 
     uint32_t entityLayerBits(EntityId entity) const {
@@ -1332,6 +1365,22 @@ public:
             }
         }
 
+        const std::vector<EntityId>& capsuleEntities = capsuleColliders3D.entityList();
+        const std::vector<physics::CapsuleCollider3D>& capsuleData = capsuleColliders3D.componentData();
+        for (size_t i = 0; i < capsuleData.size(); ++i) {
+            EntityId entity = capsuleEntities[i];
+            if (!layerMaskMatches(layerMask, entityLayerBits(entity))) {
+                continue;
+            }
+            const physics::CapsuleCollider3D& collider = capsuleData[i];
+            float distance = 0.0f;
+            physics::Vec3 point;
+            physics::Vec3 normal;
+            if (physics::raycast(ray, collider, entityPosition3D(entity), bestDistance, distance, point, normal)) {
+                considerHit(entity, distance, point, normal);
+            }
+        }
+
         return bestHit;
     }
 
@@ -1618,6 +1667,7 @@ private:
     ComponentPool<physics::CapsuleCollider2D> capsuleColliders2D;
     ComponentPool<physics::BoxCollider3D> boxColliders3D;
     ComponentPool<physics::SphereCollider3D> sphereColliders3D;
+    ComponentPool<physics::CapsuleCollider3D> capsuleColliders3D;
     ComponentPool<SpriteRenderer2D> spriteRenderers2D;
     ComponentPool<Tilemap2DComponent> tilemaps2D;
     ComponentPool<Character2DComponent> characters2D;

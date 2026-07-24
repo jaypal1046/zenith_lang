@@ -498,6 +498,13 @@ public:
         return static_cast<int>(properties.size());
     }
 
+    std::shared_ptr<MaterialAsset> cloneVariant(const std::string& variantPath) const {
+        auto variant = std::make_shared<MaterialAsset>(variantPath);
+        variant->shaderPath = shaderPath;
+        variant->properties = properties;
+        return variant;
+    }
+
 private:
     static std::string materialPropertyKindName(MaterialPropertyKind kind) {
         switch (kind) {

@@ -1,0 +1,103 @@
+import std.io;
+
+class VisualNovelTestScene() implements Scene {
+    EntityId bgEntity;
+    EntityId charEntity;
+    EntityId dialogueBarEntity;
+
+    Int currentStep = 0;
+    Bool isChoiceActive = false;
+    Int choiceMade = 0;
+
+    String currentSpeaker = "Captain Nova";
+    String currentText = "";
+    String currentBg = "";
+    String currentChar = "";
+    String choiceAText = "";
+    String choiceBText = "";
+    Int nextA = 0;
+    Int nextB = 0;
+
+    Void setStepData(stepId: Int, speaker: String, text: String, bg: String, charPic: String, optA: String, optB: String, nA: Int, nB: Int) {
+        currentStep = stepId;
+        currentSpeaker = speaker;
+        currentText = text;
+        currentBg = bg;
+        currentChar = charPic;
+        choiceAText = optA;
+        choiceBText = optB;
+        nextA = nA;
+        nextB = nB;
+        if (optA != "") {
+            isChoiceActive = true;
+        } else {
+            isChoiceActive = false;
+        }
+    }
+
+    Void loadStoryNode(nodeId: Int) {
+        if (nodeId == 0) {
+            setStepData(0, "Captain Nova", "Stardate 4092. Sector entry.", "C:/Users/jaypr/Downloads/EP01 - Art Resources/Art/spaceshipFlying.png", "C:/Users/jaypr/Downloads/EP01 - Art Resources/Art/happy.png", "", "", 1, 1);
+        } else {
+            if (nodeId == 1) {
+                setStepData(1, "Lieutenant Ray", "Anomaly detected!", "C:/Users/jaypr/Downloads/EP01 - Art Resources/Art/spaceshipFlying.png", "C:/Users/jaypr/Downloads/EP01 - Art Resources/Art/happy.png", "1. Investigate", "2. Raise Shields", 2, 3);
+            } else {
+                if (nodeId == 2) {
+                    setStepData(2, "Ship Computer", "Power surge in reactor!", "C:/Users/jaypr/Downloads/EP01 - Art Resources/Art/FaultCinematic.jpg", "C:/Users/jaypr/Downloads/EP01 - Art Resources/Art/happy.png", "", "", 4, 4);
+                } else {
+                    if (nodeId == 3) {
+                        setStepData(3, "Captain Nova", "Tactical standby.", "C:/Users/jaypr/Downloads/EP01 - Art Resources/Art/BG Bath.png", "C:/Users/jaypr/Downloads/EP01 - Art Resources/Art/happy.png", "", "", 4, 4);
+                    } else {
+                        if (nodeId == 4) {
+                            setStepData(4, "Lieutenant Ray", "Sector secured!", "C:/Users/jaypr/Downloads/EP01 - Art Resources/Art/spaceshipFlying.png", "C:/Users/jaypr/Downloads/EP01 - Art Resources/Art/happy.png", "", "", 0, 0);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Void advanceStory() {
+        if (isChoiceActive == false) {
+            loadStoryNode(nextA);
+        }
+    }
+
+    Void chooseOption(optionNum: Int) {
+        if (isChoiceActive) {
+            if (optionNum == 1) {
+                loadStoryNode(nextA);
+            } else {
+                if (optionNum == 2) {
+                    loadStoryNode(nextB);
+                }
+            }
+        }
+    }
+
+    Void onLoad() {
+        bgEntity = spawnSprite("Background", 32.0, 24.0, 64.0, 48.0, "white");
+        charEntity = spawnSprite("CharacterPortrait", 44.0, 24.0, 24.0, 32.0, "white");
+        dialogueBarEntity = spawnSprite("DialogueBar", 32.0, 40.0, 60.0, 12.0, "white");
+        loadStoryNode(0);
+    }
+}
+
+Void main() {
+    VisualNovelTestScene scene = VisualNovelTestScene();
+    scene.load();
+
+    println("initial_step=" + scene.currentStep);
+    println("initial_speaker=" + scene.currentSpeaker);
+
+    scene.advanceStory();
+    println("step1_id=" + scene.currentStep);
+    println("step1_choice_active=" + scene.isChoiceActive);
+
+    scene.chooseOption(1);
+    println("step2_id=" + scene.currentStep);
+    println("step2_speaker=" + scene.currentSpeaker);
+
+    scene.advanceStory();
+    println("step4_id=" + scene.currentStep);
+}

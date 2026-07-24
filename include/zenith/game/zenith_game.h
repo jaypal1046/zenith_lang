@@ -275,17 +275,37 @@ public:
         clear("black");
     }
     
+    void resolveColorRgb(const std::string& color, float& r, float& g, float& b) const {
+        if (color.empty()) { r = 1.0f; g = 1.0f; b = 1.0f; return; }
+        if (color[0] == '#' && color.length() == 7) {
+            unsigned int hexVal = 0;
+            std::stringstream ss;
+            ss << std::hex << color.substr(1);
+            ss >> hexVal;
+            r = ((hexVal >> 16) & 0xFF) / 255.0f;
+            g = ((hexVal >> 8) & 0xFF) / 255.0f;
+            b = (hexVal & 0xFF) / 255.0f;
+            return;
+        }
+        if (color == "red") { r = 0.90f; g = 0.22f; b = 0.22f; }
+        else if (color == "green" || color == "emerald") { r = 0.06f; g = 0.72f; b = 0.50f; }
+        else if (color == "blue") { r = 0.14f; g = 0.38f; b = 0.92f; }
+        else if (color == "yellow" || color == "amber" || color == "gold") { r = 0.96f; g = 0.62f; b = 0.04f; }
+        else if (color == "cyan" || color == "sky_blue") { r = 0.22f; g = 0.74f; b = 0.97f; }
+        else if (color == "magenta" || color == "purple" || color == "violet") { r = 0.65f; g = 0.35f; b = 0.95f; }
+        else if (color == "black" || color == "dark_slate") { r = 0.04f; g = 0.06f; b = 0.10f; }
+        else if (color == "dark_navy" || color == "navy") { r = 0.07f; g = 0.11f; b = 0.18f; }
+        else if (color == "glass_panel" || color == "slate") { r = 0.11f; g = 0.16f; b = 0.26f; }
+        else if (color == "panel_border") { r = 0.22f; g = 0.35f; b = 0.60f; }
+        else if (color == "white") { r = 0.95f; g = 0.96f; b = 0.98f; }
+        else if (color == "light_gray") { r = 0.60f; g = 0.65f; b = 0.75f; }
+        else { r = 1.0f; g = 1.0f; b = 1.0f; }
+    }
+
     void clear(const std::string& color = "black") {
         if (use_opengl) {
             float r = 0.0f, g = 0.0f, b = 0.0f;
-            if (color == "red") r = 1.0f;
-            else if (color == "green") g = 1.0f;
-            else if (color == "blue") b = 1.0f;
-            else if (color == "yellow") { r = 1.0f; g = 1.0f; }
-            else if (color == "cyan") { g = 1.0f; b = 1.0f; }
-            else if (color == "magenta") { r = 1.0f; b = 1.0f; }
-            else if (color == "white") { r = 1.0f; g = 1.0f; b = 1.0f; }
-            
+            resolveColorRgb(color, r, g, b);
 #ifdef _WIN32
             glClearColor(r, g, b, 1.0f);
             glClear(GL_COLOR_BUFFER_BIT);
@@ -312,14 +332,7 @@ public:
     void drawRect(float x, float y, float w, float h, const std::string& color = "white") {
         if (use_opengl) {
             float r = 1.0f, g = 1.0f, b = 1.0f;
-            if (color == "red") { r = 1.0f; g = 0.0f; b = 0.0f; }
-            else if (color == "green") { r = 0.0f; g = 1.0f; b = 0.0f; }
-            else if (color == "blue") { r = 0.0f; g = 0.0f; b = 1.0f; }
-            else if (color == "yellow") { r = 1.0f; g = 1.0f; b = 0.0f; }
-            else if (color == "cyan") { r = 0.0f; g = 1.0f; b = 1.0f; }
-            else if (color == "magenta") { r = 1.0f; g = 0.0f; b = 1.0f; }
-            else if (color == "black") { r = 0.0f; g = 0.0f; b = 0.0f; }
-            
+            resolveColorRgb(color, r, g, b);
 #ifdef _WIN32
             glColor3f(r, g, b);
             glBegin(GL_QUADS);
@@ -358,14 +371,7 @@ public:
     void drawCircle(float cx, float cy, float r, const std::string& color = "white") {
         if (use_opengl) {
             float r_col = 1.0f, g = 1.0f, b = 1.0f;
-            if (color == "red") { r_col = 1.0f; g = 0.0f; b = 0.0f; }
-            else if (color == "green") { r_col = 0.0f; g = 1.0f; b = 0.0f; }
-            else if (color == "blue") { r_col = 0.0f; g = 0.0f; b = 1.0f; }
-            else if (color == "yellow") { r_col = 1.0f; g = 1.0f; b = 0.0f; }
-            else if (color == "cyan") { r_col = 0.0f; g = 1.0f; b = 1.0f; }
-            else if (color == "magenta") { r_col = 1.0f; g = 0.0f; b = 1.0f; }
-            else if (color == "black") { r_col = 0.0f; g = 0.0f; b = 0.0f; }
-            
+            resolveColorRgb(color, r_col, g, b);
 #ifdef _WIN32
             glColor3f(r_col, g, b);
             glBegin(GL_TRIANGLE_FAN);
@@ -563,6 +569,50 @@ public:
         else if (color == "cyan") fg_style = "\033[36m";
         
         buffer.writeString(static_cast<int>(x), static_cast<int>(y), text, fg_style);
+    }
+
+    void drawTextWrapped(const std::string& text, float x, float y, float maxW, const std::string& color = "white") {
+        if (maxW <= 1.0f) {
+            drawText(text, x, y, color);
+            return;
+        }
+
+        const int maxCharsPerLine = std::max(5, static_cast<int>(maxW) - 2);
+        std::stringstream ss(text);
+        std::string word;
+        std::string currentLine;
+        float currentY = y;
+
+        while (ss >> word) {
+            if (currentLine.empty()) {
+                currentLine = word;
+            } else if (static_cast<int>(currentLine.length() + 1 + word.length()) <= maxCharsPerLine) {
+                currentLine += " " + word;
+            } else {
+                drawText(currentLine, x, currentY, color);
+                currentY += 1.2f;
+                currentLine = word;
+            }
+        }
+        if (!currentLine.empty()) {
+            drawText(currentLine, x, currentY, color);
+        }
+    }
+
+    float pctX(float percent) const {
+        return (static_cast<float>(width) * percent) / 100.0f;
+    }
+
+    float pctY(float percent) const {
+        return (static_cast<float>(height) * percent) / 100.0f;
+    }
+
+    float mediaWidth() const {
+        return static_cast<float>(width);
+    }
+
+    float mediaHeight() const {
+        return static_cast<float>(height);
     }
     
     void present() {
@@ -1435,7 +1485,7 @@ inline void runGameLoop(GameType& game) {
     wc.lpszClassName = "ZenithGameWindow";
     
     if (RegisterClassExA(&wc)) {
-        RECT rect = {0, 0, 640, 480};
+        RECT rect = {0, 0, 1024, 576};
         AdjustWindowRect(&rect, WS_OVERLAPPEDWINDOW, FALSE);
         
         hWnd = CreateWindowExA(
@@ -1458,17 +1508,17 @@ inline void runGameLoop(GameType& game) {
             HFONT hFont = CreateFontA(-16, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
                                       ANSI_CHARSET, OUT_TT_ONLY_PRECIS, CLIP_DEFAULT_PRECIS,
                                       ANTIALIASED_QUALITY, FF_DONTCARE | DEFAULT_PITCH, "Courier New");
-            SelectObject(hDC, hFont);
+SelectObject(hDC, hFont);
             wglUseFontBitmapsA(hDC, 0, 256, fontListBase);
             
-            glViewport(0, 0, 640, 480);
+            glViewport(0, 0, 1024, 576);
             glMatrixMode(GL_PROJECTION);
             glLoadIdentity();
-            glOrtho(0.0, 640.0, 480.0, 0.0, -1.0, 1.0);
+            glOrtho(0.0, 1024.0, 576.0, 0.0, -1.0, 1.0);
             glMatrixMode(GL_MODELVIEW);
             glLoadIdentity();
             
-            Canvas canvas(80, 24, true);
+            Canvas canvas(128, 28, true);
             canvas.fontListBase = fontListBase;
             
             game.init();
@@ -1489,6 +1539,23 @@ inline void runGameLoop(GameType& game) {
                 }
                 
                 if (!running) break;
+
+                RECT clientRect;
+                GetClientRect(hWnd, &clientRect);
+                int winW = clientRect.right - clientRect.left;
+                int winH = clientRect.bottom - clientRect.top;
+                if (winW < 100) winW = 1024;
+                if (winH < 100) winH = 576;
+
+                glViewport(0, 0, winW, winH);
+                glMatrixMode(GL_PROJECTION);
+                glLoadIdentity();
+                glOrtho(0.0, static_cast<double>(winW), static_cast<double>(winH), 0.0, -1.0, 1.0);
+                glMatrixMode(GL_MODELVIEW);
+                glLoadIdentity();
+
+                canvas.width = std::max(10, winW / 8);
+                canvas.height = std::max(5, winH / 20);
                 
                 auto current_time = std::chrono::high_resolution_clock::now();
                 float dt = std::chrono::duration<float>(current_time - last_time).count();

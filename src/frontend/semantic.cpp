@@ -429,6 +429,17 @@ static std::unique_ptr<InterfaceDeclNode> makeBuiltinCanvasInterface() {
         {"Float", "y"},
         {"String", "color"}
     }));
+    canvas->methods.push_back(makeBuiltinMethod("Void", "drawTextWrapped", {
+        {"String", "text"},
+        {"Float", "x"},
+        {"Float", "y"},
+        {"Float", "maxW"},
+        {"String", "color"}
+    }));
+    canvas->methods.push_back(makeBuiltinMethod("Float", "mediaWidth"));
+    canvas->methods.push_back(makeBuiltinMethod("Float", "mediaHeight"));
+    canvas->methods.push_back(makeBuiltinMethod("Float", "pctX", {{"Float", "percent"}}));
+    canvas->methods.push_back(makeBuiltinMethod("Float", "pctY", {{"Float", "percent"}}));
     canvas->methods.push_back(makeBuiltinMethod("Void", "present"));
     return canvas;
 }

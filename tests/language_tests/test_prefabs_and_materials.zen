@@ -1,0 +1,33 @@
+import std.io;
+
+class PrefabTestScene() implements Scene {
+    EntityId templateHero;
+    EntityId heroInstanceA;
+    EntityId heroInstanceB;
+
+    Void onLoad() {
+        templateHero = spawnSprite("HeroTemplate", 0.0, 0.0, 4.0, 4.0, "#ff0000");
+        attachBoxCollider2D(templateHero, 4.0, 4.0, false);
+        setEntityLayerMask(templateHero, 2, 4);
+
+        heroInstanceA = instantiatePrefab2D(templateHero, 12.0, 24.0, "HeroA");
+        heroInstanceB = instantiatePrefab2D(templateHero, 48.0, 96.0, "HeroB");
+
+        createMaterialVariant("materials/hero.mat", "materials/hero_red_variant.mat");
+    }
+}
+
+Void main() {
+    PrefabTestScene scene = PrefabTestScene();
+    scene.load();
+
+    Body2DView bodyA = scene.body2D(scene.heroInstanceA);
+    Body2DView bodyB = scene.body2D(scene.heroInstanceB);
+
+    println("instanceA_x=" + bodyA.x);
+    println("instanceA_y=" + bodyA.y);
+    println("instanceB_x=" + bodyB.x);
+    println("instanceB_y=" + bodyB.y);
+    println("template_alive=" + scene.isAlive(scene.templateHero));
+    println("variant_created=" + scene.createMaterialVariant("materials/hero.mat", "materials/hero_blue.mat"));
+}

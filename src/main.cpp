@@ -3209,20 +3209,6 @@ int main(int argc, char* argv[]) {
                 config.description = "A new Zenith project";
             }
             
-            bool found = false;
-            for (auto& dep : config.dependencies) {
-                if (dep.name == package_name) {
-                    dep.git_url = url;
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) {
-                ZenithDependency dep;
-                dep.name = package_name;
-                dep.git_url = url;
-                config.dependencies.push_back(dep);
-            }
             writeZenithYaml(yaml_path, config);
         } else {
             // Restore all packages from zenith.yaml
@@ -3307,6 +3293,63 @@ int main(int argc, char* argv[]) {
     // LIST subcommand: zenith list
     // =========================================================================
     if (argc >= 2 && std::string(argv[1]) == "list") {
+        namespace fs = std::filesystem;
+        std::cout << "\n\033[1m\033[96m╔══════════════════════════════════════╗\033[0m\n";
+        std::cout << "\033[1m\033[96m║   Zenith Package Manager — Installed  ║\033[0m\n";
+        std::cout << "\033[1m\033[96m╚══════════════════════════════════════╝\033[0m\n\n";
+
+        // Read zenith.yaml
+        std::string yaml_path = "zenith.yaml";
+        ZenithProjectConfig config = parseZenithYaml(yaml_path);
+
+        if (config.dependencies.empty()) {
+            std::cout << "  \033[33mNo packages declared in zenith.yaml\033[0m\n";
+        } else {
+            std::cout << "  \033[1mPackage\033[0m             \033[1mSource / Type\033[0m\n";
+            std::cout << "  " << std::string(50, '-') << "\n";
+            for (const auto& dep : config.dependencies) {
+                std::string target_dir = dep.path.empty() ? ("lib/" + dep.name) : dep.path;
+                std::string installed_str = fs::exists(target_dir) ? " \033[32m✓ installed\033[0m" : " \033[31m✗ missing\033[0m";
+                
+                std::string source_info = "";
+                if (!dep.git_url.empty()) source_info = "git:" + dep.git_url;
+                else if (!dep.pub_pkg.empty()) source_info = "pub:" + dep.pub_pkg;
+                else if (!dep.crate_name.empty()) source_info = "crate:" + dep.crate_name;
+                else if (!dep.path.empty()) source_info = "path:" + dep.path;
+                
+                if (!dep.type.empty()) source_info += " (" + dep.type + ")";
+
+                std::cout << "  \033[96m" << dep.name << "\033[0m" << std::string(std::max(1,(int)(20-dep.name.size())), ' ')
+                          << source_info << installed_str << "\n";
+            }
+        }
+
+        // Also scan lib/ for packages not in zenith.yaml
+        std::cout << "\n  \033[1mScanned lib/ directory:\033[0m\n";
+        if (fs::exists("lib")) {
+            bool found = false;
+            for (const auto& entry : fs::directory_iterator("lib")) {
+                if (entry.is_directory()) {
+                    found = true;
+                    bool in_yaml = false;
+                    for (const auto& d : config.dependencies) {
+                        if (d.name == entry.path().filename().string()) in_yaml = true;
+                    }
+                    std::cout << "  \033[36m  " << entry.path().filename().string() << "\033[0m"
+                              << (in_yaml ? " (registered)" : " \033[33m(unregistered)\033[0m") << "\n";
+                }
+            }
+            if (!found) std::cout << "  \033[2m  (empty)\033[0m\n";
+        } else {
+            std::cout << "  \033[2m  lib/ not found\033[0m\n";
+        }
+        std::cout << "\n";
+        return 0;
+
+    // =========================================================================
+    // LIST subcommand: zenith list
+    // =========================================================================
+    if (false) {
         namespace fs = std::filesystem;
         std::cout << "\n\033[1m\033[96m╔══════════════════════════════════════╗\033[0m\n";
         std::cout << "\033[1m\033[96m║   Zenith Package Manager — Installed  ║\033[0m\n";
@@ -3994,34 +4037,6 @@ int main(int argc, char* argv[]) {
             
             // 1. Cargo.toml
             std::ofstream cargo_file(bridge_dir + "/Cargo.toml");
-            if (cargo_file.is_open()) {
-                cargo_file << "[package]\n"
-                           << "name = \"rust_" << package_name << "_bridge\"\n"
-                           << "version = \"0.1.0\"\n"
-                           << "edition = \"2021\"\n\n"
-                           << "[lib]\n"
-                           << "crate-type = [\"cdylib\"]\n\n"
-                           << "[dependencies]\n"
-                           << package_name << " = \"*\"\n";
-                cargo_file.close();
-            }
-            
-            // 2. src/lib.rs
-            std::ofstream lib_file(bridge_dir + "/src/lib.rs");
-            if (lib_file.is_open()) {
-                lib_file << genRustLib(funcs, package_name);
-                lib_file.close();
-            }
-            
-            // 3. main.zen
-            std::ofstream zen_file(bridge_dir + "/main.zen");
-            if (zen_file.is_open()) {
-                zen_file << genZenithWrapper(funcs, package_name, "rust");
-                zen_file.close();
-            }
-            
-            std::cout << "  \033[32m✓\033[0m Scaffolded Rust package bridge in: \033[92m" << bridge_dir << "\033[0m\n";
-            std::cout << "  \033[2mTo build, run:\033[0m\n";
             std::cout << "    cd " << bridge_dir << " && cargo build --release\n\n";
 
             // Update zenith.yaml
@@ -4052,40 +4067,8 @@ int main(int argc, char* argv[]) {
         }
         else if (kind == "dart") {
             // 1. pubspec.yaml
-            std::ofstream pubspec_file(bridge_dir + "/pubspec.yaml");
-            if (pubspec_file.is_open()) {
-                pubspec_file << "name: dart_" << package_name << "_bridge\n"
-                             << "environment:\n"
-                             << "  sdk: '>=2.15.0 <3.0.0'\n\n"
-                             << "dependencies:\n"
-                             << "  " << package_name << ": any\n";
-                pubspec_file.close();
-            }
-            
-            // 2. main.dart
-            std::ofstream main_dart_file(bridge_dir + "/main.dart");
-            if (main_dart_file.is_open()) {
-                main_dart_file << genDartLib(funcs, package_name);
-                main_dart_file.close();
-            }
-            
             // 3. main.zen
             std::ofstream zen_file(bridge_dir + "/main.zen");
-            if (zen_file.is_open()) {
-                zen_file << genZenithWrapper(funcs, package_name, "dart");
-                zen_file.close();
-            }
-            
-            std::cout << "  \033[32m✓\033[0m Scaffolded Dart package bridge in: \033[92m" << bridge_dir << "\033[0m\n";
-            std::cout << "  \033[2mTo build, run:\033[0m\n";
-            std::cout << "    cd " << bridge_dir << " && dart pub get && dart compile wasm main.dart\n\n";
-
-            // Update zenith.yaml
-            std::string yaml_path = "zenith.yaml";
-            ZenithProjectConfig config = parseZenithYaml(yaml_path);
-            if (config.name.empty()) {
-                config.name = fs::current_path().filename().string();
-                config.version = "1.0.0";
                 config.description = "A new Zenith project";
             }
             bool found = false;
@@ -4111,7 +4094,7 @@ int main(int argc, char* argv[]) {
 
     // =========================================================================
     // SERVE subcommand: zenith serve <file.zen|dir/> [--port 8080] [--target web|wasm]
-    // Dynamic SSR + File-System Router + Static Assets + HMR — like Next.js
+    // Game Live-Preview + Static Assets + Asset Watcher + Hot-Reload Dev Server
     // =========================================================================
     if (argc >= 2 && std::string(argv[1]) == "serve") {
         if (argc < 3) {
@@ -4880,10 +4863,10 @@ a{color:#818cf8;text-decoration:none;} a:hover{text-decoration:underline;}
         std::cerr << "  zenith create <name|.> [--template=app|game|package]  Create a new Zenith project\n";
         std::cerr << "  zenith run <desktop|web|wasm|android|ios>  Run the project\n";
         std::cerr << "  zenith format [-w] <file.zen>         Format a Zenith source file\n\n";
-        std::cerr << "\033[1mSSR WEB SERVER:\033[0m\n";
+        std::cerr << "\033[1mDEV / GAME PREVIEW SERVER:\033[0m\n";
         std::cerr << "  zenith serve <file.zen> [--port 8080] [--target web|wasm]\n";
-        std::cerr << "               Start a dynamic SSR HTTP server — recompiles .zen on every\n";
-        std::cerr << "               request and streams fresh HTML, just like Next.js on Vercel.\n\n";
+        std::cerr << "               Start a live game preview server — asset watcher + hot-reload\n";
+        std::cerr << "               dev server for rapid code-first iteration.\n\n";
         std::cerr << "\033[1mPACKAGE MANAGER:\033[0m\n";
         std::cerr << "  zenith install <url>                  Install package from git URL\n";
         std::cerr << "  zenith install                        Install all from zenith.json\n";

@@ -373,6 +373,14 @@ struct SphereCollider3D {
     bool enabled = true;
 };
 
+struct CapsuleCollider3D {
+    Vec3 offset;
+    float height = 2.0f;
+    float radius = 0.5f;
+    bool isTrigger = false;
+    bool enabled = true;
+};
+
 inline AABB2D boundsOf(const BoxCollider2D& collider, const Vec2& position) {
     const Vec2 center = position + collider.offset;
     const Vec2 halfExtent = collider.size * 0.5f;
@@ -722,6 +730,17 @@ inline Vec3 centerOf(const SphereCollider3D& collider, const Vec3& position) {
     return position + collider.offset;
 }
 
+inline Vec3 centerOf(const CapsuleCollider3D& collider, const Vec3& position) {
+    return position + collider.offset;
+}
+
+inline AABB3D boundsOf(const CapsuleCollider3D& collider, const Vec3& position) {
+    const Vec3 center = position + collider.offset;
+    const float halfH = std::max(collider.height * 0.5f, collider.radius);
+    const Vec3 halfExtent(collider.radius, halfH, collider.radius);
+    return AABB3D{center - halfExtent, center + halfExtent};
+}
+
 inline bool overlaps(const BoxCollider3D& lhs, const Vec3& lhsPosition, const BoxCollider3D& rhs, const Vec3& rhsPosition) {
     if (!lhs.enabled || !rhs.enabled) {
         return false;
@@ -890,6 +909,30 @@ inline bool raycast(
     outPoint = ray.origin + direction * t;
     outNormal = hitNormal.lengthSquared() <= 0.0000001f ? direction * -1.0f : hitNormal;
     return true;
+}
+
+inline bool raycast(
+    const Ray3D& ray,
+    const CapsuleCollider3D& collider,
+    const Vec3& position,
+    float maxDistance,
+    float& outDistance,
+    Vec3& outPoint,
+    Vec3& outNormal
+) {
+    if (!collider.enabled || maxDistance < 0.0f) return false;
+    SphereCollider3D topSphere{collider.offset + Vec3(0.0f, std::max(0.0f, collider.height * 0.5f - collider.radius), 0.0f), collider.radius, collider.isTrigger, collider.enabled};
+    SphereCollider3D botSphere{collider.offset - Vec3(0.0f, std::max(0.0f, collider.height * 0.5f - collider.radius), 0.0f), collider.radius, collider.isTrigger, collider.enabled};
+    BoxCollider3D midCylinder{collider.offset, Vec3(collider.radius * 2.0f, std::max(0.01f, collider.height - collider.radius * 2.0f), collider.radius * 2.0f), collider.isTrigger, collider.enabled};
+
+    float bestDist = maxDistance;
+    bool hit = false;
+    float dist = 0.0f; Vec3 pt, norm;
+
+    if (raycast(ray, topSphere, position, bestDist, dist, pt, norm)) { hit = true; bestDist = dist; outDistance = dist; outPoint = pt; outNormal = norm; }
+    if (raycast(ray, botSphere, position, bestDist, dist, pt, norm)) { hit = true; bestDist = dist; outDistance = dist; outPoint = pt; outNormal = norm; }
+    if (raycast(ray, midCylinder, position, bestDist, dist, pt, norm)) { hit = true; bestDist = dist; outDistance = dist; outPoint = pt; outNormal = norm; }
+    return hit;
 }
 
 // ============================================================================

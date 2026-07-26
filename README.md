@@ -26,9 +26,17 @@ The repo is currently centered on:
 - language frontend and static analysis
 - native code generation
 - game runtime in `include/zenith/game/`
-- physics, scene, entity, camera, and resource systems
 - material/resource property modeling in code
 - gameplay productivity tools such as watch/dev loops, test harnesses, and asset commands
+- **Code-First Game SDK**:
+  - Native GPU double-buffered windowing & 2D immediate renderer ([zenith_window.h](file:///c:/Jay/_Plugin/zenith_lang/include/zenith/game/zenith_window.h))
+  - Cache-friendly Entity Component System (ECS) ([zenith_ecs.h](file:///c:/Jay/_Plugin/zenith_lang/include/zenith/game/zenith_ecs.h))
+  - $O(N \log N)$ Spatial Hash Grid & Physics Raycasting ([zenith_spatial.h](file:///c:/Jay/_Plugin/zenith_lang/include/zenith/game/zenith_spatial.h))
+  - Flutter-style composable UI tree (`Container`, `Stack`, `Row`, `Column`, `Image`, `Button` with actions) ([zenith_gui.h](file:///c:/Jay/_Plugin/zenith_lang/include/zenith/game/zenith_gui.h))
+  - Cutscene & video stream playback ([zenith_video.h](file:///c:/Jay/_Plugin/zenith_lang/include/zenith/game/zenith_video.h))
+  - Particle emitter engine ([zenith_particles.h](file:///c:/Jay/_Plugin/zenith_lang/include/zenith/game/zenith_particles.h))
+  - Audio manager ([zenith_audio.h](file:///c:/Jay/_Plugin/zenith_lang/include/zenith/game/zenith_audio.h))
+  - Stack-based game state machine ([zenith_state.h](file:///c:/Jay/_Plugin/zenith_lang/include/zenith/game/zenith_state.h))
 
 Secondary or maintenance-only areas:
 

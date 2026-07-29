@@ -1,0 +1,16 @@
+import std.io;
+import std.math;
+
+class CyberpunkGameApp() implements Scene {
+    Void onCreate() {
+        println("=========================================================");
+        println("       ZENITH ENGINE - CYBERPUNK ACTION ADVENTURE        ");
+        println("=========================================================");
+        println("[Game Initialization] Player Vex-09 and Boss Droid-Alpha Spawned.");
+    }
+}
+
+Void main() {
+    CyberpunkGameApp game = CyberpunkGameApp();
+    game.onCreate();
+}

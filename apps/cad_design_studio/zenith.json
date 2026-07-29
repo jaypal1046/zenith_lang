@@ -1,0 +1,7 @@
+{
+  "name": "cad_design_studio",
+  "version": "1.0.0",
+  "template": "app",
+  "entry": "src/main.zen",
+  "dependencies": {}
+}

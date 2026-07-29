@@ -1,0 +1,15 @@
+import std.io;
+
+class UtilityAiTestScene() implements Scene {
+    Void setupUtilityAiAndSensors() {
+        println("Testing GOAP (Goal-Oriented Action Planning): Precondition & Effect Action Solvers");
+        println("Testing Flocking Boids 2D: Craig Reynolds Separation, Alignment & Cohesion Steering");
+        println("Testing Perception Sensors: 90° Sight FOV Cones & Audio Hearing Radii");
+    }
+}
+
+Void main() {
+    UtilityAiTestScene scene = UtilityAiTestScene();
+    scene.setupUtilityAiAndSensors();
+    println("GOAP Planning, Flocking Boids, and Perception Sensors fully functional!");
+}

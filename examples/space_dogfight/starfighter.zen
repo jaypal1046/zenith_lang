@@ -1,0 +1,36 @@
+import std.io;
+import std.math;
+
+// -------------------------------------------------------------
+// Space Dogfight - 6DoF Starfighter & Shield Mechanics
+// -------------------------------------------------------------
+
+class Starfighter() {
+    String callsign = "Viper-1";
+    float shieldEnergy = 100.0f;
+    float maxShield = 100.0f;
+    float hullIntegrity = 150.0f;
+    float boostEnergy = 100.0f;
+
+    float pitch = 0.0f;
+    float yaw = 0.0f;
+    float roll = 0.0f;
+
+    Void apply6DofThrusters(float p, float y, float r, float dt) {
+        pitch = pitch + p * dt;
+        yaw = yaw + y * dt;
+        roll = roll + r * dt;
+        println(concat("[6DoF Flight] ", concat(callsign, concat(" Flight Orientation Pitch: ", concat(toString(pitch), concat(" Yaw: ", toString(yaw)))))));
+    }
+
+    Void fireLaserPulse() {
+        println(concat("[Starfighter Weapon] ", concat(callsign, " fired Dual Twin-Linked Plasma Cannons!")));
+    }
+
+    Void triggerAfterburners() {
+        if (boostEnergy >= 20.0f) {
+            boostEnergy = boostEnergy - 20.0f;
+            println(concat("[Starfighter Boost] ", concat(callsign, " engaged Afterburner Thrusters! Velocity: 850 m/s.")));
+        }
+    }
+}

@@ -1,0 +1,57 @@
+import std.io;
+import std.math;
+
+// -------------------------------------------------------------
+// Zenith XR (VR/AR) Spatial Virtual Reality Example Game
+// Demonstrates Dual-Controller 6DoF Motion Tracking, Stereo Eye Projection & Haptic Triggers
+// -------------------------------------------------------------
+
+class VrController() {
+    String hand = "Right";
+    float posX = 0.2f;
+    float posY = 1.2f;
+    float posZ = -0.5f;
+    bool isGripPressed = false;
+
+    Void triggerHapticVibration(float frequency, float amplitude) {
+        println(concat("[XR Haptics] Triggered pulse on ", concat(hand, concat(" Controller (Freq: ", concat(toString(frequency), concat("Hz, Amp: ", concat(toString(amplitude), ")")))))));
+    }
+
+    Void grabObject(String objectName) {
+        isGripPressed = true;
+        println(concat("[XR Interaction] ", concat(hand, concat(" Hand grabbed ", objectName))));
+        triggerHapticVibration(160.0f, 0.8f);
+    }
+}
+
+class VrVirtualRealityScene() implements Scene {
+    VrController rightHand;
+    VrController leftHand;
+
+    Void onCreate() {
+        println("=================================================");
+        println(" ZENITH ENGINE - XR (VR/AR) SPATIAL VR DEMO GAME ");
+        println("=================================================");
+        rightHand = VrController();
+        rightHand.hand = "Right";
+
+        leftHand = VrController();
+        leftHand.hand = "Left";
+        leftHand.posX = -0.2f;
+
+        println("[OpenXR Bridge] Stereo Eye FBO Projection Initialized (90 FPS Target).");
+        println("[HMD Tracking] 6DoF Pose Tracking Active. IPD: 64mm.");
+    }
+
+    Void onRenderStereoFrame() {
+        println("\n[XR Renderer] Frame Rendered for Left & Right Eye Display Matrices.");
+        rightHand.grabObject("Plasma Sword");
+    }
+}
+
+Void main() {
+    VrVirtualRealityScene vr = VrVirtualRealityScene();
+    vr.onCreate();
+    vr.onRenderStereoFrame();
+    println("\n[XR Virtual Reality] Spatial Frame Render Simulation Complete!");
+}

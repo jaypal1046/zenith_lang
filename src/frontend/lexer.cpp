@@ -41,7 +41,7 @@ void Lexer::skipWhitespaceAndComments() {
 
 bool Lexer::isKeyword(std::string_view text) const {
     static const std::vector<std::string_view> keywords = {
-        "agentic", "async", "if", "else", "return", "class", "while", "for", "struct", "import", "await", "setState", "interface", "implements", "let", "orchestration", "foreign", "break", "continue"
+        "agentic", "async", "if", "else", "return", "class", "while", "for", "struct", "import", "await", "setState", "interface", "implements", "let", "orchestration", "foreign", "break", "continue", "test"
     };
     for (auto k : keywords) if (text == k) return true;
     return false;
@@ -50,7 +50,7 @@ bool Lexer::isKeyword(std::string_view text) const {
 bool Lexer::isType(std::string_view text) const {
     static const std::vector<std::string_view> types = {
         "Int", "Float", "Bool", "String", "Void", "UI", "List", "Map",
-        "Ref", "Weak"  // Memory management smart pointer types
+        "Ref", "Weak", "Temp", "Pool"  // Memory management types
     };
     for (auto t : types) if (text == t) return true;
     return false;

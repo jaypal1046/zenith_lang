@@ -1521,7 +1521,7 @@ std::string SemanticAnalyzer::typeCheckExpression(ExprNode* expr, const std::str
         if (unary->op == "-") {
             std::string inner_type = typeCheckExpression(unary->expression.get());
             if (inner_type != "Int" && inner_type != "Float") {
-                error("Type Error: Unary negation operator '-' requires operand of numeric type (Int or Float), got '" + inner_type + "'", unary);
+error("Type Error: Unary negation operator '-' requires operand of numeric type (Int or Float), got '" + inner_type + "'", unary);
             }
             return inner_type;
         }
@@ -1594,7 +1594,7 @@ std::string SemanticAnalyzer::typeCheckExpression(ExprNode* expr, const std::str
         std::string subject_type = typeCheckExpression(match->subject.get());
         std::string unified_type = "";
         for (const auto& arm : match->arms) {
-            std::string arm_type = typeCheckExpression(arm.second.get(), expected_type);
+            std::string arm_type = typeCheckExpression(arm.body.get(), expected_type);
             if (unified_type.empty()) {
                 unified_type = arm_type;
             } else if (unified_type != arm_type) {
@@ -1877,6 +1877,10 @@ std::string SemanticAnalyzer::typeCheckExpression(ExprNode* expr, const std::str
 
         if (classes.count(ui->component_type)) {
             ClassDeclNode* class_decl = classes[ui->component_type];
+            if (class_decl->is_deprecated) {
+                std::cout << "Compiler Warning: Class '" << ui->component_type << "' at line " << ui->line
+                          << " is deprecated" << (class_decl->deprecated_message.empty() ? "." : ": " + class_decl->deprecated_message) << "\n";
+            }
             if (!acceptsArgumentCount(class_decl->primary_constructor_args, ui->children.size())) {
                 error("Constructor Error: Class '" + ui->component_type + "' expects " + 
                       std::to_string(class_decl->primary_constructor_args.size()) + " arguments, got " + 
@@ -1894,6 +1898,10 @@ std::string SemanticAnalyzer::typeCheckExpression(ExprNode* expr, const std::str
         }
         if (functions.count(ui->component_type)) {
             FunctionNode* fn = functions[ui->component_type];
+            if (fn->is_deprecated) {
+                std::cout << "Compiler Warning: Function '" << ui->component_type << "' at line " << ui->line
+                          << " is deprecated" << (fn->deprecated_message.empty() ? "." : ": " + fn->deprecated_message) << "\n";
+            }
             if (!acceptsArgumentCount(fn->parameters, ui->children.size())) {
                 error("Call Error: Function '" + ui->component_type + "' expects " + 
                       std::to_string(fn->parameters.size()) + " arguments, got " + 

@@ -212,6 +212,8 @@ std::string CodeGenerator::mapType(TypeNode* type) {
     else if (base == "Promise") base = "zenith::stdlib::Promise";
     else if (base == "Ref") base = "zenith::mem::Ref";
     else if (base == "Weak") base = "zenith::mem::Weak";
+    else if (base == "Temp") base = "zenith::mem::Temp";
+    else if (base == "Pool") base = "zenith::mem::Pool";
     else if (base == "Function") {
         if (type->generics.empty()) return "std::function<void()>";
         std::string ret = mapType(type->generics.back().get());
@@ -1036,7 +1038,8 @@ void CodeGenerator::generateFunction(FunctionNode* node) {
             indent(); output << "zenith::ffi::PythonFFIBridge::initialize();\n\n";
         }
         indent(); output << "// --- Zenith RC+GC Memory Manager: Start background cycle collector ---\n";
-        indent(); output << "zenith::mem::GcHeap::instance().start_background_gc(5000);\n\n";
+        indent(); output << "zenith::mem::GcHeap::instance().start_background_gc(5000);\n";
+        indent(); output << "// --- Zenith Frame/Arena Allocator: Ready for scoped Temp<T> allocations ---\n\n";
     }
     
     // Set flag for exported functions with String return type (for ABI conversion)

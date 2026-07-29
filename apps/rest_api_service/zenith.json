@@ -1,0 +1,7 @@
+{
+  "name": "rest_api_service",
+  "version": "1.0.0",
+  "template": "package",
+  "entry": "src/main.zen",
+  "dependencies": {}
+}

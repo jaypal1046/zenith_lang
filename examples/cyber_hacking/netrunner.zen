@@ -1,0 +1,31 @@
+import std.io;
+import std.math;
+
+// -------------------------------------------------------------
+// Cyber Hacking - Netrunner & Cyberdeck RAM Management
+// -------------------------------------------------------------
+
+class CyberdeckNetrunner() {
+    String alias = "Cipher-X";
+    int cyberdeckRam = 16;
+    int maxRam = 16;
+    float ramRegenRate = 2.5f;
+
+    Void updateRamRegen(float dt) {
+        // RAM regeneration
+    }
+
+    bool executeIceBreakerProgram(String programName, int ramCost) {
+        if (cyberdeckRam >= ramCost) {
+            cyberdeckRam = cyberdeckRam - ramCost;
+            println(concat("[Cyberdeck] ", concat(alias, concat(" executed daemon program '", concat(programName, concat("'! RAM remaining: ", toString(cyberdeckRam)))))));
+            return true;
+        }
+        println("[Cyberdeck] Insufficient RAM buffer for daemon program execution!");
+        return false;
+    }
+
+    Void injectDataPayload() {
+        println(concat("[Payload Injection] ", concat(alias, " successfully uploaded encrypted virus payload to mainframe node!")));
+    }
+}

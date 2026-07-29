@@ -472,7 +472,7 @@ public:
         if (use_opengl) {
             float r = 0.0f, g = 0.0f, b = 0.0f;
             resolveColorRgb(color, r, g, b);
-#ifdef _WIN32
+#if defined(_WIN32) || defined(ZENITH_USE_SDL2) || defined(ZENITH_USE_GLFW) || defined(ZENITH_USE_OPENGL)
             glClearColor(r, g, b, 1.0f);
             glClear(GL_COLOR_BUFFER_BIT);
 #endif
@@ -499,7 +499,7 @@ public:
         if (use_opengl) {
             float r = 1.0f, g = 1.0f, b = 1.0f;
             resolveColorRgb(color, r, g, b);
-#ifdef _WIN32
+#if defined(_WIN32) || defined(ZENITH_USE_SDL2) || defined(ZENITH_USE_GLFW) || defined(ZENITH_USE_OPENGL)
             glColor3f(r, g, b);
             glBegin(GL_QUADS);
             glVertex2f(x * 8.0f, y * 20.0f);

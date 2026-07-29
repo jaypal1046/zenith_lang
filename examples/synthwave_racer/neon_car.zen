@@ -1,0 +1,32 @@
+import std.io;
+import std.math;
+
+// -------------------------------------------------------------
+// Synthwave Racer - Cyber Supercar & Nitro Boost System
+// -------------------------------------------------------------
+
+class CyberSupercar() {
+    String carName = "Neon Vector-9";
+    float speedKmh = 0.0f;
+    float maxNormalSpeed = 240.0f;
+    float maxNitroSpeed = 340.0f;
+    float nitroCapacity = 100.0f;
+    bool isNitroEngaged = false;
+
+    Void engageNitro() {
+        if (nitroCapacity >= 35.0f) {
+            nitroCapacity = nitroCapacity - 35.0f;
+            isNitroEngaged = true;
+            speedKmh = maxNitroSpeed;
+            println(concat("[Nitro System] ", concat(carName, concat(" ENGAGED NITRO BOOST! Top Speed: ", concat(toString(speedKmh), " km/h!")))));
+        }
+    }
+
+    Void updatePhysics(float dt) {
+        if (!isNitroEngaged) {
+            speedKmh = speedKmh + 65.0f * dt;
+            if (speedKmh > maxNormalSpeed) speedKmh = maxNormalSpeed;
+        }
+        println(concat("[Telemetry] Speed: ", concat(toString(speedKmh), " km/h | Neon Particle Trail: ACTIVE")));
+    }
+}

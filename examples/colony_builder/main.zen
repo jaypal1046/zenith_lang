@@ -1,0 +1,39 @@
+import std.io;
+import std.math;
+
+// -------------------------------------------------------------
+// Colony Builder - Main Application Entry Point & Simulation Loop
+// -------------------------------------------------------------
+
+class ColonyBuilderGameApp() implements Scene {
+    ColonyGridSystem grid;
+    ColonistAI colonists;
+
+    Void onCreate() {
+        println("=========================================================");
+        println("     ZENITH ENGINE - 3D COLONY BUILDER & CITY SIM        ");
+        println("=========================================================");
+        grid = ColonyGridSystem();
+        colonists = ColonistAI();
+
+        println("[Colony Sim] Planet Alpha Centauri Bb Colony Outpost Initialized.");
+        println("[Grid Shader] 3D Terrain Grid & PBR Solar Panel Shaders Active.");
+    }
+
+    Void onUpdate(float dt) {
+        println("\n--- Colony Simulation Tick ---");
+        grid.buildBioDome(5, 8);
+        grid.verifyLifeSupportPower();
+
+        colonists.updateShiftCycle(dt);
+    }
+}
+
+Void main() {
+    ColonyBuilderGameApp game = ColonyBuilderGameApp();
+    game.onCreate();
+    game.onUpdate(0.016f);
+    println("\n=========================================================");
+    println(" COLONY BUILDER SIMULATION TICK EXECUTED WITH 0 ERRORS!  ");
+    println("=========================================================");
+}

@@ -413,6 +413,117 @@ inline std::string gcStatsString() {
     return GcHeap::instance().stats_string();
 }
 
+// ---------------------------------------------------------------------------
+// FrameAllocator & Temp<T> — High-Performance Scoped Arena/Frame Allocator
+// ---------------------------------------------------------------------------
+class FrameAllocator {
+public:
+    static FrameAllocator& instance() {
+        static FrameAllocator allocator;
+        return allocator;
+    }
+
+    void* allocate(size_t bytes, size_t alignment = 16) {
+        size_t space = capacity_ - offset_;
+        void* ptr = buffer_ + offset_;
+        if (std::align(alignment, bytes, ptr, space)) {
+            offset_ = capacity_ - space + bytes;
+            return ptr;
+        }
+        return ::operator new(bytes);
+    }
+
+    void reset() {
+        offset_ = 0;
+    }
+
+private:
+    static constexpr size_t capacity_ = 1024 * 1024; // 1MB linear frame buffer
+    uint8_t* buffer_;
+    size_t offset_ = 0;
+
+    FrameAllocator() {
+        buffer_ = static_cast<uint8_t*>(::operator new(capacity_));
+    }
+
+    ~FrameAllocator() {
+        ::operator delete(buffer_);
+    }
+};
+
+template <typename T>
+class Temp {
+private:
+    T* ptr_ = nullptr;
+public:
+    template <typename... Args>
+    explicit Temp(Args&&... args) {
+        void* mem = FrameAllocator::instance().allocate(sizeof(T), alignof(T));
+        ptr_ = new (mem) T(std::forward<Args>(args)...);
+    }
+
+    T* operator->() const { return ptr_; }
+    T& operator*() const { return *ptr_; }
+    T* get() const { return ptr_; }
+};
+
+// ---------------------------------------------------------------------------
+// ObjectPool & Pool<T> — First-Class Zero-Allocation Object Reuse Pool
+// ---------------------------------------------------------------------------
+template <typename T>
+class ObjectPool {
+public:
+    static ObjectPool& instance() {
+        static ObjectPool pool;
+        return pool;
+    }
+
+    T* acquire() {
+        if (pool_.empty()) {
+            return new T();
+        }
+        T* obj = pool_.back();
+        pool_.pop_back();
+        return obj;
+    }
+
+    void release(T* obj) {
+        if (obj) {
+            pool_.push_back(obj);
+        }
+    }
+
+    ~ObjectPool() {
+        for (T* obj : pool_) {
+            delete obj;
+        }
+        pool_.clear();
+    }
+
+private:
+    std::vector<T*> pool_;
+};
+
+template <typename T>
+class Pool {
+private:
+    T* ptr_ = nullptr;
+public:
+    Pool() {
+        ptr_ = ObjectPool<T>::instance().acquire();
+    }
+
+    ~Pool() {
+        if (ptr_) {
+            ObjectPool<T>::instance().release(ptr_);
+        }
+    }
+
+    T* operator->() const { return ptr_; }
+    T& operator*() const { return *ptr_; }
+    T* get() const { return ptr_; }
+};
+
 } // namespace mem
 } // namespace zenith
 

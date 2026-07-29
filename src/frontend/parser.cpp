@@ -185,7 +185,141 @@ std::unique_ptr<ExprNode> Parser::parseLambda() {
     return lambda_node;
 }
 
+std::unique_ptr<PatternNode> Parser::parsePattern() {
+    const Token& start_tok = current();
+    
+    // Wildcard Pattern: '_'
+    if (current().type == TokenType::ID && current().value == "_") {
+        advance();
+        return locate(std::make_unique<WildcardPatternNode>(), start_tok);
+    }
+    
+    // Literal Patterns: numbers, strings, booleans
+    if (current().type == TokenType::INT || current().type == TokenType::FLOAT ||
+        current().type == TokenType::STRING || current().value == "true" || current().value == "false") {
+        const Token& lit_tok = current();
+        std::unique_ptr<ExprNode> lit_expr = nullptr;
+        if (current().type == TokenType::STRING) {
+            lit_expr = locate(std::make_unique<StringLiteralNode>(std::string(current().value)), lit_tok);
+            advance();
+        } else if (current().type == TokenType::INT) {
+            lit_expr = locate(std::make_unique<NumberLiteralNode>(std::string(current().value), false), lit_tok);
+            advance();
+        } else if (current().type == TokenType::FLOAT) {
+            lit_expr = locate(std::make_unique<NumberLiteralNode>(std::string(current().value), true), lit_tok);
+            advance();
+        } else if (current().value == "true" || current().value == "false") {
+            lit_expr = locate(std::make_unique<BoolLiteralNode>(current().value == "true"), lit_tok);
+            advance();
+        }
+        return locate(std::make_unique<LiteralPatternNode>(std::move(lit_expr)), start_tok);
+    }
+    
+    // Enum, Struct, or Identifier Pattern
+    if (current().type == TokenType::ID || current().type == TokenType::TYPE) {
+        std::string name(current().value);
+        advance(); // consume ID or TYPE
+        
+        // Dot notation for Enum variant: EnumName.VariantName(...)
+        if (match(TokenType::PUNCT, ".")) {
+            std::string variant_name(current().value);
+            expect(TokenType::ID, "Expected enum variant name after '.'");
+            auto enum_pat = locate(std::make_unique<EnumPatternNode>(name, variant_name), start_tok);
+            
+            // Enum tuple arguments: EnumName.VariantName(arg1, arg2)
+            if (match(TokenType::PUNCT, "(")) {
+                if (current().type != TokenType::PUNCT || current().value != ")") {
+                    enum_pat->sub_patterns.push_back(parsePattern());
+                    while (match(TokenType::PUNCT, ",")) {
+                        enum_pat->sub_patterns.push_back(parsePattern());
+                    }
+                }
+                expect(TokenType::PUNCT, "Expected ')' to close enum pattern");
+            }
+            return enum_pat;
+        }
+        
+        // Struct Destructuring Pattern: StructName { field1, field2 }
+        if (match(TokenType::PUNCT, "{")) {
+            auto struct_pat = locate(std::make_unique<StructPatternNode>(name), start_tok);
+            if (current().type != TokenType::PUNCT || current().value != "}") {
+                do {
+                    std::string f_name(current().value);
+                    expect(TokenType::ID, "Expected struct field name in pattern");
+                    
+                    std::unique_ptr<PatternNode> sub_pat = nullptr;
+                    if (match(TokenType::PUNCT, ":")) {
+                        sub_pat = parsePattern();
+                    } else {
+                        // Shorthand field pattern: StructName { hp } => binds hp
+                        sub_pat = locate(std::make_unique<IdentifierPatternNode>(f_name), current());
+                    }
+                    struct_pat->fields.push_back({f_name, std::move(sub_pat)});
+                } while (match(TokenType::PUNCT, ","));
+            }
+            expect(TokenType::PUNCT, "Expected '}' to close struct pattern");
+            return struct_pat;
+        }
+        
+        // Identifier Binding Pattern: x
+        return locate(std::make_unique<IdentifierPatternNode>(name), start_tok);
+    }
+    
+    std::cerr << "Parser Error: Invalid pattern at line " << current().line << "\n";
+    exit(1);
+}
+
+std::unique_ptr<ExprNode> Parser::parseMatchExpression() {
+    const Token& start_tok = prev(); // "match" token
+    auto subject = parseExpression();
+    expect(TokenType::PUNCT, "Expected '{' to start match arms block");
+    
+    auto match_node = locate(std::make_unique<MatchExprNode>(std::move(subject)), start_tok);
+    
+    while (current().type != TokenType::PUNCT || current().value != "}") {
+        auto pattern = parsePattern();
+        
+        // Match arm arrow '=>'
+        if (current().type == TokenType::OP && current().value == "=>") {
+            advance();
+        } else if (current().type == TokenType::OP && current().value == "=" && peek().type == TokenType::OP && peek().value == ">") {
+            advance(); // consume '='
+            advance(); // consume '>'
+        } else {
+            expect(TokenType::OP, "Expected '=>' in match arm");
+        }
+        
+        std::unique_ptr<ExprNode> body = nullptr;
+        if (current().type == TokenType::PUNCT && current().value == "{") {
+            const Token& block_tok = current();
+            auto stmts = parseBlock();
+            auto block_expr = locate(std::make_unique<BlockExprNode>(), block_tok);
+            block_expr->statements = std::move(stmts);
+            body = std::move(block_expr);
+        } else {
+            body = parseExpression();
+        }
+        
+        MatchArm arm;
+        arm.pattern = std::move(pattern);
+        arm.body = std::move(body);
+        match_node->arms.push_back(std::move(arm));
+        
+        // Optional separator between arms
+        if (match(TokenType::PUNCT, ",")) {}
+        else if (match(TokenType::PUNCT, ";")) {}
+    }
+    
+    expect(TokenType::PUNCT, "Expected '}' to end match expression");
+    return match_node;
+}
+
 std::unique_ptr<ExprNode> Parser::parseExpression() {
+    // If it's a match expression
+    if (match(TokenType::KEYWORD, "match")) {
+        return parseMatchExpression();
+    }
+
     // If it is a lambda expression, parse it
     if (current().type == TokenType::PUNCT && current().value == "(") {
         size_t scan_pos = pos + 1;
@@ -915,6 +1049,8 @@ std::unique_ptr<ProgramNode> Parser::parseProgram() {
         bool has_weak      = false;
         bool has_gc_root   = false;
         bool has_export    = false;
+        bool has_deprecated = false;
+        std::string deprecated_msg = "";
         std::string route_path = "";
         std::string library_name = "";
         while (current().type == TokenType::KEYWORD &&
@@ -925,6 +1061,14 @@ std::unique_ptr<ProgramNode> Parser::parseProgram() {
             else if (ann == "@weak")      has_weak    = true;
             else if (ann == "@gc_root")   has_gc_root = true;
             else if (ann == "@export")    has_export  = true;
+            else if (ann == "@deprecated") {
+                has_deprecated = true;
+                if (match(TokenType::PUNCT, "(")) {
+                    deprecated_msg = std::string(current().value);
+                    expect(TokenType::STRING, "Expected string literal for deprecation message");
+                    expect(TokenType::PUNCT, ")");
+                }
+            }
             else if (ann == "@route") {
                 expect(TokenType::PUNCT, "(");
                 route_path = std::string(current().value);
@@ -944,6 +1088,10 @@ std::unique_ptr<ProgramNode> Parser::parseProgram() {
             if (!route_path.empty()) {
                 class_node->is_routed = true;
                 class_node->route_path = route_path;
+            }
+            if (has_deprecated) {
+                class_node->is_deprecated = true;
+                class_node->deprecated_message = deprecated_msg;
             }
             program->statements.push_back(std::move(class_node));
         } 
@@ -1022,8 +1170,12 @@ std::unique_ptr<ProgramNode> Parser::parseProgram() {
                 type->is_inferred = true;
             }
 
-            program->statements.push_back(
-                locate(std::make_unique<VarDeclNode>(std::move(type), var_name, std::move(init)), let_tok));
+            auto var_node = locate(std::make_unique<VarDeclNode>(std::move(type), var_name, std::move(init)), let_tok);
+            if (has_deprecated) {
+                var_node->is_deprecated = true;
+                var_node->deprecated_message = deprecated_msg;
+            }
+            program->statements.push_back(std::move(var_node));
         }
         else if ((current().type == TokenType::KEYWORD && (current().value == "agentic" || current().value == "async")) ||
                  current().type == TokenType::TYPE ||
@@ -1041,6 +1193,10 @@ std::unique_ptr<ProgramNode> Parser::parseProgram() {
             auto ret_type = parseType();
             auto fn = parseFunction(is_agentic, is_async, std::move(ret_type));
             fn->is_exported = has_export;
+            if (has_deprecated) {
+                fn->is_deprecated = true;
+                fn->deprecated_message = deprecated_msg;
+            }
             program->statements.push_back(std::move(fn));
         } 
         else if (current().type == TokenType::KEYWORD && current().value == "import") {

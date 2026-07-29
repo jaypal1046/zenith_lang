@@ -1,0 +1,25 @@
+import std.io;
+import std.math;
+
+// -------------------------------------------------------------
+// Fantasy Survival - Monster Horde AI & Flocking Movement
+// -------------------------------------------------------------
+
+class MonsterHordeGroup() {
+    int goblinCount = 25;
+    int orcCount = 10;
+    float posX = 100.0f;
+    float posZ = 100.0f;
+    float moveSpeed = 6.0f;
+
+    Void advanceHorde(float targetX, float targetZ, float dt) {
+        float dx = targetX - posX;
+        float dz = targetZ - posZ;
+        float dist = std.math.sqrt(dx * dx + dz * dz);
+        if (dist > 0.1f) {
+            posX = posX + (dx / dist) * moveSpeed * dt;
+            posZ = posZ + (dz / dist) * moveSpeed * dt;
+        }
+        println(concat("[Horde AI] Flocking Swarm (", concat(toString(goblinCount + orcCount), concat(" monsters) advancing to (", concat(toString(posX), concat(", ", concat(toString(posZ), ")")))))));
+    }
+}

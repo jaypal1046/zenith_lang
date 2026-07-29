@@ -1,0 +1,45 @@
+import std.io;
+import std.math;
+
+// -------------------------------------------------------------
+// Cyberpunk Adventure - Player Controller & Weapon System
+// -------------------------------------------------------------
+
+class CyberPlayer() {
+    String name = "Vex-09";
+    float health = 150.0f;
+    float maxHealth = 150.0f;
+    float energy = 100.0f;
+    float posX = 0.0f;
+    float posY = 1.0f;
+    float posZ = 0.0f;
+
+    float moveSpeed = 12.0f;
+    int credits = 500;
+    bool isDashActive = false;
+
+    Void move(float inputX, float inputZ, float dt) {
+        posX = posX + inputX * moveSpeed * dt;
+        posZ = posZ + inputZ * moveSpeed * dt;
+    }
+
+    Void executeCyberDash() {
+        if (energy >= 25.0f) {
+            energy = energy - 25.0f;
+            isDashActive = true;
+            println(concat("[Cyber Player] ", concat(name, " executed High-Speed Cyber-Dash! Energy: ", toString(energy))));
+        } else {
+            println("[Cyber Player] Not enough energy for Cyber-Dash!");
+        }
+    }
+
+    Void firePlasmaRifle() {
+        println(concat("[Weapon System] ", concat(name, " fired Plasma Rifle! Impact Force: 45.0 N.")));
+    }
+
+    Void takeDamage(float amount) {
+        health = health - amount;
+        if (health < 0.0f) health = 0.0f;
+        println(concat("[Cyber Player] ", concat(name, concat(" took ", concat(toString(amount), concat(" damage! Health: ", toString(health)))))));
+    }
+}

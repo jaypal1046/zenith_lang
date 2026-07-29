@@ -1,0 +1,16 @@
+import std.io;
+
+class Bullet() {
+    Float speed = 500.0;
+    Bool active = true;
+
+    Void fire() {
+        println("Bullet fired with speed: " + speed);
+    }
+}
+
+Void main() {
+    Pool<Bullet> b1 = Pool<Bullet>();
+    println("Acquired object from Pool<Bullet>");
+    b1.fire();
+}

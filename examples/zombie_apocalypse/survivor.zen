@@ -1,0 +1,37 @@
+import std.io;
+import std.math;
+
+// -------------------------------------------------------------
+// Zombie Apocalypse - Survivor Player & Barricade System
+// -------------------------------------------------------------
+
+class SurvivorPlayer() {
+    String name = "Jack Reaper";
+    float health = 100.0f;
+    int shotgunShells = 32;
+    int pipeBombs = 4;
+    int woodPlanks = 10;
+
+    Void fireShotgun() {
+        if (shotgunShells > 0) {
+            shotgunShells = shotgunShells - 1;
+            println(concat("[Weapon System] ", concat(name, concat(" fired 12-Gauge Pump Shotgun! Blasted 4 Zombies! Shells remaining: ", toString(shotgunShells)))));
+        } else {
+            println("[Weapon System] Shotgun empty! Reloading...");
+        }
+    }
+
+    Void repairBarricade() {
+        if (woodPlanks >= 2) {
+            woodPlanks = woodPlanks - 2;
+            println(concat("[Barricade System] ", concat(name, " reinforced wooden barricade (+50 HP). Planks left: ", toString(woodPlanks))));
+        }
+    }
+
+    Void throwPipeBomb() {
+        if (pipeBombs > 0) {
+            pipeBombs = pipeBombs - 1;
+            println(concat("[Explosion Event] ", concat(name, concat(" threw Pipe Bomb! Detonated 15 Zombies in AoE Blast! Bombs left: ", toString(pipeBombs)))));
+        }
+    }
+}

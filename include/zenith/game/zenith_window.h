@@ -122,6 +122,122 @@ public:
     }
 };
 
+struct ActionBinding {
+    KeyCode key = KeyCode::Unknown;
+    MouseButton mouseButton = static_cast<MouseButton>(-1);
+};
+
+class InputMap {
+public:
+    static InputMap& instance() {
+        static InputMap map;
+        return map;
+    }
+
+    void bindKey(const std::string& actionName, KeyCode key) {
+        m_bindings[actionName].key = key;
+    }
+
+    void bindMouseButton(const std::string& actionName, MouseButton button) {
+        m_bindings[actionName].mouseButton = button;
+    }
+
+    bool isActionDown(const std::string& actionName) const {
+        auto it = m_bindings.find(actionName);
+        if (it == m_bindings.end()) return false;
+        if (it->second.key != KeyCode::Unknown) {
+            return Input::isKeyDown(it->second.key);
+        }
+        if (static_cast<int>(it->second.mouseButton) >= 0) {
+            return Input::isMouseButtonDown(it->second.mouseButton);
+        }
+        return false;
+    }
+
+    bool isActionPressed(const std::string& actionName) const {
+        auto it = m_bindings.find(actionName);
+        if (it == m_bindings.end()) return false;
+        if (it->second.key != KeyCode::Unknown) {
+            return Input::isKeyPressed(it->second.key);
+        }
+        return false;
+    }
+
+private:
+    std::unordered_map<std::string, ActionBinding> m_bindings;
+};
+
+class CameraShake {
+public:
+    float intensity = 0.0f;
+    float duration = 0.0f;
+    float timer = 0.0f;
+    float offsetX = 0.0f;
+    float offsetY = 0.0f;
+
+    void shake(float pIntensity, float pDuration) {
+        intensity = pIntensity;
+        duration = pDuration;
+        timer = pDuration;
+    }
+
+    void update(float dt) {
+        if (timer > 0.0f) {
+            timer -= dt;
+            float progress = timer / duration;
+            float currentIntensity = intensity * progress;
+            offsetX = ((float)(rand() % 2000 - 1000) / 1000.0f) * currentIntensity;
+            offsetY = ((float)(rand() % 2000 - 1000) / 1000.0f) * currentIntensity;
+        } else {
+            offsetX = 0.0f;
+            offsetY = 0.0f;
+        }
+    }
+};
+
+class TweenEngine {
+public:
+    static float easeLinear(float t) { return t; }
+    static float easeInQuad(float t) { return t * t; }
+    static float easeOutQuad(float t) { return t * (2.0f - t); }
+    static float easeInOutQuad(float t) { return t < 0.5f ? 2.0f * t * t : -1.0f + (4.0f - 2.0f * t) * t; }
+
+    static float interpolate(float start, float end, float progress, const std::string& ease = "linear") {
+        float t = std::clamp(progress, 0.0f, 1.0f);
+        float e = t;
+        if (ease == "in") e = easeInQuad(t);
+        else if (ease == "out") e = easeOutQuad(t);
+        else if (ease == "in_out") e = easeInOutQuad(t);
+        return start + (end - start) * e;
+    }
+};
+
+class InputInjector {
+public:
+    static void injectKeyPress(KeyCode key) {
+        Input::updateKey(static_cast<int>(key), true);
+    }
+    static void injectKeyRelease(KeyCode key) {
+        Input::updateKey(static_cast<int>(key), false);
+    }
+    static void injectMouseMove(float x, float y) {
+        Input::updateMousePosition(x, y);
+    }
+    static void injectMouseButton(MouseButton button, bool pressed) {
+        Input::updateMouseButton(static_cast<int>(button), pressed);
+    }
+};
+
+class HeadlessRunner {
+public:
+    static void runDeterministic(std::function<void(float fixedDt)> stepFunc, int frameCount = 60, float fixedStep = 1.0f / 60.0f) {
+        for (int frame = 0; frame < frameCount; ++frame) {
+            stepFunc(fixedStep);
+            Input::endFrame();
+        }
+    }
+};
+
 class NativeWindow {
 private:
     WindowConfig m_config;

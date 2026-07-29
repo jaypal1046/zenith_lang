@@ -1,0 +1,40 @@
+import std.io;
+import std.math;
+
+// -------------------------------------------------------------
+// Stealth Ops - Main Application Entry Point & Infiltration Loop
+// -------------------------------------------------------------
+
+class StealthOpsGameApp() implements Scene {
+    StealthAgent agent;
+    PatrolGuardAI sentinelGuard;
+
+    Void onCreate() {
+        println("=========================================================");
+        println("       ZENITH ENGINE - 3D STEALTH OPS INFILTRATION       ");
+        println("=========================================================");
+        agent = StealthAgent();
+        sentinelGuard = PatrolGuardAI();
+
+        println("[Shadow System] Shadow Depth Occlusion Volumes Active.");
+        println("[Perception System] Guard Sight Cones & Audio Hearing Sensors Online.");
+    }
+
+    Void onUpdate(float dt) {
+        println("\n--- Stealth Infiltration Loop ---");
+        agent.toggleCrouch(); // Silent stance (12 dB)
+        sentinelGuard.checkHearingRadius(agent.noiseLevelDb);
+
+        agent.throwEmpGrenade();
+        agent.performSilentTakedown("Guard Sentinel #4");
+    }
+}
+
+Void main() {
+    StealthOpsGameApp game = StealthOpsGameApp();
+    game.onCreate();
+    game.onUpdate(0.016f);
+    println("\n=========================================================");
+    println(" STEALTH OPS GAME LOOP EXECUTED WITH 0 ERRORS!           ");
+    println("=========================================================");
+}

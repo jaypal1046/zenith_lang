@@ -77,26 +77,64 @@ struct Vec3 {
         );
     }
     static float distance(const Vec3& a, const Vec3& b) { return (a - b).length(); }
-};
+#if defined(__SSE2__) || defined(_M_X64) || defined(_M_AMD64)
+#include <emmintrin.h>
+#define ZENITH_HAS_SIMD 1
+#endif
 
-struct Vec4 {
-    float x = 0.0f;
-    float y = 0.0f;
-    float z = 0.0f;
-    float w = 0.0f;
+struct alignas(16) Vec4 {
+    union {
+        struct { float x, y, z, w; };
+        float data[4];
+#if ZENITH_HAS_SIMD
+        __m128 simd_v;
+#endif
+    };
 
-    Vec4() = default;
+    Vec4() : x(0.0f), y(0.0f), z(0.0f), w(0.0f) {}
     Vec4(float x, float y, float z, float w) : x(x), y(y), z(z), w(w) {}
 
-    Vec4 operator+(const Vec4& v) const { return Vec4(x + v.x, y + v.y, z + v.z, w + v.w); }
-    Vec4 operator-(const Vec4& v) const { return Vec4(x - v.x, y - v.y, z - v.z, w - v.w); }
-    Vec4 operator*(float s) const { return Vec4(x * s, y * s, z * s, w * s); }
-    Vec4 operator/(float s) const { return Vec4(x / s, y / s, z / s, w / s); }
+    Vec4 operator+(const Vec4& v) const {
+#if ZENITH_HAS_SIMD
+        Vec4 res;
+        res.simd_v = _mm_add_ps(simd_v, v.simd_v);
+        return res;
+#else
+        return Vec4(x + v.x, y + v.y, z + v.z, w + v.w);
+#endif
+    }
+    Vec4 operator-(const Vec4& v) const {
+#if ZENITH_HAS_SIMD
+        Vec4 res;
+        res.simd_v = _mm_sub_ps(simd_v, v.simd_v);
+        return res;
+#else
+        return Vec4(x - v.x, y - v.y, z - v.z, w - v.w);
+#endif
+    }
+    Vec4 operator*(float s) const {
+#if ZENITH_HAS_SIMD
+        Vec4 res;
+        res.simd_v = _mm_mul_ps(simd_v, _mm_set1_ps(s));
+        return res;
+#else
+        return Vec4(x * s, y * s, z * s, w * s);
+#endif
+    }
+    Vec4 operator/(float s) const {
+#if ZENITH_HAS_SIMD
+        Vec4 res;
+        res.simd_v = _mm_div_ps(simd_v, _mm_set1_ps(s));
+        return res;
+#else
+        return Vec4(x / s, y / s, z / s, w / s);
+#endif
+    }
 
-    Vec4& operator+=(const Vec4& v) { x += v.x; y += v.y; z += v.z; w += v.w; return *this; }
-    Vec4& operator-=(const Vec4& v) { x -= v.x; y -= v.y; z -= v.z; w -= v.w; return *this; }
-    Vec4& operator*=(float s) { x *= s; y *= s; z *= s; w *= s; return *this; }
-    Vec4& operator/=(float s) { x /= s; y /= s; z /= s; w /= s; return *this; }
+    Vec4& operator+=(const Vec4& v) { *this = *this + v; return *this; }
+    Vec4& operator-=(const Vec4& v) { *this = *this - v; return *this; }
+    Vec4& operator*=(float s) { *this = *this * s; return *this; }
+    Vec4& operator/=(float s) { *this = *this / s; return *this; }
 
     float length() const { return std::sqrt(x * x + y * y + z * z + w * w); }
     float lengthSquared() const { return x * x + y * y + z * z + w * w; }
@@ -110,13 +148,25 @@ struct Vec4 {
     }
 };
 
-struct Mat4 {
-    float m00 = 1.0f; float m01 = 0.0f; float m02 = 0.0f; float m03 = 0.0f;
-    float m10 = 0.0f; float m11 = 1.0f; float m12 = 0.0f; float m13 = 0.0f;
-    float m20 = 0.0f; float m21 = 0.0f; float m22 = 1.0f; float m23 = 0.0f;
-    float m30 = 0.0f; float m31 = 0.0f; float m32 = 0.0f; float m33 = 1.0f;
+struct alignas(16) Mat4 {
+    union {
+        struct {
+            float m00, m01, m02, m03;
+            float m10, m11, m12, m13;
+            float m20, m21, m22, m23;
+            float m30, m31, m32, m33;
+        };
+        float data[16];
+#if ZENITH_HAS_SIMD
+        __m128 rows[4];
+#endif
+    };
 
-    Mat4() = default;
+    Mat4() : m00(1.0f), m01(0.0f), m02(0.0f), m03(0.0f),
+             m10(0.0f), m11(1.0f), m12(0.0f), m13(0.0f),
+             m20(0.0f), m21(0.0f), m22(1.0f), m23(0.0f),
+             m30(0.0f), m31(0.0f), m32(0.0f), m33(1.0f) {}
+
     Mat4(
         float m00, float m01, float m02, float m03,
         float m10, float m11, float m12, float m13,
@@ -130,39 +180,77 @@ struct Mat4 {
     static Mat4 identity() { return Mat4(); }
 
     Mat4 operator+(const Mat4& other) const {
+#if ZENITH_HAS_SIMD
+        Mat4 res;
+        res.rows[0] = _mm_add_ps(rows[0], other.rows[0]);
+        res.rows[1] = _mm_add_ps(rows[1], other.rows[1]);
+        res.rows[2] = _mm_add_ps(rows[2], other.rows[2]);
+        res.rows[3] = _mm_add_ps(rows[3], other.rows[3]);
+        return res;
+#else
         return Mat4(
             m00 + other.m00, m01 + other.m01, m02 + other.m02, m03 + other.m03,
             m10 + other.m10, m11 + other.m11, m12 + other.m12, m13 + other.m13,
             m20 + other.m20, m21 + other.m21, m22 + other.m22, m23 + other.m23,
             m30 + other.m30, m31 + other.m31, m32 + other.m32, m33 + other.m33
         );
+#endif
     }
 
     Mat4 operator-(const Mat4& other) const {
+#if ZENITH_HAS_SIMD
+        Mat4 res;
+        res.rows[0] = _mm_sub_ps(rows[0], other.rows[0]);
+        res.rows[1] = _mm_sub_ps(rows[1], other.rows[1]);
+        res.rows[2] = _mm_sub_ps(rows[2], other.rows[2]);
+        res.rows[3] = _mm_sub_ps(rows[3], other.rows[3]);
+        return res;
+#else
         return Mat4(
             m00 - other.m00, m01 - other.m01, m02 - other.m02, m03 - other.m03,
             m10 - other.m10, m11 - other.m11, m12 - other.m12, m13 - other.m13,
             m20 - other.m20, m21 - other.m21, m22 - other.m22, m23 - other.m23,
             m30 - other.m30, m31 - other.m31, m32 - other.m32, m33 - other.m33
         );
+#endif
     }
 
     Mat4 operator*(float scalar) const {
+#if ZENITH_HAS_SIMD
+        Mat4 res;
+        __m128 s = _mm_set1_ps(scalar);
+        res.rows[0] = _mm_mul_ps(rows[0], s);
+        res.rows[1] = _mm_mul_ps(rows[1], s);
+        res.rows[2] = _mm_mul_ps(rows[2], s);
+        res.rows[3] = _mm_mul_ps(rows[3], s);
+        return res;
+#else
         return Mat4(
             m00 * scalar, m01 * scalar, m02 * scalar, m03 * scalar,
             m10 * scalar, m11 * scalar, m12 * scalar, m13 * scalar,
             m20 * scalar, m21 * scalar, m22 * scalar, m23 * scalar,
             m30 * scalar, m31 * scalar, m32 * scalar, m33 * scalar
         );
+#endif
     }
 
     Mat4 operator/(float scalar) const {
+#if ZENITH_HAS_SIMD
+        Mat4 res;
+        __m128 s = _mm_set1_ps(scalar);
+        res.rows[0] = _mm_div_ps(rows[0], s);
+        res.rows[1] = _mm_div_ps(rows[1], s);
+        res.rows[2] = _mm_div_ps(rows[2], s);
+        res.rows[3] = _mm_div_ps(rows[3], s);
+        return res;
+#else
         return Mat4(
             m00 / scalar, m01 / scalar, m02 / scalar, m03 / scalar,
             m10 / scalar, m11 / scalar, m12 / scalar, m13 / scalar,
             m20 / scalar, m21 / scalar, m22 / scalar, m23 / scalar,
             m30 / scalar, m31 / scalar, m32 / scalar, m33 / scalar
         );
+#endif
     }
 
     Mat4 operator*(const Mat4& other) const {
@@ -1029,6 +1117,465 @@ public:
             }
         }
         return bestHit;
+    }
+};
+
+// ============================================================================
+// 4. COLLISION LAYER MATRIX, PHYSICS MATERIALS, TRIGGERS & JOINTS
+// ============================================================================
+
+class CollisionLayerMatrix {
+public:
+    uint32_t matrix[32];
+
+    CollisionLayerMatrix() {
+        for (int i = 0; i < 32; ++i) matrix[i] = 0xFFFFFFFF;
+    }
+
+    void setCollision(int layerA, int layerB, bool canCollide) {
+        if (layerA < 0 || layerA >= 32 || layerB < 0 || layerB >= 32) return;
+        if (canCollide) {
+            matrix[layerA] |= (1u << layerB);
+            matrix[layerB] |= (1u << layerA);
+        } else {
+            matrix[layerA] &= ~(1u << layerB);
+            matrix[layerB] &= ~(1u << layerA);
+        }
+    }
+
+    bool canCollide(int layerA, int layerB) const {
+        if (layerA < 0 || layerA >= 32 || layerB < 0 || layerB >= 32) return true;
+        return (matrix[layerA] & (1u << layerB)) != 0;
+    }
+};
+
+struct PhysicsMaterial {
+    float friction = 0.4f;
+    float restitution = 0.2f;
+
+    static PhysicsMaterial Bouncy() { return {0.2f, 0.9f}; }
+    static PhysicsMaterial Rubber() { return {0.8f, 0.7f}; }
+    static PhysicsMaterial Metal() { return {0.3f, 0.1f}; }
+    static PhysicsMaterial Ice() { return {0.02f, 0.05f}; }
+    static PhysicsMaterial Frictionless() { return {0.0f, 0.0f}; }
+};
+
+struct PhysicsCollisionPair {
+    uint32_t entityA;
+    uint32_t entityB;
+    bool isTrigger;
+};
+
+class PhysicsEventSystem {
+public:
+    std::function<void(uint32_t, uint32_t)> onCollisionEnter;
+    std::function<void(uint32_t, uint32_t)> onCollisionExit;
+    std::function<void(uint32_t, uint32_t)> onTriggerEnter;
+    std::function<void(uint32_t, uint32_t)> onTriggerExit;
+
+    void dispatchCollision(uint32_t e1, uint32_t e2, bool enter) {
+        if (enter && onCollisionEnter) onCollisionEnter(e1, e2);
+        else if (!enter && onCollisionExit) onCollisionExit(e1, e2);
+    }
+
+    void dispatchTrigger(uint32_t e1, uint32_t e2, bool enter) {
+        if (enter && onTriggerEnter) onTriggerEnter(e1, e2);
+        else if (!enter && onTriggerExit) onTriggerExit(e1, e2);
+    }
+};
+
+enum class JointType { Hinge, Spring, Fixed };
+
+struct PhysicsJoint2D {
+    JointType type = JointType::Fixed;
+    uint32_t entityA = 0;
+    uint32_t entityB = 0;
+    Vec2 anchorA;
+    Vec2 anchorB;
+    float stiffness = 100.0f;
+    float damping = 10.0f;
+    float restLength = 1.0f;
+    bool enabled = true;
+};
+
+struct CcdConfig {
+    bool enableCCD = true;
+    float motionThreshold = 0.5f;
+    int maxSubSteps = 4;
+};
+
+class CcdSolver {
+public:
+    static bool sweepCircle(Vec2 startPos, Vec2 endPos, float radius, Vec2 obstaclePos, float obstacleRadius, float& outHitTime, Vec2& outHitNormal) {
+        Vec2 motion = endPos - startPos;
+        Vec2 rel = startPos - obstaclePos;
+        float combinedRadius = radius + obstacleRadius;
+
+        float a = motion.x * motion.x + motion.y * motion.y;
+        if (a <= 0.0001f) return false;
+
+        float b = 2.0f * (rel.x * motion.x + rel.y * motion.y);
+        float c = (rel.x * rel.x + rel.y * rel.y) - (combinedRadius * combinedRadius);
+
+        float discriminant = b * b - 4.0f * a * c;
+        if (discriminant < 0.0f) return false;
+
+        float t = (-b - std::sqrt(discriminant)) / (2.0f * a);
+        if (t >= 0.0f && t <= 1.0f) {
+            outHitTime = t;
+            Vec2 hitPos = startPos + motion * t;
+            outHitNormal = (hitPos - obstaclePos).normalized();
+            return true;
+        }
+        return false;
+    }
+};
+
+struct RagdollLimb {
+    uint32_t entity = 0;
+    std::string name;
+    Vec2 position;
+    Vec2 velocity;
+    float rotation = 0.0f;
+    float angularVelocity = 0.0f;
+    float minAngle = -0.8f;
+    float maxAngle = 0.8f;
+};
+
+class RagdollSkeleton {
+public:
+    std::vector<RagdollLimb> limbs;
+
+    void addLimb(const std::string& name, Vec2 pos) {
+        limbs.push_back({static_cast<uint32_t>(limbs.size() + 1), name, pos, Vec2(0, 0), 0.0f, 0.0f, -0.8f, 0.8f});
+    }
+
+    void simulate(float dt) {
+        for (auto& limb : limbs) {
+            limb.velocity.y -= 9.81f * 100.0f * dt; // gravity
+            limb.position = limb.position + limb.velocity * dt;
+            limb.rotation += limb.angularVelocity * dt;
+
+            // Joint angle limits constraint
+            limb.rotation = std::clamp(limb.rotation, limb.minAngle, limb.maxAngle);
+        }
+    }
+};
+
+class VehiclePhysics2D {
+public:
+    float enginePower = 1500.0f;
+    float steeringAngle = 0.0f;
+    float maxSteerAngle = 0.5f;
+    float brakeForce = 1000.0f;
+    float lateralFriction = 0.95f; // tire grip / drift resistance
+
+    void update(Vec2& position, float& rotation, Vec2& velocity, float throttle, float steer, float brake, float dt) {
+        steeringAngle = steer * maxSteerAngle;
+
+        // Forward vector in vehicle local space
+        Vec2 forward(std::cos(rotation), std::sin(rotation));
+        Vec2 right(-std::sin(rotation), std::cos(rotation));
+
+        // Engine acceleration along forward axis
+        if (throttle != 0.0f) {
+            velocity = velocity + forward * (throttle * enginePower * dt);
+        }
+
+        // Brake force deceleration
+        if (brake > 0.0f) {
+            velocity = velocity * (1.0f - std::min(1.0f, brake * brakeForce * dt * 0.001f));
+        }
+
+        // Lateral velocity cancellation for realistic tire grip
+        float rightVel = velocity.x * right.x + velocity.y * right.y;
+        Vec2 lateralVel = right * rightVel;
+        velocity = velocity - lateralVel * lateralFriction;
+
+        // Turn rotation based on forward speed and steering angle
+        float speed = std::sqrt(velocity.x * velocity.x + velocity.y * velocity.y);
+        rotation += steeringAngle * (speed * 0.002f) * dt;
+
+        position = position + velocity * dt;
+    }
+};
+
+struct CharacterControllerConfig {
+    float maxSlopeAngleDegrees = 45.0f;
+    float stepOffset = 0.4f;
+    bool enableLedgeProtection = true;
+    float skinWidth = 0.08f;
+    float gravity = -9.81f * 100.0f;
+};
+
+class CharacterControllerSystem {
+public:
+    CharacterControllerConfig config;
+
+    struct MoveResult {
+        Vec2 finalPosition;
+        bool isGrounded = false;
+        bool isSliding = false;
+        bool isLedgeAhead = false;
+        bool steppedUp = false;
+    };
+
+    MoveResult move(Vec2 currentPos, Vec2 wishVelocity, Vec2 groundNormal, float groundY, float aheadGroundY, float dt) {
+        MoveResult res;
+        res.finalPosition = currentPos;
+
+        // 1. Slope Angle Check
+        float slopeAngleRad = std::acos(std::clamp(groundNormal.y, -1.0f, 1.0f));
+        float slopeAngleDeg = slopeAngleRad * (180.0f / 3.14159265f);
+
+        if (slopeAngleDeg > config.maxSlopeAngleDegrees) {
+            // Slope too steep -> slide down slope
+            res.isSliding = true;
+            Vec2 slideDir(groundNormal.x, -std::abs(groundNormal.y));
+            wishVelocity = wishVelocity + slideDir * 300.0f * dt;
+        }
+
+        // 2. Ledge Detection Check
+        if (config.enableLedgeProtection) {
+            float dropDepth = currentPos.y - aheadGroundY;
+            if (dropDepth > config.stepOffset * 2.0f && std::abs(wishVelocity.x) > 0.0f) {
+                res.isLedgeAhead = true;
+                wishVelocity.x = 0.0f; // Halt horizontal motion at cliff edge
+            }
+        }
+
+        // 3. Step Offset Check
+        float obstacleHeight = groundY - currentPos.y;
+        if (obstacleHeight > 0.0f && obstacleHeight <= config.stepOffset) {
+            res.steppedUp = true;
+            res.finalPosition.y += obstacleHeight; // Auto step-up over stair curb
+        }
+
+        // Integrate Position
+        res.finalPosition = res.finalPosition + wishVelocity * dt;
+        if (res.finalPosition.y <= groundY) {
+            res.finalPosition.y = groundY;
+            res.isGrounded = true;
+        }
+
+        return res;
+    }
+};
+
+struct NavMeshNode {
+    int id = 0;
+    Vec2 position;
+    std::vector<std::pair<int, float>> neighbors; // neighborId, edgeCost
+};
+
+class NavMesh2D {
+public:
+    std::vector<NavMeshNode> nodes;
+
+    int addNode(Vec2 point) {
+        int id = static_cast<int>(nodes.size());
+        nodes.push_back({id, point, {}});
+        return id;
+    }
+
+    void connectBiDirectional(int idA, int idB) {
+        if (idA < 0 || idA >= (int)nodes.size() || idB < 0 || idB >= (int)nodes.size()) return;
+        float dist = std::sqrt((nodes[idA].position.x - nodes[idB].position.x) * (nodes[idA].position.x - nodes[idB].position.x) +
+                               (nodes[idA].position.y - nodes[idB].position.y) * (nodes[idA].position.y - nodes[idB].position.y));
+        nodes[idA].neighbors.push_back({idB, dist});
+        nodes[idB].neighbors.push_back({idA, dist});
+    }
+
+    int findClosestNode(Vec2 point) const {
+        if (nodes.empty()) return -1;
+        int closestId = 0;
+        float minSqDist = 1e9f;
+        for (const auto& node : nodes) {
+            float dx = node.position.x - point.x;
+            float dy = node.position.y - point.y;
+            float sqDist = dx * dx + dy * dy;
+            if (sqDist < minSqDist) {
+                minSqDist = sqDist;
+                closestId = node.id;
+            }
+        }
+        return closestId;
+    }
+};
+
+class PathfinderAStar {
+public:
+    static std::vector<Vec2> findPath(const NavMesh2D& navMesh, Vec2 startPos, Vec2 goalPos) {
+        if (navMesh.nodes.empty()) return {startPos, goalPos};
+
+        int startId = navMesh.findClosestNode(startPos);
+        int goalId = navMesh.findClosestNode(goalPos);
+
+        if (startId == goalId) return {startPos, goalPos};
+
+        size_t nodeCount = navMesh.nodes.size();
+        std::vector<float> gCost(nodeCount, 1e9f);
+        std::vector<int> parent(nodeCount, -1);
+        std::vector<bool> closedSet(nodeCount, false);
+
+        auto heuristic = [&](int id) {
+            Vec2 p = navMesh.nodes[id].position;
+            return std::sqrt((p.x - goalPos.x) * (p.x - goalPos.x) + (p.y - goalPos.y) * (p.y - goalPos.y));
+        };
+
+        struct QueueItem {
+            int id;
+            float fCost;
+            bool operator>(const QueueItem& other) const { return fCost > other.fCost; }
+        };
+
+        std::priority_queue<QueueItem, std::vector<QueueItem>, std::greater<QueueItem>> openSet;
+
+        gCost[startId] = 0.0f;
+        openSet.push({startId, heuristic(startId)});
+
+        while (!openSet.empty()) {
+            int current = openSet.top().id;
+            openSet.pop();
+
+            if (current == goalId) break;
+            if (closedSet[current]) continue;
+            closedSet[current] = true;
+
+            for (const auto& edge : navMesh.nodes[current].neighbors) {
+                int neighbor = edge.first;
+                float edgeWeight = edge.second;
+
+                if (closedSet[neighbor]) continue;
+
+                float tentativeG = gCost[current] + edgeWeight;
+                if (tentativeG < gCost[neighbor]) {
+                    gCost[neighbor] = tentativeG;
+                    parent[neighbor] = current;
+                    openSet.push({neighbor, tentativeG + heuristic(neighbor)});
+                }
+            }
+        }
+
+        // Reconstruct path
+        std::vector<Vec2> path;
+        int curr = goalId;
+        while (curr != -1) {
+            path.push_back(navMesh.nodes[curr].position);
+            curr = parent[curr];
+        }
+        std::reverse(path.begin(), path.end());
+        if (path.empty()) path = {startPos, goalPos};
+        return path;
+    }
+};
+
+struct GoapAction {
+    std::string name;
+    float cost = 1.0f;
+    std::unordered_map<std::string, bool> preconditions;
+    std::unordered_map<std::string, bool> effects;
+};
+
+class GoapPlanner {
+public:
+    static std::vector<GoapAction> plan(
+        const std::unordered_map<std::string, bool>& currentState,
+        const std::unordered_map<std::string, bool>& goalState,
+        const std::vector<GoapAction>& availableActions
+    ) {
+        // Find action sequence that satisfies goalState from currentState
+        std::vector<GoapAction> actionPlan;
+        auto state = currentState;
+
+        for (const auto& action : availableActions) {
+            bool preconditionsMet = true;
+            for (const auto& [key, val] : action.preconditions) {
+                if (state.find(key) == state.end() || state[key] != val) {
+                    preconditionsMet = false;
+                    break;
+                }
+            }
+            if (preconditionsMet) {
+                actionPlan.push_back(action);
+                for (const auto& [key, val] : action.effects) {
+                    state[key] = val;
+                }
+            }
+        }
+        return actionPlan;
+    }
+};
+
+struct Boid2D {
+    Vec2 position;
+    Vec2 velocity;
+};
+
+class FlockingBoids2D {
+public:
+    float neighborRadius = 50.0f;
+    float separationWeight = 1.5f;
+    float alignmentWeight = 1.0f;
+    float cohesionWeight = 1.0f;
+
+    Vec2 calculateSteering(const std::vector<Boid2D>& boids, size_t index) const {
+        if (boids.empty() || index >= boids.size()) return Vec2(0, 0);
+
+        Vec2 separation(0, 0);
+        Vec2 alignment(0, 0);
+        Vec2 cohesion(0, 0);
+        int neighborCount = 0;
+
+        Vec2 myPos = boids[index].position;
+        Vec2 myVel = boids[index].velocity;
+
+        for (size_t i = 0; i < boids.size(); ++i) {
+            if (i == index) continue;
+            float dist = std::sqrt((boids[i].position.x - myPos.x) * (boids[i].position.x - myPos.x) +
+                                   (boids[i].position.y - myPos.y) * (boids[i].position.y - myPos.y));
+            if (dist < neighborRadius && dist > 0.001f) {
+                // 1. Separation
+                separation = separation + (myPos - boids[i].position) / (dist * dist);
+                // 2. Alignment
+                alignment = alignment + boids[i].velocity;
+                // 3. Cohesion
+                cohesion = cohesion + boids[i].position;
+                neighborCount++;
+            }
+        }
+
+        if (neighborCount > 0) {
+            alignment = (alignment / static_cast<float>(neighborCount)).normalized();
+            cohesion = ((cohesion / static_cast<float>(neighborCount)) - myPos).normalized();
+            separation = separation.normalized();
+        }
+
+        return separation * separationWeight + alignment * alignmentWeight + cohesion * cohesionWeight;
+    }
+};
+
+class PerceptionSensorSystem {
+public:
+    float sightRadius = 150.0f;
+    float sightFovDegrees = 90.0f;
+    float hearingRadius = 250.0f;
+
+    bool canSeeTarget(Vec2 sensorPos, float sensorFacingAngle, Vec2 targetPos) const {
+        Vec2 dir = targetPos - sensorPos;
+        float dist = std::sqrt(dir.x * dir.x + dir.y * dir.y);
+        if (dist > sightRadius) return false;
+
+        float targetAngle = std::atan2(dir.y, dir.x);
+        float angleDiff = std::abs(targetAngle - sensorFacingAngle);
+        float fovRad = (sightFovDegrees * 0.5f) * (3.14159265f / 180.0f);
+        return angleDiff <= fovRad;
+    }
+
+    bool canHearTarget(Vec2 sensorPos, Vec2 soundPos, float soundLoudness) const {
+        float dist = std::sqrt((soundPos.x - sensorPos.x) * (soundPos.x - sensorPos.x) +
+                               (soundPos.y - sensorPos.y) * (soundPos.y - sensorPos.y));
+        return dist <= (hearingRadius * soundLoudness);
     }
 };
 

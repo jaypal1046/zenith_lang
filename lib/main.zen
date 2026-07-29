@@ -1,0 +1,31 @@
+import std.io;
+
+// -------------------------------------------------------------
+// Zenith Engine - Root Project Entry Point (lib/main.zen)
+// -------------------------------------------------------------
+
+class ZenithProjectMain() {
+    Void runMainLauncher() {
+        println("=================================================================");
+        println("         ZENITH ENGINE MASTER GAME GALLERY & LAUNCHER          ");
+        println("=================================================================");
+        println(" 1. Cyberpunk Action Adventure (examples/cyberpunk_adventure/main.zen)");
+        println(" 2. Fantasy Spell Survival (examples/fantasy_survival/main.zen)");
+        println(" 3. 3D Mech Warfare Simulator (examples/mech_warfare/main.zen)");
+        println(" 4. 6DoF Space Dogfight Simulator (examples/space_dogfight/main.zen)");
+        println(" 5. 3D Stealth Ops Infiltration (examples/stealth_ops/main.zen)");
+        println(" 6. 3D Zombie Apocalypse Survival (examples/zombie_apocalypse/main.zen)");
+        println(" 7. 3D Pirate Naval Warfare (examples/pirate_naval_warfare/main.zen)");
+        println(" 8. 3D Sci-Fi Colony Builder (examples/colony_builder/main.zen)");
+        println(" 9. 3D Neon Synthwave Racer (examples/synthwave_racer/main.zen)");
+        println("10. Cyberpunk Netrunner Hacking (examples/cyber_hacking/main.zen)");
+        println("11. Master All-Games Test Launcher (examples/run_all_examples.zen)");
+        println("=================================================================");
+        println("[Status] ZENITH ENGINE ACTIVE & READY!");
+    }
+}
+
+Void main() {
+    ZenithProjectMain app = ZenithProjectMain();
+    app.runMainLauncher();
+}

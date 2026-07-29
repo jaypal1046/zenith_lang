@@ -1,0 +1,7 @@
+{
+  "name": "markdown_editor_app",
+  "version": "1.0.0",
+  "template": "app",
+  "entry": "src/main.zen",
+  "dependencies": {}
+}

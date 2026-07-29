@@ -1,0 +1,37 @@
+import std.io;
+import std.math;
+
+// -------------------------------------------------------------
+// Cyberpunk Adventure - Cyber-Droid GOAP Enemy AI
+// -------------------------------------------------------------
+
+class CyberDroidEnemy() {
+    String unitId = "Droid-Alpha-01";
+    float health = 120.0f;
+    float posX = 20.0f;
+    float posZ = 30.0f;
+    String currentGoapState = "PATROL";
+    float sightFovDegrees = 90.0f;
+    float perceptionRadius = 200.0f;
+
+    Void updatePatrol(float dt) {
+        posX = posX + 2.0f * dt;
+        println(concat("[Cyber AI] ", concat(unitId, concat(" patrolling at (", concat(toString(posX), concat(", ", concat(toString(posZ), ")")))))));
+    }
+
+    bool detectPlayerTarget(float playerX, float playerZ) {
+        float dx = playerX - posX;
+        float dz = playerZ - posZ;
+        float dist = std.math.sqrt(dx * dx + dz * dz);
+        if (dist <= perceptionRadius) {
+            currentGoapState = "ENGAGE_TARGET";
+            println(concat("[Cyber AI Perception] ", concat(unitId, " detected player! Switched GOAP state to ENGAGE_TARGET.")));
+            return true;
+        }
+        return false;
+    }
+
+    Void executeAttack() {
+        println(concat("[Cyber AI Attack] ", concat(unitId, " fired Laser Cannon at target! Dealt 20 damage.")));
+    }
+}

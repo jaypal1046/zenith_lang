@@ -1,0 +1,36 @@
+import std.io;
+
+struct PlayerStats {
+    Int hp;
+    Float speed;
+}
+
+Void testMatchLiteral(val: Int) {
+    match val {
+        1 => { println("One"); },
+        2 => { println("Two"); },
+        _ => { println("Other"); }
+    };
+}
+
+Void testMatchStruct(stats: PlayerStats) {
+    match stats {
+        PlayerStats { hp: 100, speed: 5.0 } => {
+            println("Full Health Nova");
+        },
+        PlayerStats { hp: 0, speed } => {
+            println("Defeated");
+        },
+        _ => {
+            println("In Battle");
+        }
+    };
+}
+
+Void main() {
+    testMatchLiteral(1);
+    testMatchLiteral(42);
+    
+    PlayerStats player = PlayerStats { hp: 100, speed: 5.0 };
+    testMatchStruct(player);
+}

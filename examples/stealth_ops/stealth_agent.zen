@@ -1,0 +1,37 @@
+import std.io;
+import std.math;
+
+// -------------------------------------------------------------
+// Stealth Ops - Operative Agent & Noise Management
+// -------------------------------------------------------------
+
+class StealthAgent() {
+    String codename = "Agent Echo";
+    float posX = 0.0f;
+    float posZ = 0.0f;
+    bool isCrouched = true;
+    float noiseLevelDb = 12.0f; // Silent crouching
+    int empGrenades = 3;
+
+    Void toggleCrouch() {
+        isCrouched = !isCrouched;
+        if (isCrouched) {
+            noiseLevelDb = 12.0f;
+            println(concat("[Stealth Agent] ", concat(codename, " entered Silent Crouch Stance. Noise: 12 dB.")));
+        } else {
+            noiseLevelDb = 65.0f;
+            println(concat("[Stealth Agent] ", concat(codename, " stood up to Run. Noise: 65 dB!")));
+        }
+    }
+
+    Void throwEmpGrenade() {
+        if (empGrenades > 0) {
+            empGrenades = empGrenades - 1;
+            println(concat("[Stealth Weapon] ", concat(codename, concat(" threw EMP Grenade! Disabled security cameras in 15m radius. EMPs remaining: ", toString(empGrenades)))));
+        }
+    }
+
+    Void performSilentTakedown(String targetName) {
+        println(concat("[Stealth Takedown] ", concat(codename, concat(" executed silent non-lethal takedown on ", targetName))));
+    }
+}

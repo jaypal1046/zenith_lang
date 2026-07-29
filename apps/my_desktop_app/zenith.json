@@ -1,0 +1,7 @@
+{
+  "name": "my_desktop_app",
+  "version": "1.0.0",
+  "template": "app",
+  "entry": "src/main.zen",
+  "dependencies": {}
+}

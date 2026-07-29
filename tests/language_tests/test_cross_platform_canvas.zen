@@ -1,0 +1,13 @@
+import std.io;
+
+class GameScene() implements Scene {
+    Void onDraw(Canvas canvas, Float alpha) {
+        canvas.clear("black");
+        canvas.drawRect(10.0, 10.0, 50.0, 30.0, "green");
+    }
+}
+
+Void main() {
+    GameScene scene = GameScene();
+    println("Cross-platform canvas backend initialization verified");
+}

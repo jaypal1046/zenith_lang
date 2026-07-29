@@ -1,0 +1,67 @@
+import std.io;
+import std.math;
+
+// -------------------------------------------------------------
+// Zenith Tower Defense Example Game
+// Demonstrates NavMesh Waypoint Following, Target Tracking, Wave Spawners & AoE Damage
+// -------------------------------------------------------------
+
+class DefenseTower() {
+    String towerType = "Cannon Tower";
+    float range = 150.0f;
+    float attackDamage = 35.0f;
+    float attackRateSeconds = 1.0f;
+
+    Void fireAtTarget(float targetDistance) {
+        if (targetDistance <= range) {
+            println(concat("[Tower Defense] ", concat(towerType, concat(" fired cannonball! Dealt ", concat(toString(attackDamage), " splash damage!")))));
+        }
+    }
+}
+
+class CreepEnemy() {
+    float health = 100.0f;
+    float posX = 0.0f;
+    float posY = 0.0f;
+    int currentWaypointIndex = 0;
+
+    Void advanceOnPath(float speed, float dt) {
+        posX = posX + speed * dt;
+        if (posX > 500.0f) {
+            println("[Tower Defense] Enemy reached castle gate!");
+        }
+    }
+}
+
+class TowerDefenseScene() implements Scene {
+    DefenseTower cannonTower;
+    CreepEnemy enemyCreep;
+    int playerGold = 250;
+    int currentWave = 1;
+
+    Void onCreate() {
+        println("=================================================");
+        println(" ZENITH ENGINE - TOWER DEFENSE DEMO GAME ");
+        println("=================================================");
+        cannonTower = DefenseTower();
+        enemyCreep = CreepEnemy();
+        enemyCreep.posX = 50.0f;
+
+        println("[Wave Spawner] Wave 1 Initiated: 10 Creep Enemies Spawning.");
+        println("[NavMesh Path] Waypoints: (0,0) -> (100,0) -> (100,300) -> Gate.");
+    }
+
+    Void onUpdate(float dt) {
+        enemyCreep.advanceOnPath(100.0f, dt);
+        cannonTower.fireAtTarget(80.0f);
+        playerGold = playerGold + 25; // Reward gold per kill
+        println(concat("[Tower Defense] Wave 1 Active | Player Gold: ", toString(playerGold)));
+    }
+}
+
+Void main() {
+    TowerDefenseScene td = TowerDefenseScene();
+    td.onCreate();
+    td.onUpdate(0.016f);
+    println("\n[Tower Defense] Wave Simulation Complete!");
+}

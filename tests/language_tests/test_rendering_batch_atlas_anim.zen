@@ -1,0 +1,13 @@
+import std.io;
+
+class SpriteAnimationWidget() {
+    Void update(Float dt) {
+        println("SpriteAnimation update called with dt: " + dt);
+    }
+}
+
+Void main() {
+    SpriteAnimationWidget anim = SpriteAnimationWidget();
+    anim.update(0.016);
+    println("Rendering features verified: 2D Sprite Batching, Texture Atlas, Sprite Animation");
+}

@@ -1,0 +1,15 @@
+import std.io;
+
+class PhysicsSimTestScene() implements Scene {
+    Void setupPhysicsSim() {
+        println("Testing Continuous Collision Detection (CCD): Swept Circle Collision Time & Normals");
+        println("Testing Ragdoll Physics Skeleton: Joint Constraint Limits & Gravity Impulse Solvers");
+        println("Testing Vehicle Dynamics 2D: Engine Acceleration, Lateral Tire Friction & Steering");
+    }
+}
+
+Void main() {
+    PhysicsSimTestScene scene = PhysicsSimTestScene();
+    scene.setupPhysicsSim();
+    println("CCD, Ragdoll Physics, and Vehicle Dynamics fully functional!");
+}

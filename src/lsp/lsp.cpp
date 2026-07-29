@@ -267,7 +267,7 @@ void findNodeAt(ASTNode* node, int line, int col, ASTNode*& best) {
     else if (auto* match_expr = dynamic_cast<MatchExprNode*>(node)) {
         findNodeAt(match_expr->subject.get(), line, col, best);
         for (const auto& arm : match_expr->arms) {
-            findNodeAt(arm.second.get(), line, col, best);
+            findNodeAt(arm.body.get(), line, col, best);
         }
     }
     else if (auto* lambda = dynamic_cast<LambdaNode*>(node)) {

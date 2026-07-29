@@ -1,0 +1,7 @@
+{
+  "name": "security_vault_utility",
+  "version": "1.0.0",
+  "template": "app",
+  "entry": "src/main.zen",
+  "dependencies": {}
+}

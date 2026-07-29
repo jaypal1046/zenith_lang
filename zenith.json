@@ -1,5 +1,7 @@
 {
-  "dependencies": {
-    "Spoon-Knife": "https://github.com/octocat/Spoon-Knife.git"
-  }
+  "name": "zenith_lang",
+  "version": "1.0.0",
+  "entry": "lib/main.zen",
+  "srcDir": "lib",
+  "examplesDir": "examples"
 }

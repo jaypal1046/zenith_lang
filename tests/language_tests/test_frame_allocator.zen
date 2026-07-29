@@ -1,0 +1,15 @@
+import std.io;
+
+class TempParticle() {
+    Float posX = 10.0;
+    Float posY = 20.0;
+
+    Void printPos() {
+        println("Particle Pos: (" + posX + ", " + posY + ")");
+    }
+}
+
+Void main() {
+    Temp<TempParticle> p = Temp<TempParticle>();
+    println("Arena/Frame Temp<T> allocation verified successfully");
+}

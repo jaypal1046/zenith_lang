@@ -1,0 +1,73 @@
+import std.io;
+import std.math;
+
+// -------------------------------------------------------------
+// Zenith 2D Platformer Example Game
+// Demonstrates Physics Gravity, Tilemap Collision, Double Jump & Coin Pickup
+// -------------------------------------------------------------
+
+class PlatformerPlayer() {
+    float posX = 100.0f;
+    float posY = 200.0f;
+    float velX = 0.0f;
+    float velY = 0.0f;
+    float gravity = -9.8f * 50.0f;
+    bool isGrounded = false;
+    int jumpCount = 0;
+    int coinsCollected = 0;
+
+    Void jump() {
+        if (jumpCount < 2) { // Double Jump
+            velY = 400.0f;
+            jumpCount = jumpCount + 1;
+            isGrounded = false;
+            println(concat("[Platformer] Jump executed! Jump count: ", toString(jumpCount)));
+        }
+    }
+
+    Void update(float dt) {
+        velY = velY + gravity * dt;
+        posY = posY + velY * dt;
+        posX = posX + velX * dt;
+
+        // Ground Collision Check (Y = 50.0f)
+        if (posY <= 50.0f) {
+            posY = 50.0f;
+            velY = 0.0f;
+            isGrounded = true;
+            jumpCount = 0;
+        }
+    }
+
+    Void collectCoin() {
+        coinsCollected = coinsCollected + 1;
+        println(concat("[Platformer] Coin collected! Total Coins: ", toString(coinsCollected)));
+    }
+}
+
+class PlatformerScene() implements Scene {
+    PlatformerPlayer player;
+
+    Void onCreate() {
+        println("=================================================");
+        println(" ZENITH ENGINE - 2D PLATFORMER DEMO GAME ");
+        println("=================================================");
+        player = PlatformerPlayer();
+        println("[Platformer] Level Tilemap Loaded. Player Spawned at (100, 200).");
+    }
+
+    Void onUpdate(float dt) {
+        player.jump(); // First Jump
+        player.update(dt);
+        player.collectCoin();
+        player.jump(); // Double Jump mid-air
+        player.update(dt);
+    }
+}
+
+Void main() {
+    PlatformerScene scene = PlatformerScene();
+    scene.onCreate();
+    scene.onUpdate(0.016f);
+    println("\n[Platformer] Platformer Simulation Loop Complete!");
+}

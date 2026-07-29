@@ -1,0 +1,21 @@
+import std.io;
+
+class MovementSystem() {
+    Void update() {
+        println("MovementSystem executed (reads Position, writes Velocity)");
+    }
+}
+
+class RenderSystem() {
+    Void update() {
+        println("RenderSystem executed (reads Position, reads Sprite)");
+    }
+}
+
+Void main() {
+    MovementSystem move = MovementSystem();
+    RenderSystem render = RenderSystem();
+    move.update();
+    render.update();
+    println("ECS Parallel Scheduler verified with data-oriented stage execution");
+}

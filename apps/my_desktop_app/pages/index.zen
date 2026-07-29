@@ -1,0 +1,13 @@
+import std.io;
+
+// -------------------------------------------------------------
+// Zenith Language - Web/SSR Router Page (pages/index.zen)
+// -------------------------------------------------------------
+
+Void main() {
+    println("<!DOCTYPE html><html><head><title>Zenith App</title></head>");
+    println("<body style='background:#0f172a;color:#38bdf8;font-family:sans-serif;text-align:center;padding:50px;'>");
+    println("<h1>⚡ Universal Zenith Application</h1>");
+    println("<p>Hot Reload & SSR Live Preview active via 'zenith serve'!</p>");
+    println("</body></html>");
+}

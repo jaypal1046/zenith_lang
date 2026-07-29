@@ -120,8 +120,9 @@ void Formatter::formatExpression(ExprNode* expr) {
         indent_level++;
         for (size_t i = 0; i < match_expr->arms.size(); ++i) {
             indent();
-            output << match_expr->arms[i].first << " => ";
-            formatExpression(match_expr->arms[i].second.get());
+            formatPattern(match_expr->arms[i].pattern.get());
+            output << " => ";
+            formatExpression(match_expr->arms[i].body.get());
             output << ",\n";
         }
         indent_level--;
@@ -385,6 +386,38 @@ void Formatter::formatStatement(ASTNode* node) {
         indent();
         formatExpression(expr);
         output << ";\n";
+    }
+}
+
+void Formatter::formatPattern(PatternNode* pattern) {
+    if (!pattern) return;
+    if (auto* wild = dynamic_cast<WildcardPatternNode*>(pattern)) {
+        output << "_";
+    } else if (auto* lit = dynamic_cast<LiteralPatternNode*>(pattern)) {
+        formatExpression(lit->literal.get());
+    } else if (auto* id = dynamic_cast<IdentifierPatternNode*>(pattern)) {
+        output << id->name;
+    } else if (auto* en = dynamic_cast<EnumPatternNode*>(pattern)) {
+        output << en->enum_name << "." << en->variant_name;
+        if (!en->sub_patterns.empty()) {
+            output << "(";
+            for (size_t i = 0; i < en->sub_patterns.size(); ++i) {
+                formatPattern(en->sub_patterns[i].get());
+                if (i < en->sub_patterns.size() - 1) output << ", ";
+            }
+            output << ")";
+        }
+    } else if (auto* st = dynamic_cast<StructPatternNode*>(pattern)) {
+        output << st->struct_name << " { ";
+        for (size_t i = 0; i < st->fields.size(); ++i) {
+            output << st->fields[i].first;
+            if (st->fields[i].second) {
+                output << ": ";
+                formatPattern(st->fields[i].second.get());
+            }
+            if (i < st->fields.size() - 1) output << ", ";
+        }
+        output << " }";
     }
 }
 

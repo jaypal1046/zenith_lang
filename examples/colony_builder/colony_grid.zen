@@ -1,0 +1,28 @@
+import std.io;
+import std.math;
+
+// -------------------------------------------------------------
+// Colony Builder - 3D Grid Layout & Life Support Grid
+// -------------------------------------------------------------
+
+class ColonyGridSystem() {
+    int totalBioDomes = 4;
+    float totalPowerMw = 120.0f;
+    float powerConsumptionMw = 85.0f;
+    float oxygenProductionLiters = 5000.0f;
+
+    Void buildBioDome(int gridX, int gridY) {
+        totalBioDomes = totalBioDomes + 1;
+        powerConsumptionMw = powerConsumptionMw + 15.0f;
+        println(concat("[Colony Grid] Erected Bio-Dome #", concat(toString(totalBioDomes), concat(" at grid (", concat(toString(gridX), concat(", ", concat(toString(gridY), "). Power Consumption: ", concat(toString(powerConsumptionMw), " MW"))))))));
+    }
+
+    bool verifyLifeSupportPower() {
+        if (totalPowerMw >= powerConsumptionMw) {
+            println("[Life Support Grid] Power Balance: STABLE (+35.0 MW Surplus).");
+            return true;
+        }
+        println("[Life Support Grid] POWER BLACKOUT WARNING!");
+        return false;
+    }
+}

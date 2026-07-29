@@ -1,0 +1,24 @@
+import std.io;
+import std.math;
+
+// -------------------------------------------------------------
+// Cyber Hacking - Mainframe Node & Black ICE Countermeasures
+// -------------------------------------------------------------
+
+class MainframeNodeMatrix() {
+    String nodeAddress = "NODE::0x9A4F::CORP_FINANCE";
+    float firewallIntegrity = 250.0f;
+    bool isBlackIceActive = true;
+
+    Void breachFirewall(float breachPower) {
+        firewallIntegrity = firewallIntegrity - breachPower;
+        if (firewallIntegrity < 0.0f) firewallIntegrity = 0.0f;
+        println(concat("[Node Matrix] Firewall ", concat(nodeAddress, concat(" Integrity: ", toString(firewallIntegrity)))));
+    }
+
+    Void triggerBlackIceCountermeasure() {
+        if (isBlackIceActive) {
+            println(concat("[Black ICE Warning] Neural trace feedback initiated on node ", nodeAddress));
+        }
+    }
+}

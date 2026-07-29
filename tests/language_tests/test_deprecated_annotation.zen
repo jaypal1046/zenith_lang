@@ -1,0 +1,23 @@
+import std.io;
+
+@deprecated("Use newLegacySystem() instead")
+Void oldLegacySystem() {
+    println("Old legacy system called");
+}
+
+Void newLegacySystem() {
+    println("New legacy system called");
+}
+
+@deprecated("Class DeprecatedClass is obsolete")
+class OldEngine() {
+    Void run() {
+        println("Old engine running");
+    }
+}
+
+Void main() {
+    oldLegacySystem();
+    newLegacySystem();
+    OldEngine engine = OldEngine();
+}

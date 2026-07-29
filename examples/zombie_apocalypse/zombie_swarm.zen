@@ -1,0 +1,21 @@
+import std.io;
+import std.math;
+
+// -------------------------------------------------------------
+// Zombie Apocalypse - Swarm AI & Barricade Destruction
+// -------------------------------------------------------------
+
+class ZombieSwarmAI() {
+    int hordeCount = 75;
+    float barricadeHealth = 200.0f;
+
+    Void advanceSwarm(float dt) {
+        println(concat("[Zombie Horde AI] Swarm of ", concat(toString(hordeCount), " Walker & Runner Zombies charging barricade!")));
+    }
+
+    Void attackBarricade(float damage) {
+        barricadeHealth = barricadeHealth - damage;
+        if (barricadeHealth < 0.0f) barricadeHealth = 0.0f;
+        println(concat("[Barricade Physics] Barricade under attack! Health: ", toString(barricadeHealth)));
+    }
+}

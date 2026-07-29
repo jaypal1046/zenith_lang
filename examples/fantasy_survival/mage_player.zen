@@ -1,0 +1,39 @@
+import std.io;
+import std.math;
+
+// -------------------------------------------------------------
+// Fantasy Survival - Archmage Player & Spellcasting System
+// -------------------------------------------------------------
+
+class ArchmagePlayer() {
+    String name = "Mage Zenith";
+    float health = 200.0f;
+    float mana = 100.0f;
+    float maxMana = 100.0f;
+    float manaRegenRate = 15.0f;
+
+    Void updateRegen(float dt) {
+        mana = mana + manaRegenRate * dt;
+        if (mana > maxMana) mana = maxMana;
+    }
+
+    bool castFireball() {
+        if (mana >= 30.0f) {
+            mana = mana - 30.0f;
+            println(concat("[Spellcasting] ", concat(name, " cast FIREBALL! Dealt 75 Explosive Damage! Mana: ", toString(mana))));
+            return true;
+        }
+        println("[Spellcasting] Not enough Mana for Fireball!");
+        return false;
+    }
+
+    bool castIceNova() {
+        if (mana >= 45.0f) {
+            mana = mana - 45.0f;
+            println(concat("[Spellcasting] ", concat(name, " cast ICE NOVA! Frozen 10 Enemies in Area-of-Effect!")));
+            return true;
+        }
+        println("[Spellcasting] Not enough Mana for Ice Nova!");
+        return false;
+    }
+}

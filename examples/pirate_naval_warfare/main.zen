@@ -1,0 +1,46 @@
+import std.io;
+import std.math;
+
+// -------------------------------------------------------------
+// Pirate Naval Warfare - Main Application Entry Point & Naval Battle Loop
+// -------------------------------------------------------------
+
+class PirateNavalWarfareGameApp() implements Scene {
+    GalleonShip kraken;
+    GalleonShip royalNavy;
+    OceanWaterSim ocean;
+
+    Void onCreate() {
+        println("=========================================================");
+        println("       ZENITH ENGINE - PIRATE NAVAL WARFARE DEMO         ");
+        println("=========================================================");
+        ocean = OceanWaterSim();
+        ocean.loadOceanShaders();
+
+        kraken = GalleonShip();
+        kraken.shipName = "The Black Kraken";
+
+        royalNavy = GalleonShip();
+        royalNavy.shipName = "HMS Victory";
+
+        println("[Naval Fleet] Galleon 'Black Kraken' and 'HMS Victory' Engaged in Open Sea.");
+    }
+
+    Void onUpdate(float dt) {
+        println("\n--- Broadside Naval Battle Loop ---");
+        ocean.calculateBuoyancyForce(4.0f, 500000.0f);
+        kraken.adjustSails(30.0f);
+
+        kraken.firePortBroadside();
+        royalNavy.fireStarboardBroadside();
+    }
+}
+
+Void main() {
+    PirateNavalWarfareGameApp game = PirateNavalWarfareGameApp();
+    game.onCreate();
+    game.onUpdate(0.016f);
+    println("\n=========================================================");
+    println(" PIRATE NAVAL WARFARE GAME LOOP EXECUTED WITH 0 ERRORS!  ");
+    println("=========================================================");
+}

@@ -1,0 +1,29 @@
+import std.io;
+import std.math;
+
+// -------------------------------------------------------------
+// Pirate Naval Warfare - Galleon Ship & Broadside Cannons
+// -------------------------------------------------------------
+
+class GalleonShip() {
+    String shipName = "The Black Kraken";
+    float hullHealth = 350.0f;
+    float maxHull = 350.0f;
+    float speedKnots = 12.0f;
+    int portCannons = 16;
+    int starboardCannons = 16;
+    float sailWindAngle = 45.0f;
+
+    Void firePortBroadside() {
+        println(concat("[Naval Combat] ", concat(shipName, concat(" fired ", concat(toString(portCannons), " Port Broadside Cannons! Heavy Iron Balls Fired!")))));
+    }
+
+    Void fireStarboardBroadside() {
+        println(concat("[Naval Combat] ", concat(shipName, concat(" fired ", concat(toString(starboardCannons), " Starboard Broadside Cannons!")))));
+    }
+
+    Void adjustSails(float windAngle) {
+        sailWindAngle = windAngle;
+        println(concat("[Naval Physics] Sails trimmed to wind angle: ", toString(sailWindAngle)));
+    }
+}

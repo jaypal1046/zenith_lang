@@ -1,0 +1,37 @@
+import std.io;
+import std.math;
+
+// -------------------------------------------------------------
+// Mech Warfare - Heavy BattleMech Unit & Heat Management
+// -------------------------------------------------------------
+
+class BattleMech() {
+    String modelName = "Atlas-X 100-Ton";
+    float armorIntegrity = 500.0f;
+    float currentHeat = 0.0f;
+    float maxHeatThreshold = 100.0f;
+    float torsoAngle = 0.0f;
+    int missileCount = 40;
+
+    Void updateCooling(float dt) {
+        currentHeat = currentHeat - 10.0f * dt;
+        if (currentHeat < 0.0f) currentHeat = 0.0f;
+    }
+
+    Void fireAutocannon() {
+        if (currentHeat + 15.0f <= maxHeatThreshold) {
+            currentHeat = currentHeat + 15.0f;
+            println(concat("[Mech Weapon] ", concat(modelName, concat(" fired AC/20 Heavy Cannon! Heat: ", toString(currentHeat)))));
+        } else {
+            println("[Mech Overheat Warning] Auto-Cannon locked to prevent reactor shutdown!");
+        }
+    }
+
+    Void fireLrmMissileSalvo() {
+        if (missileCount >= 10 && currentHeat + 25.0f <= maxHeatThreshold) {
+            missileCount = missileCount - 10;
+            currentHeat = currentHeat + 25.0f;
+            println(concat("[Mech Weapon] ", concat(modelName, concat(" launched LRM-10 Missile Salvo! Missiles remaining: ", toString(missileCount)))));
+        }
+    }
+}

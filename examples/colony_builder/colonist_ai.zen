@@ -1,0 +1,17 @@
+import std.io;
+import std.math;
+
+// -------------------------------------------------------------
+// Colony Builder - Colonist AI State Machine & Morale
+// -------------------------------------------------------------
+
+class ColonistAI() {
+    int population = 48;
+    float avgMoralePercent = 88.5f;
+    float foodSupplyUnits = 450.0f;
+
+    Void updateShiftCycle(float dt) {
+        foodSupplyUnits = foodSupplyUnits - population * 0.1f * dt;
+        println(concat("[Colonist AI] Population: ", concat(toString(population), concat(" Colonists | Food Supply: ", concat(toString(foodSupplyUnits), concat(" units | Morale: ", concat(toString(avgMoralePercent), "%")))))));
+    }
+}

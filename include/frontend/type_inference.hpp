@@ -246,37 +246,27 @@ public:
             std::string left_type = inferType(binary->left.get());
             std::string right_type = inferType(binary->right.get());
             
-            // String concatenation
             if (binary->op == "+" && (left_type == "String" || right_type == "String")) {
                 return "String";
             }
-            
-            // Arithmetic operations
             if (binary->op == "+" || binary->op == "-" || binary->op == "*" || binary->op == "/") {
                 if (left_type == "Float" || right_type == "Float") return "Float";
                 if (left_type == "Int" || right_type == "Int") return "Int";
             }
-            
-            // Comparison operations
             if (binary->op == "==" || binary->op == "!=" || 
                 binary->op == "<" || binary->op == ">" || 
                 binary->op == "<=" || binary->op == ">=") {
                 return "Bool";
             }
-            
-            // Logical operations
             if (binary->op == "&&" || binary->op == "||") {
                 return "Bool";
             }
-            
-            return left_type;  // Default to left type
+            return left_type;
         }
-        
-        // Lambda expressions - infer from context or annotations
+
+        // Lambda expressions
         if (auto* lambda = dynamic_cast<LambdaNode*>(expr)) {
             std::string ret_type = lambda->return_type ? lambda->return_type->type_name : "Void";
-            
-            // Build function type signature: Function<Arg1, Arg2, Ret>
             std::string sig = "Function<";
             for (size_t i = 0; i < lambda->parameters.size(); i++) {
                 if (lambda->parameters[i]->type->is_inferred && lambda->parameters[i]->initializer) {
@@ -288,19 +278,18 @@ public:
             sig += ret_type + ">";
             return sig;
         }
-        
-        // Await expressions - unwrap async type
-        if (auto* await = dynamic_cast<AwaitExprNode*>(expr)) {
-            std::string async_type = inferType(await->expression.get());
-            // Remove Async/Task/Future wrapper if present
+
+        // Await expressions
+        if (auto* await_expr = dynamic_cast<AwaitExprNode*>(expr)) {
+            std::string async_type = inferType(await_expr->expression.get());
             if (async_type.find("Async<") == 0 || async_type.find("Task<") == 0 || async_type.find("Future<") == 0) {
                 auto params = getGenericParams(async_type);
                 if (!params.empty()) return params[0];
             }
             return async_type;
         }
-        
-        // Try expressions - extract Ok type from Result
+
+        // Try expressions
         if (auto* try_expr = dynamic_cast<TryExprNode*>(expr)) {
             std::string result_type = inferType(try_expr->expression.get());
             if (result_type.find("Result<") == 0) {
@@ -309,71 +298,35 @@ public:
             }
             return result_type;
         }
-        
-        // Match expressions - unify all arm types
+
+        // Match expressions
         if (auto* match = dynamic_cast<MatchExprNode*>(expr)) {
             std::string subject_type = inferType(match->subject.get());
             std::string result_type;
-            
             for (const auto& arm : match->arms) {
-                std::string arm_type = inferType(arm.second.get());
-                if (result_type.empty()) {
-                    result_type = arm_type;
-                } else if (result_type != arm_type) {
-                    // Type mismatch in match arms - could report error
+                if (arm.body) {
+                    std::string arm_type = inferType(arm.body.get());
+                    if (result_type.empty()) result_type = arm_type;
                 }
             }
-            
             return result_type;
         }
-        
-        // Property access - type depends on object
-        if (auto* prop = dynamic_cast<PropertyAccessNode*>(expr)) {
-            // This requires symbol table lookup - handled by semantic analyzer
-            return "";
-        }
-        
-        // Function/Method calls - require symbol table
-        if (dynamic_cast<FunctionCallNode*>(expr) || 
-            dynamic_cast<MethodCallNode*>(expr)) {
-            return "";
-        }
-        
-        // Identifiers - require symbol table lookup
-        if (dynamic_cast<IdentifierNode*>(expr)) {
-            return "";
-        }
-        
-        // UI Components
-        if (auto* ui = dynamic_cast<UIComponentNode*>(expr)) {
-            // Fall back to semantic typeCheckExpression to correctly handle function/class calls
-            return "";
-        }
-        
+
         return "";
     }
-    
+
     /**
      * Check if a type can be inferred from context
      */
     bool canInferFromContext(ExprNode* expr) {
         if (!expr) return false;
         
-        // Direct literals can always be inferred
         if (dynamic_cast<NumberLiteralNode*>(expr) ||
             dynamic_cast<StringLiteralNode*>(expr) ||
-            dynamic_cast<BoolLiteralNode*>(expr)) {
-            return true;
-        }
-        
-        // Collection literals
-        if (dynamic_cast<ListLiteralNode*>(expr) ||
-            dynamic_cast<MapLiteralNode*>(expr)) {
-            return true;
-        }
-        
-        // Expressions with known return types
-        if (dynamic_cast<BinaryExprNode*>(expr) ||
+            dynamic_cast<BoolLiteralNode*>(expr) ||
+            dynamic_cast<ListLiteralNode*>(expr) ||
+            dynamic_cast<MapLiteralNode*>(expr) ||
+            dynamic_cast<BinaryExprNode*>(expr) ||
             dynamic_cast<OptionExprNode*>(expr) ||
             dynamic_cast<ResultExprNode*>(expr)) {
             return true;
@@ -381,7 +334,7 @@ public:
         
         return false;
     }
-    
+
     /**
      * Create a TypeNode with inferred type from expression
      */

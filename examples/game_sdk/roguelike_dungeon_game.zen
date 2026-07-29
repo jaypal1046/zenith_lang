@@ -1,0 +1,55 @@
+import std.io;
+import std.math;
+
+// -------------------------------------------------------------
+// Zenith Rogue-like Dungeon Crawler Example Game
+// Demonstrates Procedural Dungeon Generation, Random Loot Drops & Permadeath Loops
+// -------------------------------------------------------------
+
+class DungeonHero() {
+    int hp = 100;
+    int maxHp = 100;
+    int dungeonFloor = 1;
+    int gold = 0;
+    bool isAlive = true;
+
+    Void drinkPotion(int healAmount) {
+        hp = hp + healAmount;
+        if (hp > maxHp) hp = maxHp;
+        println(concat("[Rogue-like] Drank Potion! Restored ", concat(toString(healAmount), concat(" HP. Current HP: ", toString(hp)))));
+    }
+
+    Void die() {
+        isAlive = false;
+        println("[Permadeath] Hero has perished in the dungeon! Progress reset.");
+    }
+}
+
+class RoguelikeDungeonScene() implements Scene {
+    DungeonHero hero;
+
+    Void onCreate() {
+        println("=================================================");
+        println(" ZENITH ENGINE - ROGUE-LIKE DUNGEON DEMO GAME ");
+        println("=================================================");
+        hero = DungeonHero();
+
+        println("[Procedural Dungeon] Floor 1 Grid: 15 Rooms Connected via Corridors.");
+        println("[Loot Generator] Random Loot Table Seeded (Common, Rare, Legendary).");
+    }
+
+    Void exploreRoom() {
+        println("\n[Dungeon Exploration] Entered Room (3, 4)...");
+        println("[Combat] Defeated Skeleton Warrior!");
+        println("[Loot Drop] Rolled Loot Table: 'Golden Chalice' (+50 Gold) & 'Health Potion'.");
+        hero.gold = hero.gold + 50;
+        hero.drinkPotion(25);
+    }
+}
+
+Void main() {
+    RoguelikeDungeonScene dungeon = RoguelikeDungeonScene();
+    dungeon.onCreate();
+    dungeon.exploreRoom();
+    println("\n[Rogue-like] Dungeon Simulation Run Complete!");
+}

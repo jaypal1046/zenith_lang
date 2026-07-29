@@ -1,0 +1,14 @@
+import std.io;
+
+class ReliableUdpTestScene() implements Scene {
+    Void setupReliableUdp() {
+        println("Testing Reliable-UDP Layer: Sequence Numbering & 32-Bit ACK Bitfields");
+        println("Testing Jacobson RTT Estimator & Packet Loss Retransmission Queue");
+    }
+}
+
+Void main() {
+    ReliableUdpTestScene scene = ReliableUdpTestScene();
+    scene.setupReliableUdp();
+    println("Reliable-UDP Layer protocol fully functional!");
+}

@@ -1,0 +1,40 @@
+import std.io;
+import std.math;
+
+// -------------------------------------------------------------
+// Space Dogfight - Main Application Entry Point & Flight Loop
+// -------------------------------------------------------------
+
+class SpaceDogfightGameApp() implements Scene {
+    Starfighter viper;
+    AsteroidSector belt;
+
+    Void onCreate() {
+        println("=========================================================");
+        println("       ZENITH ENGINE - 6DOF SPACE DOGFIGHT SIMULATOR     ");
+        println("=========================================================");
+        belt = AsteroidSector();
+        belt.loadSpaceEnvironment();
+
+        viper = Starfighter();
+
+        println("[Flight Computer] Target Lock System Online. Radar Active.");
+        println("[Audio Engine] 3D HRTF Spatial Engine Thruster Hum Active.");
+    }
+
+    Void onUpdate(float dt) {
+        println("\n--- Space Dogfight Flight Loop ---");
+        viper.apply6DofThrusters(15.0f, 5.0f, 0.0f, dt);
+        viper.triggerAfterburners();
+        viper.fireLaserPulse();
+    }
+}
+
+Void main() {
+    SpaceDogfightGameApp game = SpaceDogfightGameApp();
+    game.onCreate();
+    game.onUpdate(0.016f);
+    println("\n=========================================================");
+    println(" SPACE DOGFIGHT GAME LOOP EXECUTED WITH 0 ERRORS!        ");
+    println("=========================================================");
+}

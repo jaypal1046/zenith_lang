@@ -1,0 +1,36 @@
+import std.io;
+import std.ui;
+
+// -------------------------------------------------------------
+// Zenith Language - 3D CAD & Product Design Studio App
+// -------------------------------------------------------------
+
+class CadDesignStudioApp() implements Application {
+    String studioTitle = "Zenith 3D CAD & Product Studio v1.0";
+    int polygonCount = 42800;
+
+    Void onInit() {
+        println("=========================================================");
+        println(concat("   STARTING APPLICATION: ", studioTitle));
+        println("=========================================================");
+        println("[3D Viewport] OpenGL 4.5 Core Profile Viewport Created (60 FPS).");
+        println("[CSG Engine] Constructive Solid Geometry Boolean Mesh Engine Ready.");
+        println("[Export Pipeline] STL & OBJ Exporter Registered.");
+    }
+
+    Void performCsgUnion() {
+        println("\n[CSG Operation] Union: Cylinder #1 + Cube Base -> Joined Mesh.");
+        println(concat("[3D Viewport] Mesh Updated. Total Polygons: ", toString(polygonCount)));
+    }
+
+    Void exportStlFile(String filename) {
+        println(concat("[Export] Binary STL exported to: '", concat(filename, "' (0 errors).")));
+    }
+}
+
+Void main() {
+    CadDesignStudioApp studio = CadDesignStudioApp();
+    studio.onInit();
+    studio.performCsgUnion();
+    studio.exportStlFile("product_prototype.stl");
+}

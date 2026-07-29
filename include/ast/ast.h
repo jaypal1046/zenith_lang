@@ -64,6 +64,12 @@ public:
 // Expressions
 class ExprNode : public ASTNode {};
 
+class BlockExprNode : public ExprNode {
+public:
+    std::vector<std::unique_ptr<ASTNode>> statements;
+    BlockExprNode() = default;
+};
+
 // Dummy expression to hold logic like 'x > 10' for now
 class BinaryExprNode : public ExprNode {
 public:
@@ -188,6 +194,8 @@ public:
     std::unique_ptr<TypeNode> type;
     std::unique_ptr<ExprNode> initializer;
     MemoryAnnotation memory_hint = MemoryAnnotation::Default;
+    bool is_deprecated = false;
+    std::string deprecated_message;
     
     VarDeclNode(std::unique_ptr<TypeNode> t, std::string name, std::unique_ptr<ExprNode> init = nullptr)
         : type(std::move(t)), var_name(std::move(name)), initializer(std::move(init)) {}
@@ -261,14 +269,6 @@ public:
     TryExprNode(std::unique_ptr<ExprNode> expr) : expression(std::move(expr)) {}
 };
 
-class MatchExprNode : public ExprNode {
-public:
-    std::unique_ptr<ExprNode> subject;
-    std::vector<std::pair<std::string, std::unique_ptr<ExprNode>>> arms;  // pattern -> expression
-    
-    MatchExprNode(std::unique_ptr<ExprNode> subj) : subject(std::move(subj)) {}
-};
-
 // Closure/Lambda expressions
 class LambdaNode : public ExprNode {
 public:
@@ -288,6 +288,8 @@ public:
     std::vector<std::unique_ptr<ASTNode>> body;
     std::vector<std::string> generic_params;  // Generic type parameters, e.g., ["T", "U"]
     bool is_async = false;
+    bool is_deprecated = false;
+    std::string deprecated_message;
     
     // Interop fields
     bool is_foreign = false;
@@ -341,6 +343,8 @@ public:
     bool is_managed = false;    // For @managed RC+GC heap tracking
     bool is_routed = false;     // For @route SPA routing annotation
     std::string route_path;     // Path associated with @route
+    bool is_deprecated = false;
+    std::string deprecated_message;
     
     ClassDeclNode(std::string name) : class_name(std::move(name)) {}
 };
@@ -412,6 +416,54 @@ class MemoryAnnotationNode : public ASTNode {
 public:
     std::string annotation;  // "managed", "weak", "gc_root"
     MemoryAnnotationNode(std::string ann) : annotation(std::move(ann)) {}
+};
+
+// Pattern Nodes for Match Expressions
+class PatternNode : public ASTNode {};
+
+class LiteralPatternNode : public PatternNode {
+public:
+    std::unique_ptr<ExprNode> literal;
+    LiteralPatternNode(std::unique_ptr<ExprNode> lit) : literal(std::move(lit)) {}
+};
+
+class WildcardPatternNode : public PatternNode {
+public:
+    WildcardPatternNode() = default;
+};
+
+class IdentifierPatternNode : public PatternNode {
+public:
+    std::string name;
+    IdentifierPatternNode(std::string n) : name(std::move(n)) {}
+};
+
+class EnumPatternNode : public PatternNode {
+public:
+    std::string enum_name;
+    std::string variant_name;
+    std::vector<std::unique_ptr<PatternNode>> sub_patterns;
+    EnumPatternNode(std::string e_name, std::string v_name)
+        : enum_name(std::move(e_name)), variant_name(std::move(v_name)) {}
+};
+
+class StructPatternNode : public PatternNode {
+public:
+    std::string struct_name;
+    std::vector<std::pair<std::string, std::unique_ptr<PatternNode>>> fields;
+    StructPatternNode(std::string s_name) : struct_name(std::move(s_name)) {}
+};
+
+struct MatchArm {
+    std::unique_ptr<PatternNode> pattern;
+    std::unique_ptr<ExprNode> body;
+};
+
+class MatchExprNode : public ExprNode {
+public:
+    std::unique_ptr<ExprNode> subject;
+    std::vector<MatchArm> arms;
+    MatchExprNode(std::unique_ptr<ExprNode> subj) : subject(std::move(subj)) {}
 };
 
 // Program Root

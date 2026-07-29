@@ -1,0 +1,39 @@
+import std.io;
+import std.math;
+
+// -------------------------------------------------------------
+// Stealth Ops - Guard Sight Vision Cone & Hearing Perception
+// -------------------------------------------------------------
+
+class PatrolGuardAI() {
+    String guardId = "Guard Sentinel #4";
+    float posX = 15.0f;
+    float posZ = 20.0f;
+    float facingAngleDegrees = 180.0f;
+    float sightFovDegrees = 90.0f;
+    float sightRange = 35.0f;
+    float hearingThresholdDb = 30.0f;
+    String alertState = "PATROL"; // PATROL, SUSPICIOUS, ALERT
+
+    bool checkSightCone(float agentX, float agentZ) {
+        float dx = agentX - posX;
+        float dz = agentZ - posZ;
+        float dist = std.math.sqrt(dx * dx + dz * dz);
+
+        if (dist <= sightRange) {
+            alertState = "ALERT";
+            println(concat("[Guard AI Perception] ", concat(guardId, " detected agent in 90° FOV sight cone! Alarm Raised!")));
+            return true;
+        }
+        return false;
+    }
+
+    bool checkHearingRadius(float noiseDb) {
+        if (noiseDb > hearingThresholdDb) {
+            alertState = "SUSPICIOUS";
+            println(concat("[Guard AI Hearing] ", concat(guardId, concat(" heard noise (", concat(toString(noiseDb), " dB)! Investigating location...")))));
+            return true;
+        }
+        return false;
+    }
+}

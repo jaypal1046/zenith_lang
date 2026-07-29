@@ -1,0 +1,42 @@
+import std.io;
+import std.math;
+
+// -------------------------------------------------------------
+// Zombie Apocalypse - Main Application Entry Point & Survival Loop
+// -------------------------------------------------------------
+
+class ZombieApocalypseGameApp() implements Scene {
+    SurvivorPlayer hero;
+    ZombieSwarmAI swarm;
+    int currentNightWave = 3;
+
+    Void onCreate() {
+        println("=========================================================");
+        println("       ZENITH ENGINE - ZOMBIE APOCALYPSE SURVIVAL        ");
+        println("=========================================================");
+        hero = SurvivorPlayer();
+        swarm = ZombieSwarmAI();
+
+        println("[World System] Abandoned City Haven (Night 3 - 03:00 AM).");
+        println("[Physics System] Ragdoll Dismemberment & Explosive Barrel Impulse Ready.");
+    }
+
+    Void onUpdate(float dt) {
+        println(concat("\n--- Night ", concat(toString(currentNightWave), " Survival Wave Loop ---")));
+        swarm.advanceSwarm(dt);
+        swarm.attackBarricade(35.0f);
+
+        hero.repairBarricade();
+        hero.fireShotgun();
+        hero.throwPipeBomb();
+    }
+}
+
+Void main() {
+    ZombieApocalypseGameApp game = ZombieApocalypseGameApp();
+    game.onCreate();
+    game.onUpdate(0.016f);
+    println("\n=========================================================");
+    println(" ZOMBIE APOCALYPSE GAME LOOP EXECUTED WITH 0 ERRORS!     ");
+    println("=========================================================");
+}

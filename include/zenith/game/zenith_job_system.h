@@ -101,6 +101,67 @@ public:
     unsigned int getThreadCount() const { return static_cast<unsigned int>(m_workers.size()); }
 };
 
+struct EcsSystemTask {
+    std::string name;
+    std::vector<std::string> reads;
+    std::vector<std::string> writes;
+    std::function<void()> run;
+};
+
+class EcsParallelScheduler {
+public:
+    void addSystem(std::string name, std::vector<std::string> reads, std::vector<std::string> writes, std::function<void()> runFunc) {
+        m_systems.push_back({std::move(name), std::move(reads), std::move(writes), std::move(runFunc)});
+    }
+
+    static bool haveDataConflict(const EcsSystemTask& a, const EcsSystemTask& b) {
+        for (const auto& w : a.writes) {
+            for (const auto& r : b.reads) if (w == r) return true;
+            for (const auto& w2 : b.writes) if (w == w2) return true;
+        }
+        for (const auto& r : a.reads) {
+            for (const auto& w : b.writes) if (r == w) return true;
+        }
+        return false;
+    }
+
+    void execute(JobSystem& jobSystem) {
+        std::vector<std::vector<EcsSystemTask>> stages;
+        for (const auto& sys : m_systems) {
+            bool placed = false;
+            for (auto& stage : stages) {
+                bool conflict = false;
+                for (const auto& existing : stage) {
+                    if (haveDataConflict(sys, existing)) {
+                        conflict = true;
+                        break;
+                    }
+                }
+                if (!conflict) {
+                    stage.push_back(sys);
+                    placed = true;
+                    break;
+                }
+            }
+            if (!placed) {
+                stages.push_back({sys});
+            }
+        }
+
+        for (const auto& stage : stages) {
+            for (const auto& task : stage) {
+                jobSystem.submit(task.run);
+            }
+            jobSystem.wait();
+        }
+    }
+
+    void clear() { m_systems.clear(); }
+
+private:
+    std::vector<EcsSystemTask> m_systems;
+};
+
 } // namespace zenith
 
 #endif // ZENITH_JOB_SYSTEM_H

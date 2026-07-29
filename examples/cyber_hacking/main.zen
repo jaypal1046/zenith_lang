@@ -1,0 +1,39 @@
+import std.io;
+import std.math;
+
+// -------------------------------------------------------------
+// Cyber Hacking - Main Application Entry Point & Netrunning Loop
+// -------------------------------------------------------------
+
+class CyberHackingGameApp() implements Scene {
+    CyberdeckNetrunner runner;
+    MainframeNodeMatrix targetNode;
+
+    Void onCreate() {
+        println("=========================================================");
+        println("     ZENITH ENGINE - CYBERPUNK NETRUNNER HACKING SIM     ");
+        println("=========================================================");
+        runner = CyberdeckNetrunner();
+        targetNode = MainframeNodeMatrix();
+
+        println("[Cyberdeck Interface] 16GB Neural Cyberdeck RAM Online.");
+        println("[Cyberspace Shader] Holographic Data Matrix Grid Shaders Active.");
+    }
+
+    Void onUpdate(float dt) {
+        println("\n--- Netrunning Intrusion Loop ---");
+        runner.executeIceBreakerProgram("Overclock_v2", 6);
+        targetNode.breachFirewall(85.0f);
+        targetNode.triggerBlackIceCountermeasure();
+        runner.injectDataPayload();
+    }
+}
+
+Void main() {
+    CyberHackingGameApp game = CyberHackingGameApp();
+    game.onCreate();
+    game.onUpdate(0.016f);
+    println("\n=========================================================");
+    println(" CYBER HACKING GAME LOOP EXECUTED WITH 0 ERRORS!        ");
+    println("=========================================================");
+}

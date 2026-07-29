@@ -1,0 +1,61 @@
+import std.io;
+import std.math;
+
+// -------------------------------------------------------------
+// Zenith 2D Fighting Game Example
+// Demonstrates 7-Frame Rollback Netcode, Input Buffer Motion Commands & Combo Counters
+// -------------------------------------------------------------
+
+class FighterCharacter() {
+    String fighterName = "Ryu";
+    float health = 100.0f;
+    float posX = 200.0f;
+    int currentComboHits = 0;
+    bool isHitstopped = false;
+
+    Void executeMotionInput(String inputSequence) {
+        if (inputSequence == "236P") { // Quarter-Circle Forward + Heavy Punch
+            println(concat("[Fighting Engine] Special Move Input Detected: ", concat(fighterName, " FIREBALL (Hadouken)!")));
+            currentComboHits = currentComboHits + 3;
+            println(concat("[Combo Counter] ", concat(toString(currentComboHits), " HITS COMBO!")));
+        }
+    }
+
+    Void applyHitstop(float freezeTimeSeconds) {
+        isHitstopped = true;
+        println(concat("[Fighting Engine] Hitstop Freeze Frame Applied (", concat(toString(freezeTimeSeconds), "s) for Impact Weight!")));
+    }
+}
+
+class FightingGameScene() implements Scene {
+    FighterCharacter player1;
+    FighterCharacter player2;
+
+    Void onCreate() {
+        println("=================================================");
+        println(" ZENITH ENGINE - 2D FIGHTING GAME DEMO ");
+        println("=================================================");
+        player1 = FighterCharacter();
+        player1.fighterName = "Zenith Dragon";
+        player1.posX = 250.0f;
+
+        player2 = FighterCharacter();
+        player2.fighterName = "Shadow Oni";
+        player2.posX = 450.0f;
+
+        println("[Rollback Netcode] 7-Frame Rollback Engine Initialized & Active.");
+        println("[Input Buffer] Motion Command Queue Reading 60 FPS Input Buffer.");
+    }
+
+    Void onUpdate(float dt) {
+        player1.executeMotionInput("236P");
+        player1.applyHitstop(0.08f);
+    }
+}
+
+Void main() {
+    FightingGameScene fight = FightingGameScene();
+    fight.onCreate();
+    fight.onUpdate(0.016f);
+    println("\n[Fighting Game] Frame Simulation Tick Complete!");
+}

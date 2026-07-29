@@ -1,0 +1,66 @@
+import std.io;
+import std.math;
+
+// -------------------------------------------------------------
+// Zenith Racing & Vehicle Simulation Example Game
+// Demonstrates Vehicle Physics 2D/3D, Lateral Friction Drift, Gearbox & Lap Timers
+// -------------------------------------------------------------
+
+class RaceCar() {
+    String carName = "Zenith GT-R";
+    float speedKmh = 0.0f;
+    float maxSpeedKmh = 280.0f;
+    int currentGear = 1;
+    float steeringAngle = 0.0f;
+    float driftFactor = 0.85f;
+    bool isBraking = false;
+
+    Void accelerate(float throttle, float dt) {
+        speedKmh = speedKmh + throttle * 45.0f * dt;
+        if (speedKmh > maxSpeedKmh) speedKmh = maxSpeedKmh;
+
+        // Auto gear shifting
+        if (speedKmh > 50.0f && currentGear == 1) currentGear = 2;
+        if (speedKmh > 100.0f && currentGear == 2) currentGear = 3;
+        if (speedKmh > 160.0f && currentGear == 3) currentGear = 4;
+        if (speedKmh > 220.0f && currentGear == 4) currentGear = 5;
+    }
+
+    Void turn(float angle) {
+        steeringAngle = angle;
+        if (std.math.abs(angle) > 30.0f && speedKmh > 80.0f) {
+            println(concat("[Vehicle Physics] Drift initiated! Friction Lateral Slip: ", toString(driftFactor)));
+        }
+    }
+}
+
+class RacingGameScene() implements Scene {
+    RaceCar playerCar;
+    float currentLapTime = 0.0f;
+    int currentLap = 1;
+
+    Void onCreate() {
+        println("=================================================");
+        println(" ZENITH ENGINE - RACING & VEHICLE SIM DEMO GAME ");
+        println("=================================================");
+        playerCar = RaceCar();
+        println("[Track Engine] Grand Prix Circuit Loaded. Car Spawned at Grid Slot 1.");
+        println("[Vehicle Physics] Lateral Tire Drift & Gearbox Physics Engine Active.");
+    }
+
+    Void onUpdate(float dt) {
+        currentLapTime = currentLapTime + dt;
+        playerCar.accelerate(1.0f, dt);
+        playerCar.turn(35.0f); // High-speed turn for drift calculation
+
+        println(concat("[Speedometer] ", concat(playerCar.carName, concat(" Speed: ", concat(toString(playerCar.speedKmh), concat(" km/h | Gear: ", toString(playerCar.currentGear)))))));
+        println(concat("[Lap Timer] Lap ", concat(toString(currentLap), concat(" Time: ", concat(toString(currentLapTime), " s")))));
+    }
+}
+
+Void main() {
+    RacingGameScene racing = RacingGameScene();
+    racing.onCreate();
+    racing.onUpdate(0.016f);
+    println("\n[Racing Sim] Vehicle Simulation Frame Complete!");
+}

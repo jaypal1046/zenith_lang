@@ -1,0 +1,71 @@
+import std.io;
+import std.math;
+
+// -------------------------------------------------------------
+// Zenith Turn-Based Tactical Strategy Example Game
+// Demonstrates Grid Movement, Turn Queue Manager, Fog-of-War & Ability Execution
+// -------------------------------------------------------------
+
+class TacticalUnit() {
+    String unitName = "Knight";
+    int gridX = 0;
+    int gridY = 0;
+    int movePoints = 4;
+    int health = 80;
+    bool isTurnActive = false;
+
+    Void moveTo(int targetX, int targetY) {
+        int dist = std.math.abs(targetX - gridX) + std.math.abs(targetY - gridY);
+        if (dist <= movePoints) {
+            gridX = targetX;
+            gridY = targetY;
+            println(concat(unitName, concat(" moved to grid position (", concat(toString(gridX), concat(", ", concat(toString(gridY), ")"))))));
+        } else {
+            println(concat(unitName, " cannot move that far in one turn!"));
+        }
+    }
+}
+
+class TacticalStrategyScene() implements Scene {
+    TacticalUnit squadUnit1;
+    TacticalUnit enemyUnit1;
+    int currentTurnRound = 1;
+
+    Void onCreate() {
+        println("=================================================");
+        println(" ZENITH ENGINE - TURN-BASED TACTICAL DEMO GAME ");
+        println("=================================================");
+        squadUnit1 = TacticalUnit();
+        squadUnit1.unitName = "Paladin Unit";
+        squadUnit1.gridX = 2;
+        squadUnit1.gridY = 2;
+
+        enemyUnit1 = TacticalUnit();
+        enemyUnit1.unitName = "Orc Berserker";
+        enemyUnit1.gridX = 5;
+        enemyUnit1.gridY = 3;
+
+        println("[Grid Board] 10x10 Tactical Grid & Fog-of-War initialized.");
+        println("[Turn Manager] Order Queue: [Paladin Unit] -> [Orc Berserker].");
+    }
+
+    Void executeTurnRound() {
+        println(concat("\n--- Turn Round ", concat(toString(currentTurnRound), " ---")));
+        squadUnit1.isTurnActive = true;
+        squadUnit1.moveTo(4, 2);
+        squadUnit1.isTurnActive = false;
+
+        enemyUnit1.isTurnActive = true;
+        enemyUnit1.moveTo(4, 3);
+        enemyUnit1.isTurnActive = false;
+
+        currentTurnRound = currentTurnRound + 1;
+    }
+}
+
+Void main() {
+    TacticalStrategyScene strategy = TacticalStrategyScene();
+    strategy.onCreate();
+    strategy.executeTurnRound();
+    println("\n[Tactical Strategy] Turn-Based Simulation Complete!");
+}

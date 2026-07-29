@@ -13,6 +13,7 @@ private:
     void indent();
     void formatStatement(ASTNode* node);
     void formatExpression(ExprNode* expr);
+    void formatPattern(PatternNode* pattern);
     void formatType(TypeNode* type);
 
 public:
